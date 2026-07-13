@@ -34,7 +34,6 @@ OUT  = REPO / 'dashboard' / 'data' / 'cleaning_history.json'
 sys.path.append(str(NB))
 from cpht_config import HX_CONFIG as COLD_CFG, CIT_TAG, TOTAL_CHARGE_TAG
 
-RELIABLE_R2, RELIABLE_N = 0.30, 10          # quality gate (same as fouling-rate audit)
 CORR_MIN = 0.20                              # min |Q-CIT corr| for a trustworthy sensitivity estimate
 
 EVENT_LABEL = {'SWITCH': 'สลับเชลล์ / ล้างออนไลน์', 'TAM': 'TAM (turnaround)'}
@@ -63,11 +62,11 @@ def main():
     as_of = feat.index.max()
     out = {'as_of': as_of.strftime('%Y-%m-%d'),
            'criteria': {
-               'fouling_rate': 'ต่อรอบเดินเครื่อง: polyfit(days_on_duty, U_relative, 1); slope×30 = dUrel/เดือน (ยิ่งลบ = สกปรกเร็ว)',
-               'quality_gate': f'เชื่อถือได้เมื่อ R² ≥ {RELIABLE_R2} และ N ≥ {RELIABLE_N} จุด',
+               'fouling_rate': 'ต่อรอบเดินเครื่อง: AIC race เชิงเส้น vs asymptotic decay บน U_relative (curve_models.py), รายงานอัตราปัจจุบัน (tail slope) ไม่ใช่ค่าเฉลี่ยทั้งรอบ',
+               'quality_gate': 'เชื่อถือได้ (`reliable`, มาจาก nb_audit.robust_fouling_rate) เมื่อ: slope<0 อย่างมีนัยสำคัญ (CI upper < tol), R²ของโมเดลที่เลือก ≥ 0.30, sign-change-rate ≤ 0.35 (ไม่ใช่สัญญาณ oscillation จากการสลับเชลล์), ช่วงข้อมูล/จำนวนจุด/สัดส่วน in-service เพียงพอ, และ Rf สอดคล้องทิศทาง — นิยามเดียวกันทั้งระบบ (ไม่คำนวณซ้ำที่นี่)',
                'clean_trigger': 'U_relative < 0.875 (เสีย 12.5% จากสภาพสะอาด) หรือ duty shortfall > threshold (3b)',
                'cit_recovery_measured': 'จุดกระโดดจริงตอนล้าง: HX ปลายเทรน (cold_out=CIT) ใช้ cold_out jump ตรง; อื่น ๆ ใช้ ΔQ_recovered/charge × CIT_sensitivity (2c)',
-               'bypass_correction': 'ก่อน/หลัง = median ของวัน [-5..-2] และ [+1..+4] รอบเหตุการณ์ (เว้นวัน transition) — กันข้อมูลเพี้ยนช่วงล้าง-ผ่าน-bypass ที่ Operating_State จับไม่ได้',
+               'bypass_correction': 'ก่อน/หลัง = median ของวัน [-12..-2] และ [+2..+12] รอบเหตุการณ์ (เว้นวัน transition 2 วันทั้งสองฝั่ง) — หน้าต่างเดียวกับ event-study ใน notebook 14, กันข้อมูล transient ตอนเริ่ม/TAM-recovery ที่หน้าต่างสั้นกว่านี้จะจับติดมาด้วย',
                'cit_recovery_model': 'expected_CIT_gain_C จาก 2d/6d (single-TAM calibration → เชิงทิศทาง)',
                'note': 'แสดง "วัดจริง" เทียบ "โมเดล" เพื่อให้วิศวกรตรวจว่าโมเดลตรงกับของจริงแค่ไหน',
            },
@@ -92,12 +91,20 @@ def main():
         # Bypass-cleaning correction: Operating_State stays NORMAL through online
         # bypass cleans (daily averages + shared flow meters hide the diversion), so
         # single-row before/after values can land on corrupted transition days.
-        # Robust windows instead: before = median of days [-5..-2], after = median of
-        # days [+1..+4] around the event — skipping the transition day(s) themselves.
-        PRE_W, POST_W, SKIP = (2, 5), (1, 4), True
+        # Robust windows: before = median of days [-(PRE+GAP)..-GAP], after = median of
+        # days [+GAP..+(GAP+POST)] around the event, skipping GAP transition days on both
+        # sides. Matches notebook 14's event-study window (10-day medians, 2-day gap) — the
+        # production window here used to be shorter (2-5 / 1-4 days) and started averaging
+        # just 1 day after the event, which is exactly the startup/TAM-recovery-transient
+        # risk the wider window avoids; the two are now reconciled to one definition.
+        # Known unaddressed edge case (shared with notebook 14's version of this window):
+        # cleaning events closer together than PRE+GAP+GAP+POST=~22 days have overlapping
+        # pre/post windows, which biases both events' measured recovery — no minimum-spacing
+        # guard exists yet. Rare in this dataset but visible for E113A's early-2021 events.
+        PRE, POST, GAP = 10, 10, 2
 
         def robust(colvals, pos, side):
-            lo, hi = (pos - PRE_W[1], pos - PRE_W[0]) if side == 'before' else (pos + POST_W[0], pos + POST_W[1])
+            lo, hi = (pos - PRE - GAP, pos - GAP) if side == 'before' else (pos + GAP, pos + GAP + POST)
             vals = colvals.iloc[max(0, lo): hi + 1].dropna()
             return float(vals.median()) if len(vals) else None
 
@@ -136,9 +143,12 @@ def main():
                 if not frx.empty:
                     r = frx.iloc[0]
                     N = int(r.get('N_regression_pts', 0)); R2 = _num(r.get('R2'))
+                    # canonical reliability decision: the `reliable` column already produced by
+                    # nb_audit.robust_fouling_rate (slope/CI/R2/oscillation/span/Rf gates) —
+                    # do not redefine it here (previously an independent, disagreeing R2/N gate).
                     run_ended = dict(run=int(r['Run']), duration_days=_num(r.get('Duration_days'), 1),
                                      dUrel_per_month=_num(r.get('dUrel_per_month')), R2=R2, N=N,
-                                     reliable=bool((R2 or 0) >= RELIABLE_R2 and N >= RELIABLE_N))
+                                     reliable=bool(r.get('reliable')))
 
             note = ''
             if not estimable and cit_meas is not None:

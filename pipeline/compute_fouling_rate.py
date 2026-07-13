@@ -148,6 +148,13 @@ def main():
             'dUrel_per_day', 'intercept', 'dUrel_per_month', 'dUrel_per_day_raw', 'dUrel_ci_lo', 'dUrel_ci_hi',
             'dUrel_per_day_recent', 'dRf_per_day', 'R2', 'p_value', 'N_regression_pts',
             'span_days', 'normal_frac', 'n_winsorized', 'split_after_day',
+            # asymptotic-fit diagnostics (curve_models.py AIC race, see nb_audit.robust_fouling_rate):
+            # dUrel_per_day (above) IS dUrel_per_day_tail — kept as one column so existing
+            # consumers don't need to change; dUrel_per_day_wholerun is the old single-line
+            # Theil-Sen estimate, kept as a secondary cross-check now that it's no longer primary.
+            'model_selected', 'dUrel_per_day_tail', 'dUrel_per_day_wholerun',
+            'tau_days', 'A_asymp', 'Rf_inf_asymp', 'asymp_aic', 'linear_aic', 'R2_model',
+            'sign_change_rate', 'last_day_on_duty',
             'reliable', 'rate_flag']
     df = pd.DataFrame(rows).reindex(columns=cols)
     df.to_csv(OUT, index=False)
@@ -162,6 +169,55 @@ def main():
     if miss:
         print(f'  HX with no reliable run (rate falls back to partner/None downstream): {miss}')
     print('  physical invariant OK: 0 reliable runs with slope >= 0')
+
+    try:
+        _hot_cold_balance_diagnostic()
+    except Exception as e:
+        print(f'  (hot/cold energy-balance diagnostic skipped: {e})')
+
+
+def _hot_cold_balance_diagnostic():
+    """Diagnostic-only, NOT a gate: duty (Q) throughout this pipeline is computed from the
+    crude/cold side only (see notebooks/02_feature_engineering.ipynb, cpht_features.py) —
+    there is no cross-check against the hot/residue side, so a bad hot-side flow tag or an
+    unstated heat-loss/vaporization assumption would never be caught. This reports the
+    median |Q_hot - Q_cold| / Q_cold discrepancy per HX where both sides have flow tags
+    (cpht_features.HX_CONFIG has hot-side tags; the notebook-02 config used for the main
+    feature file does not). Residue-side Cp/density are approximated with the same crude
+    correlation (crude_properties.py) for lack of a residue-specific one, so this is a rough
+    plausibility check, not a precise energy balance — never used to filter/gate any run."""
+    import sys as _sys
+    _sys.path.append(str(NB))
+    import cpht_features as F
+    import crude_properties as CProp
+    proc = pd.read_csv(DATA / 'Process_information_cleaned.csv', parse_dates=['Timestamp']).set_index('Timestamp')
+    crude = pd.read_csv(DATA / 'Crude_property_profiled.csv', parse_dates=['Date']).set_index('Date')
+    sg = (crude['SG_15_6C'].reindex(proc.index).ffill().bfill()
+          if 'SG_15_6C' in crude.columns else pd.Series(0.92, index=proc.index))
+
+    rows = []
+    for hx, cfg in F.HX_CONFIG.items():
+        s = F.parse_hx(cfg)
+        need = ('cold_flow', 'cold_in', 'cold_out', 'hot_flow', 'hot_in', 'hot_out')
+        if not all(s.get(k) for k in need) or not all(s[k] in proc.columns for k in need):
+            continue
+        t_cold = (proc[s['cold_in']] + proc[s['cold_out']]) / 2
+        cp_c, rho_c = CProp.cp_rho_crude(t_cold, sg)
+        Q_cold = rho_c * proc[s['cold_flow']] * cp_c * (proc[s['cold_out']] - proc[s['cold_in']]) / 3600
+        t_hot = (proc[s['hot_in']] + proc[s['hot_out']]) / 2
+        cp_h, rho_h = CProp.cp_rho_crude(t_hot, sg)
+        Q_hot = rho_h * proc[s['hot_flow']] * cp_h * (proc[s['hot_in']] - proc[s['hot_out']]) / 3600
+        m = Q_cold.abs() > 50   # ignore near-zero/idle rows (division blows up the % metric)
+        if m.sum() < 30:
+            continue
+        disc = float(((Q_hot[m] - Q_cold[m]).abs() / Q_cold[m].abs()).median() * 100)
+        rows.append((hx, round(disc, 1), int(m.sum())))
+
+    if rows:
+        print('  hot/cold energy-balance check (diagnostic only, NOT a gate; residue-side '
+              'Cp/rho approximated with the crude correlation -> plausibility check, not precise):')
+        for hx, disc, n in sorted(rows, key=lambda r: -r[1]):
+            print(f'    {hx}: median |Q_hot-Q_cold|/Q_cold = {disc}% (n={n})' + (' [!]' if disc > 30 else ''))
 
 
 if __name__ == '__main__':

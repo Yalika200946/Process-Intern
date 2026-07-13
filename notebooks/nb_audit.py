@@ -18,6 +18,7 @@ Usage in a notebook:
 from __future__ import annotations
 import numpy as np
 import pandas as pd
+import curve_models as cm
 
 
 # ────────────────────────────── methodology header ──────────────────────────────
@@ -150,7 +151,8 @@ INSERVICE_STATES = ('NORMAL', 'SUBSTITUTE_ACTIVE', 'PARALLEL')  # HX actively tr
 def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                         lag_days=15, winsor_ceil=1.10, recent_days=60,
                         min_span_days=30, min_pts=20, min_normal_frac=0.5,
-                        slope_tol=5e-4, intra_recovery=0.15, inservice_states=INSERVICE_STATES):
+                        slope_tol=5e-4, intra_recovery=0.15, inservice_states=INSERVICE_STATES,
+                        min_r2_gate=0.30, max_sign_change_rate=0.35):
     """Physically-grounded, robust per-run fouling-rate estimate for ONE run's on-duty window.
 
     Fixes the failure modes of a plain OLS-per-run on U_relative (see METHODOLOGY §3.5):
@@ -159,15 +161,36 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
       * winsorize high-side — clip U_relative to `winsor_ceil` (~1.10); values above are
                               baseline-too-low / throughput artifacts, not "cleaner than clean".
       * Theil-Sen slope     — median-of-pairwise-slopes (breakdown ~29%), robust to the
-                              U_relative spikes OLS chokes on; returns a 95% CI.
+                              U_relative spikes OLS chokes on; returns a 95% CI. Kept as the
+                              robust linear baseline used for the sign/CI reliability gate.
+      * asymptotic refit    — U_relative rarely declines as one straight line for an entire
+                              run: a fast initial decline (film formation) typically flattens
+                              toward a mature-fouling floor (Kern-Seaton form). An AIC race
+                              between a straight line and a falling-exponential-asymptote curve
+                              (see curve_models.py, shared with the PHM engine) picks whichever
+                              shape actually fits, so a short/still-linear run isn't force-fit to
+                              a curve it doesn't need, and a genuinely two-phase run isn't
+                              mis-summarized by a single biased slope.
+      * tail-slope rate     — the reported `dUrel_per_day` is the CURRENT rate: the analytic
+                              derivative of the winning curve at the run's most recent point
+                              (equals the Theil-Sen slope when linear wins). This is what "how
+                              fast is this HX fouling right now" should mean for ranking/RUL —
+                              a whole-run average slope under-reads the current rate for a run
+                              that has already flattened toward its asymptote.
+      * oscillation gate     — sign-change frequency of the smoothed derivative + a model-fit R²
+                              floor catch runs dominated by operational noise (e.g. repeated
+                              shell-switch cycling) that a sign-of-slope-only check can miss,
+                              regardless of whether the noisy segment nets a negative slope.
       * Rf cross-check      — slope of fouling resistance Rf (must be ≥0 physically) for a
                               sign-consistency gate (dU_rel<0 ⇄ dRf>0).
-      * recent-window rate  — Theil-Sen over the last `recent_days` on-duty days = the CURRENT
-                              rate (whole-run slope under-reads long/asymptotic runs).
-      * reliability gate    — a fouling rate is only `reliable` if the trend is significantly
-                              NEGATIVE (CI upper < slope_tol), the span/points/NORMAL-fraction
-                              suffice, and Rf agrees; else `rate_flag` says why and it is
-                              EXCLUDED downstream rather than emitting an unphysical number.
+      * recent-window rate  — Theil-Sen over the last `recent_days` on-duty days, kept as a
+                              secondary diagnostic cross-check against the tail-slope estimate.
+      * reliability gate    — a fouling rate is only `reliable` if the whole-run trend is
+                              significantly NEGATIVE (CI upper < slope_tol), the selected-model
+                              fit is not noise-dominated (R² floor, sign-change-rate ceiling),
+                              span/points/NORMAL-fraction suffice, and Rf agrees; else
+                              `rate_flag` says why and it is EXCLUDED downstream rather than
+                              emitting an unphysical number.
 
     Inputs are array-likes for a single run (same length/order). `state`/`rf_run` optional.
     Returns a dict of the CSV columns (values None when not computable)."""
@@ -207,6 +230,9 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                N_regression_pts=int(len(d1)), span_days=round(span, 1),
                normal_frac=round(normal_frac, 3), n_winsorized=n_wins,
                split_after_day=(round(split_at, 1) if split_at is not None else None),
+               model_selected=None, dUrel_per_day_tail=None, dUrel_per_day_wholerun=None,
+               tau_days=None, A_asymp=None, Rf_inf_asymp=None, asymp_aic=None, linear_aic=None,
+               R2_model=None, sign_change_rate=None, last_day_on_duty=None,
                reliable=False, rate_flag=None)
 
     # data-sufficiency gates (physical trend can't be read from too little in-service data)
@@ -217,10 +243,51 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
     if len(d1) < min_pts:
         out['rate_flag'] = 'few_points'; return out
 
+    order = np.argsort(d1)
+    d1s, u1s = d1[order], u1[order]
+
     slope, intercept, lo, hi = stats.theilslopes(u1, d1)
     pred = intercept + slope * d1
     ss_tot = float(np.sum((u1 - u1.mean()) ** 2))
     r2 = 1 - float(np.sum((u1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
+
+    # AIC race: linear vs falling-asymptote vs power, on the same sorted (d1s, u1s) window
+    # the Theil-Sen fit used. `curve_models.fit_model` returns None (excluded from the race)
+    # on a non-converging fit rather than raising, so a run where the curve fit fails simply
+    # falls back to the linear/Theil-Sen result below.
+    fit_lin = cm.fit_model('linear', d1s, u1s, models=cm.MODELS_FALLING)
+    fit_asy = cm.fit_model('asymptotic', d1s, u1s, models=cm.MODELS_FALLING)
+    fit_pow = cm.fit_model('power', d1s, u1s, models=cm.MODELS_FALLING)
+    fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
+    best = min(fits, key=lambda f: f['aic']) if fits else None
+
+    if best is not None and best['name'] == 'asymptotic':
+        model_selected = 'asymptotic'
+        dUrel_tail = cm.tail_slope('asymptotic', best['params'], d1s[-1], models=cm.MODELS_FALLING)
+        A_amp, tau, c_floor = best['params']
+        tau_days = float(tau)
+        rf_inf_asymp = float(c_floor)   # asymptotic U_relative floor this run trends toward
+        a_asymp = float(A_amp)          # amplitude — with tau/c_floor, fully reconstructs the
+                                         # fitted curve y(t)=A*exp(-t/tau)+c for downstream projection
+        pred_sel = cm.MODELS_FALLING['asymptotic'][0](d1s, *best['params'])
+    else:
+        model_selected = 'linear'
+        dUrel_tail = float(slope)
+        tau_days = None
+        rf_inf_asymp = None
+        a_asymp = None
+        pred_sel = intercept + slope * d1s
+    ss_tot_sel = float(np.sum((u1s - u1s.mean()) ** 2))
+    r2_model = 1 - float(np.sum((u1s - pred_sel) ** 2)) / ss_tot_sel if ss_tot_sel > 0 else 0.0
+
+    # oscillation / operational-noise detector: sign-change frequency of the smoothed
+    # derivative. A genuine fouling trend (linear or asymptotic-decay) is mostly one-signed;
+    # an operational sawtooth (e.g. repeated shell-switch cycling) flips sign often regardless
+    # of its net slope, which a sign-of-net-slope-only check can miss.
+    roll = pd.Series(u1s).rolling(7, min_periods=3, center=True).mean().to_numpy()
+    dsig = np.sign(np.diff(roll))
+    dsig = dsig[np.isfinite(dsig) & (dsig != 0)]
+    sign_change_rate = float(np.mean(np.diff(dsig) != 0)) if len(dsig) > 1 else 0.0
 
     rec = d1 >= (d1.max() - recent_days)
     slope_recent = stats.theilslopes(u1[rec], d1[rec])[0] if rec.sum() >= max(8, min_pts // 2) else None
@@ -229,18 +296,33 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
         mrf = np.isfinite(rf1)
         slope_rf = float(stats.theilslopes(rf1[mrf], d1[mrf])[0])
 
-    out.update(dUrel_per_day=round(float(slope), 6),
+    out.update(dUrel_per_day=round(float(dUrel_tail), 6),
                intercept=round(float(intercept), 6),
                dUrel_ci_lo=round(float(lo), 6), dUrel_ci_hi=round(float(hi), 6),
                dUrel_per_day_recent=(round(float(slope_recent), 6) if slope_recent is not None else None),
                dRf_per_day=(round(slope_rf, 8) if slope_rf is not None else None),
-               R2=round(float(r2), 3))
+               R2=round(float(r2), 3),
+               model_selected=model_selected,
+               dUrel_per_day_tail=round(float(dUrel_tail), 6),
+               dUrel_per_day_wholerun=round(float(slope), 6),
+               tau_days=(round(tau_days, 2) if tau_days is not None else None),
+               A_asymp=(round(a_asymp, 6) if a_asymp is not None else None),
+               Rf_inf_asymp=(round(rf_inf_asymp, 4) if rf_inf_asymp is not None else None),
+               asymp_aic=(round(fit_asy['aic'], 2) if fit_asy else None),
+               linear_aic=(round(fit_lin['aic'], 2) if fit_lin else None),
+               R2_model=round(float(r2_model), 3),
+               sign_change_rate=round(sign_change_rate, 3),
+               last_day_on_duty=round(float(d1s[-1]), 2))
 
     # physical + reliability constraint: a genuine fouling run has U_relative STRICTLY declining
     # (slope<0) with a CI whose upper bound is still essentially negative (< slope_tol).
     if slope >= 0 or hi >= slope_tol:
         out['rate_flag'] = 'positive_slope_throughput' if slope > slope_tol else 'flat_no_signal'
         return out
+    if r2_model < min_r2_gate:
+        out['rate_flag'] = 'noisy_low_r2'; return out
+    if sign_change_rate > max_sign_change_rate:
+        out['rate_flag'] = 'oscillating'; return out
     if slope_rf is not None and slope_rf < -slope_tol:   # U falling but Rf also falling → inconsistent
         out['rate_flag'] = 'rf_inconsistent'; return out
     out['reliable'] = True; out['rate_flag'] = 'ok'
@@ -248,13 +330,20 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
 
 
 def quality_gate_runs(fr_df, min_r2=0.3, min_pts=10):
-    """Flag per-run fouling-rate estimates that are too weak to trust (low R²/few points).
-    Adds `rate_reliable` + returns (df, summary). Use so weak runs are down-weighted/flagged,
-    not treated equal to well-fit ones."""
+    """NON-AUTHORITATIVE diagnostic only. The canonical reliability decision is the `reliable`
+    column already produced by `robust_fouling_rate` (R²/oscillation/sign/span/Rf gates all
+    applied there) — this helper does NOT redefine it. It exists purely to report how an
+    R²/N-only heuristic would have differed, for debugging/QA, and adds `rate_reliable` as a
+    separate diagnostic column so it's never mistaken for the real gate. Do not consume
+    `rate_reliable` downstream — consume `reliable`."""
     df = fr_df.copy()
     r2 = df.get('R2', pd.Series(1.0, index=df.index)).fillna(0)
     npts = df.get('N_regression_pts', pd.Series(min_pts, index=df.index)).fillna(0)
     df['rate_reliable'] = (r2 >= min_r2) & (npts >= min_pts)
+    canonical = df.get('reliable')
     summ = dict(total=len(df), reliable=int(df['rate_reliable'].sum()),
                 flagged=int((~df['rate_reliable']).sum()), min_r2=min_r2, min_pts=min_pts)
+    if canonical is not None:
+        summ['canonical_reliable'] = int(canonical.sum())
+        summ['disagrees_with_canonical'] = int((df['rate_reliable'] != canonical.fillna(False)).sum())
     return df, summ

@@ -19,7 +19,6 @@ warnings.filterwarnings('ignore')
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from scipy.optimize import curve_fit
 from scipy.stats import weibull_min
 from scipy.special import gamma as gammafn
 
@@ -29,6 +28,7 @@ DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 202
 DASH = REPO / 'dashboard' / 'data'
 sys.path.append(str(NB))
 import phm_config as C
+from curve_models import MODELS_RISING as MODELS, fit_model, predict_cross
 
 rng = np.random.default_rng(C.RANDOM_SEED)
 
@@ -39,36 +39,8 @@ fr  = pd.read_csv(DATA / 'Fouling_Rate_By_Run.csv')
 crude = pd.read_csv(DATA / 'Crude_property_profiled.csv', parse_dates=['Date']).set_index('Date').sort_index()
 HXES = sorted(dev['HX'].dropna().unique())
 
-# ---------------- degradation model library (C1) ----------------
-def m_linear(t, a, b):      return a * t + b
-def m_asymp(t, A, tau, c):  return A * (1 - np.exp(-t / np.maximum(tau, 1e-6))) + c
-def m_power(t, a, b, c):    return a * np.power(np.maximum(t, 1e-6), b) + c
-
-MODELS = {
-    'linear':     (m_linear, 2, lambda t, y: [ (y[-1]-y[0])/max(t[-1]-t[0],1), y[0] ]),
-    'asymptotic': (m_asymp,  3, lambda t, y: [ max(y.max()-y.min(),1), max(t.max()/2,1), y.min() ]),
-    'power':      (m_power,  3, lambda t, y: [ max((y[-1]-y[0]),1)/max(t[-1]**0.5,1), 0.7, y.min() ]),
-}
-
-def fit_model(name, t, y):
-    f, k, p0 = MODELS[name]
-    try:
-        popt, _ = curve_fit(f, t, y, p0=p0(t, y), maxfev=8000)
-        pred = f(t, *popt)
-        sse = float(np.sum((y - pred) ** 2))
-        n = len(t)
-        aic = n * np.log(sse / n + 1e-12) + 2 * (k + 1)
-        return dict(name=name, params=[float(v) for v in popt], sse=sse, aic=float(aic))
-    except Exception:
-        return None
-
-def predict_cross(name, params, y0_t, target, tmax=1000):
-    """days from y0_t until model reaches `target` (deviation threshold)."""
-    f = MODELS[name][0]
-    ts = np.arange(0, tmax)
-    yy = f(y0_t + ts, *params)
-    hit = np.where(yy >= target)[0]
-    return int(hit[0]) if len(hit) else None
+# degradation model library (C1) — linear/asymptotic/power fit + AIC selection now live in
+# curve_models.py (shared with notebooks/nb_audit.py's U_relative fouling-rate estimator).
 
 def gp_fit_predict(t, y, t_query):
     from sklearn.gaussian_process import GaussianProcessRegressor

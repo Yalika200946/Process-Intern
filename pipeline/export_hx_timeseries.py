@@ -105,9 +105,11 @@ def main():
         runs = []
         if not fr.empty:
             for _, r in fr[fr.HX == hx].iterrows():
+                # canonical reliability decision: read nb_audit.robust_fouling_rate's own
+                # `reliable` column directly (previously an independent, disagreeing R2/N gate).
                 runs.append(dict(run=int(r.get('Run', 0)), duration_days=_num(r.get('Duration_days')),
                                  dUrel_per_month=_num(r.get('dUrel_per_month')), R2=_num(r.get('R2')),
-                                 reliable=bool((r.get('R2', 0) >= 0.3) and (r.get('N_regression_pts', 0) >= 10))))
+                                 reliable=bool(r.get('reliable'))))
 
         # human-readable hot-stream name from the cpht_features title ("... vs Residue")
         title = FULL_CFG.get(hx, {}).get('title', '')

@@ -243,7 +243,13 @@ def main():
 
     totals = dict(n_hx=len(per_hx), cum_cit_C=round(cum_cit, 2),
                   saving_thb_yr=round(cum_yr),
-                  baht_day=round(cum_yr / PLANT['DAYS_PER_YEAR']))
+                  baht_day=round(cum_yr / PLANT['DAYS_PER_YEAR']),
+                  independence_caveat=(
+                      'ผลรวมนี้บวก ΔCIT ของแต่ละ HX ตรงๆ โดยสมมติว่าเป็นอิสระต่อกัน แต่ในเทรน '
+                      'preheat แบบอนุกรม การล้าง HX ตัวหนึ่งจะเปลี่ยน ΔT ที่ HX ถัดไปในเทรนได้รับ '
+                      'จริง — ตัวเลขนี้จึงเป็นค่าประมาณขอบบน (upper bound) ไม่ใช่ผลลัพธ์ที่ผ่านการ '
+                      'จัดลำดับ/จำลองปฏิสัมพันธ์ระหว่าง HX จริง ซึ่งเป็นหน้าที่ของ '
+                      '16_cleaning_plan_optimization.ipynb'))
 
     # slide reproduction check (E113A: ΔCIT=2, Feed=80, NG=390 -> 8,311,680)
     check = 2 * PLANT['STD_ENERGY'] * 80 * PLANT['NG_PRICE'] * 360 * 0.5

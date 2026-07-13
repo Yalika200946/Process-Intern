@@ -30,7 +30,9 @@ DASH = REPO / 'dashboard' / 'data'
 OUT  = DASH / 'evidence.json'
 sys.path.append(str(NB))
 
-R2_GATE = 0.30   # fouling-rate run below this R² = low-confidence (nb_audit.quality_gate_runs)
+R2_GATE = 0.30   # LEGACY-ONLY fallback for a Fouling_Rate_By_Run.csv without a `reliable`
+                 # column (current pipeline always has one — see below). Keep in sync with
+                 # `min_r2_gate` in nb_audit.robust_fouling_rate (currently also 0.30).
 
 
 def _load(name, default=None):

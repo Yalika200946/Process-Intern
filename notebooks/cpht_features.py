@@ -11,6 +11,7 @@ import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
+import crude_properties
 
 DATA_FILE    = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')) / 'Process_information_cleaned.csv'
 CRUDE_FILE   = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')) / 'Crude_property_profiled.csv'
@@ -24,8 +25,11 @@ TARGET_TAG = '1TI116.pv'   # CIT -- Coil Inlet Temperature to furnace F101
 CHARGE_TAG = '1fi005.pv'   # total crude charge (m3/hr)
 O2_TAG     = '1AI001.pv'   # flue-gas O2 %
 
-CP_CRUDE  = 2.2    # kJ/kg.K (assumed, Equations_Reference doc)
-RHO_CRUDE = 850    # kg/m3   (assumed)
+SG_FALLBACK = 0.92  # used only if crude assay SG is unavailable for a given timestamp
+                    # (duty formula is otherwise `crude_properties.cp_rho_crude`, the same
+                    # temperature/SG-dependent correlation notebook 02 uses -- previously this
+                    # module used fixed CP_CRUDE=2.2 kJ/kg.K / RHO_CRUDE=850 kg/m3 constants,
+                    # a second, uncross-checked formula for the same physical quantity)
 
 LEAK_TARGET_HX = 'E113A'  # cold-side outlet of E113A IS the target (CIT) -- see build_cit_feature_matrix
 
@@ -175,9 +179,16 @@ def correct_crude_outliers(df_raw, hx_config=HX_CONFIG, target_tag=TARGET_TAG):
     return df
 
 
-def compute_q_features(df, streams, charge_tag=CHARGE_TAG):
-    """dT_cold, cold-side duty (Q, kW), and charge-normalised Q_norm per HX."""
+def compute_q_features(df, streams, charge_tag=CHARGE_TAG, sg=None):
+    """dT_cold, cold-side duty (Q, kW), and charge-normalised Q_norm per HX.
+
+    Cp/density use `crude_properties.cp_rho_crude(t_avg, SG)` — the same temperature- and
+    SG-dependent correlation notebook 02 uses for the identical physical quantity — evaluated
+    at each HX's own (cold- or hot-side) average temperature. `sg` is the per-timestamp crude
+    SG_15_6C series (from the crude assay, ffilled); falls back to SG_FALLBACK where missing.
+    """
     charge = df[charge_tag].replace(0, np.nan)
+    sg_use = sg.reindex(df.index).fillna(SG_FALLBACK) if sg is not None else pd.Series(SG_FALLBACK, index=df.index)
 
     dT_cold_df = pd.DataFrame(index=df.index)
     duty_df    = pd.DataFrame(index=df.index)
@@ -188,12 +199,16 @@ def compute_q_features(df, streams, charge_tag=CHARGE_TAG):
             dT_cold_df[hx] = df[s['cold_out']] - df[s['cold_in']]
 
         if s['cold_flow'] and s['cold_in'] and s['cold_out']:
-            Q = RHO_CRUDE * df[s['cold_flow']] * CP_CRUDE * dT_cold_df[hx] / 3600
+            t_avg = (df[s['cold_in']] + df[s['cold_out']]) / 2
+            cp, rho_t = crude_properties.cp_rho_crude(t_avg, sg_use)
+            Q = rho_t * df[s['cold_flow']] * cp / 3600
             duty_df[hx]   = Q
             Q_norm_df[hx] = Q / charge
         elif s['hot_flow'] and s['hot_in'] and s['hot_out']:
+            t_avg = (df[s['hot_in']] + df[s['hot_out']]) / 2
+            cp, rho_t = crude_properties.cp_rho_crude(t_avg, sg_use)
             dT_hot = df[s['hot_in']] - df[s['hot_out']]
-            Q = RHO_CRUDE * df[s['hot_flow']] * CP_CRUDE * dT_hot / 3600
+            Q = rho_t * df[s['hot_flow']] * cp * dT_hot / 3600
             duty_df[hx]   = Q
             Q_norm_df[hx] = Q / charge
         elif s['cold_in'] and s['cold_out']:
@@ -374,8 +389,21 @@ def build_cit_feature_matrix(data_file=DATA_FILE, hx_config=HX_CONFIG,
     df_raw = pd.read_csv(data_file, index_col='Timestamp', parse_dates=True)
     df = correct_crude_outliers(df_raw, hx_config, target_tag)
 
+    # Crude assay merged as-of each process day (loaded here, ahead of Q, so duty computation
+    # can use the real per-day SG rather than a fixed default -- see compute_q_features). ffill
+    # ONLY (carry the last KNOWN assay forward) -- the previous `.ffill().bfill()` back-filled
+    # the lead-in rows before the first assay sample with a *future* assay value, i.e. used
+    # tomorrow's crude slate to describe today's crude: a (mild) look-ahead leak. Any leading
+    # rows with no prior assay are filled with the first available value but flagged in
+    # `crude_leadin_filled` so this last-resort fill is explicit, not silent.
+    crude = pd.read_csv(crude_file, parse_dates=['Date']).set_index('Date')
+    crude = crude.reindex(df.index).ffill()
+    leadin = crude.iloc[:, 0].isna()            # rows before first known assay
+    crude = crude.bfill()                       # fill only the flagged lead-in
+
     streams = {hx: parse_hx(cfg) for hx, cfg in hx_config.items()}
-    dT_cold_df, duty_df, Q_norm_df = compute_q_features(df, streams, charge_tag)
+    sg = crude['SG_15_6C'] if 'SG_15_6C' in crude.columns else None
+    dT_cold_df, duty_df, Q_norm_df = compute_q_features(df, streams, charge_tag, sg=sg)
 
     feat = pd.DataFrame(index=df.index)
     for hx, s in streams.items():
@@ -396,17 +424,7 @@ def build_cit_feature_matrix(data_file=DATA_FILE, hx_config=HX_CONFIG,
     feat['month_sin']    = np.sin(2 * np.pi * df.index.month / 12)
     feat['month_cos']    = np.cos(2 * np.pi * df.index.month / 12)
 
-    # Crude assay merged as-of each process day. ffill ONLY (carry the last
-    # KNOWN assay forward) -- the previous `.ffill().bfill()` back-filled the
-    # lead-in rows before the first assay sample with a *future* assay value,
-    # i.e. used tomorrow's crude slate to describe today's crude: a (mild)
-    # look-ahead leak. Any leading rows with no prior assay are filled with the
-    # first available value but flagged in `crude_leadin_filled` so this
-    # last-resort fill is explicit, not silent.
-    crude = pd.read_csv(crude_file, parse_dates=['Date']).set_index('Date')
-    crude = crude.reindex(df.index).ffill()
-    leadin = crude.iloc[:, 0].isna()            # rows before first known assay
-    crude = crude.bfill()                       # fill only the flagged lead-in
+    # crude assay columns (loaded above, ahead of Q, so duty could use per-day SG)
     feat['crude_leadin_filled'] = leadin.astype(int).values
     for col in crude.columns:
         feat[f'crude_{col}'] = crude[col]

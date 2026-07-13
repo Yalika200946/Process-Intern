@@ -30,6 +30,7 @@ NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'end_of_run.json'
 sys.path.append(str(NB))
+import curve_models as cm
 
 # --- engineering constants (documented, tunable) ---
 TRIGGER_DROP_FRAC   = 0.125   # U_relative loss that defines "must clean" (12.5%), per notebook 5
@@ -77,22 +78,42 @@ def main():
         # ---- current-run fouling rate (dU_relative/day), from the ROBUST Fouling_Rate_By_Run ----
         # Only trust a rate the physics-gate marked `reliable` (slope<0, in-service, enough span).
         # Priority: current run if reliable → most recent OTHER reliable run of this HX (flagged) →
-        # current-run tail fit → none. Prefer the recent-window ("current") rate over the whole-run
-        # slope when it's available and still negative (long/asymptotic runs read low whole-run).
+        # current-run tail fit → none. `dUrel_per_day` is now itself the curve-aware TAIL slope
+        # (nb_audit.robust_fouling_rate's linear-vs-asymptotic AIC race — see curve_models.py),
+        # so it is preferred directly rather than falling back to a raw noisy recent-60d window
+        # (that window is only used as a secondary cross-check if the tail slope is unavailable).
         # This supersedes the old "last row in file" logic that mixed a finished run's rate into
         # the current card (the E112C contradiction).
         def _rate_of(row):
+            tail = _num(row.get('dUrel_per_day'), 6)
             rec = _num(row.get('dUrel_per_day_recent'), 6)
-            whole = _num(row.get('dUrel_per_day'), 6)
-            return rec if (rec is not None and rec < 0) else whole
+            return tail if tail is not None else rec
+
+        def _curve_of(row):
+            """Reconstruct the fitted falling-asymptote curve (A, tau, c, anchor day) for
+            extrapolation, but only when the run's own data actually spans enough of the fitted
+            time constant to trust the asymptote (span >= 0.5*tau) — otherwise a short run's
+            curve fit is too uncertain to extrapolate and callers should fall back to a linear
+            projection from the tail slope instead."""
+            if row.get('model_selected') != 'asymptotic':
+                return None
+            A, tau, c, t0, span = (row.get('A_asymp'), row.get('tau_days'), row.get('Rf_inf_asymp'),
+                                    row.get('last_day_on_duty'), row.get('span_days'))
+            if any(v is None or (isinstance(v, float) and not np.isfinite(v)) for v in (A, tau, c, t0, span)):
+                return None
+            if tau <= 0 or span < 0.5 * tau:
+                return None
+            return dict(A=float(A), tau=float(tau), c=float(c), t0=float(t0))
+
         frx_all = fr[fr.HX == hx]
         frx_rel = frx_all[frx_all.get('reliable') == True] if 'reliable' in frx_all else frx_all  # noqa: E712
         frx_cur = frx_rel[frx_rel.Run == cur_rid] if cur_rid is not None else frx_rel.iloc[0:0]
-        rate_urel, r2, run_dur, rate_source = None, None, None, None
+        rate_urel, r2, run_dur, rate_source, curve = None, None, None, None, None
         if not frx_cur.empty:
             last = frx_cur.iloc[-1]
             rate_urel = _rate_of(last); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
             rate_source = 'current_run'
+            curve = _curve_of(last)   # only meaningful for the CURRENT run's own days-on-duty axis
         if rate_urel is None and not frx_rel.empty:   # most recent OTHER reliable run of this HX
             last = frx_rel.sort_values('Run').iloc[-1]
             rate_urel = _rate_of(last); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
@@ -107,11 +128,33 @@ def main():
                     rate_source = 'current_run_fit'
 
         # ---- URel view: days to trigger ----
+        # Prefer extrapolating along the fitted asymptotic curve (not linearly from the tail
+        # slope) when the current run's own fit selected 'asymptotic' and has enough span to
+        # trust the fitted time constant — a flattening run reaches a lower trigger LATER than a
+        # naive linear countdown from its instantaneous rate would suggest.
         past_urel = cur_urel <= trigger_urel
-        days_urel = 0.0 if past_urel else (
-            (trigger_urel - cur_urel) / rate_urel if rate_urel and rate_urel < 0 else None)
+        days_urel, curve_used = None, False
+        if past_urel:
+            days_urel = 0.0
+        elif curve is not None:
+            d_cross = cm.predict_cross('asymptotic', [curve['A'], curve['tau'], curve['c']],
+                                        curve['t0'], trigger_urel, models=cm.MODELS_FALLING,
+                                        tmax=PROJECT_HORIZON_DAYS * 3, direction='falling')
+            if d_cross is not None:
+                days_urel = float(d_cross)
+                curve_used = True
+        if days_urel is None and rate_urel is not None and rate_urel < 0:
+            days_urel = (trigger_urel - cur_urel) / rate_urel
+
         proj_urel_days, proj_urel_val = [], []
-        if rate_urel is not None:
+        if curve_used:
+            horizon = min(PROJECT_HORIZON_DAYS, max(60.0, days_urel * 1.3))
+            f_asym = cm.MODELS_FALLING['asymptotic'][0]
+            for t in range(0, int(horizon) + 1, PROJECT_STEP_DAYS):
+                proj_urel_days.append(t)
+                proj_urel_val.append(round(max(0.0, float(
+                    f_asym(curve['t0'] + t, curve['A'], curve['tau'], curve['c']))), 3))
+        elif rate_urel is not None:
             horizon = min(PROJECT_HORIZON_DAYS, max(60.0, (days_urel or 0) * 1.3))
             for t in range(0, int(horizon) + 1, PROJECT_STEP_DAYS):
                 proj_urel_days.append(t)
@@ -119,7 +162,7 @@ def main():
 
         urel_block = dict(
             current=round(cur_urel, 3), baseline=1.0, trigger=round(trigger_urel, 3),
-            rate_per_day=rate_urel, rate_source=rate_source,
+            rate_per_day=rate_urel, rate_source=rate_source, curve_projection=curve_used,
             days_remaining=_num(days_urel, 0), past_trigger=bool(past_urel),
             projected_date=(as_of + pd.Timedelta(days=days_urel)).strftime('%Y-%m-%d') if days_urel else None,
             proj=dict(days=proj_urel_days, val=proj_urel_val))
@@ -191,6 +234,8 @@ def main():
             signals.append(f'ล้างแล้วคาดคืน CIT ~{cit_loss_now:+.1f}°C')
         if unreliable:
             signals.append(f'⚠ ความเชื่อมั่นแนวโน้มต่ำ (R²={r2:.2f})')
+        if curve_used:
+            signals.append('คาดการณ์วันที่ต้องล้างตามเส้นโค้ง asymptotic (ไม่ใช่เส้นตรง) — อัตราการสกปรกกำลังชะลอตัว')
 
         health = ('critical' if past_urel else 'warn' if near or worsening else
                   'ok' if improving or (days_urel and days_urel > 120) else 'watch')
