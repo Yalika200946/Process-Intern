@@ -31,6 +31,13 @@ SG_FALLBACK = 0.92  # used only if crude assay SG is unavailable for a given tim
                     # module used fixed CP_CRUDE=2.2 kJ/kg.K / RHO_CRUDE=850 kg/m3 constants,
                     # a second, uncross-checked formula for the same physical quantity)
 
+# Kept for backward compatibility: 08_cleaning_priority_ranking.ipynb imports these directly
+# for a simple, single-charge-value kW->degC conversion (E113A/E112C direct CIT-gain override)
+# where a per-timestamp SG-dependent correlation isn't warranted. NOT used by compute_q_features
+# below (that now uses crude_properties.cp_rho_crude with real per-day SG).
+CP_CRUDE  = 2.2    # kJ/kg.K (assumed, Equations_Reference doc)
+RHO_CRUDE = 850    # kg/m3   (assumed)
+
 LEAK_TARGET_HX = 'E113A'  # cold-side outlet of E113A IS the target (CIT) -- see build_cit_feature_matrix
 
 OUTLIER_WINDOW   = 30    # rolling window (days) for z-score detection
