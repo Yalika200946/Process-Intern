@@ -1,0 +1,17 @@
+# keep the image small + free of raw plant data (mounted at /data instead)
+demo/
+figures/
+outputs/
+models/
+**/backup_*/
+**/__pycache__/
+**/.ipynb_checkpoints/
+*.pyc
+.git/
+.claude/
+notebooks/scratch_fouling/
+notebooks/_build_*.py
+# raw source data is NEVER baked into the image (mount it at runtime)
+Data/
+**/uploads/
+Tags Crude Preheat.xlsx

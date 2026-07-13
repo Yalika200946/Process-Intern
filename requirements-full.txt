@@ -1,0 +1,8 @@
+# FULL extras — needed only to run the ENTIRE 13-notebook pipeline headless.
+# Install on top of requirements.txt:  pip install -r requirements.txt -r requirements-full.txt
+# NOTE: tensorflow is large (~500MB+) and only powers notebook 6a's LSTM benchmark,
+# which is already documented as rejected (~700 daily rows is too few for a sequence
+# model). The dashboard, backend, quick-refresh and PHM layer do NOT need it.
+-r requirements.txt
+seaborn==0.13.2          # EDA plots in notebooks 0/1/2
+tensorflow==2.21.0       # LSTM benchmark in notebooks 5/6a/6b

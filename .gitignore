@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ML Models (large files)
+src/ml/trained_models/training_weights/
+*.h5
+*.pkl
+
+# Data (large files - add your data separately)
+data/
+*.csv
+*.xlsx
+*.xls
+
+# ── Plant data protection (prevent pushing REAL tags/values to a public repo) ──
+# Real computed dashboard results contain real instrument tags + operating values.
+# They stay LOCAL (dashboard still works on your machine) but are never committed.
+# Publish the anonymized  demo/  folder instead (safe, fake data).
+dashboard/data/*.json
+backend/uploads/
+**/uploads/
+**/backup_*/
+Data/
+# demo/ (anonymized) is intentionally NOT ignored — it is the safe, publishable artifact
+
+# Windows reserved-device-name junk files (accidental `> nul` redirects; block git add on Windows)
+notebooks/_archive_2026-07-12/nul
+notebooks/_archive_2026-07-12/root_nul

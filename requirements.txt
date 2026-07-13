@@ -1,0 +1,25 @@
+# CPHT Predictive Maintenance — CORE dependencies (pinned to the dev environment).
+#
+# Enough to run:
+#   * backend/server.py   (serve dashboard + Excel upload + quick topology refresh)
+#   * pipeline post-processors: gen_honest_metrics, add_forecast_intervals,
+#     build_dashboard_topology, phm_analysis
+#   * run_all.py for every notebook EXCEPT 0/1/2 (seaborn) and 5/6a/6b (tensorflow)
+#
+# For the FULL notebook re-run (all 13 notebooks incl. the LSTM benchmark),
+# also install requirements-full.txt.
+pandas==2.3.3
+numpy==2.3.5
+scikit-learn==1.9.0
+scipy==1.16.3
+xgboost==3.3.0
+shap==0.52.0
+joblib==1.5.3
+matplotlib==3.10.0
+openpyxl==3.1.5
+
+# executes notebooks headless (run_all.py)
+nbformat==5.10.4
+nbconvert==7.17.1
+jupyter-client==8.9.1
+ipykernel==7.3.0

@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bangchak · CPHT Predictive Maintenance Dashboard</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+
+<!-- Tailwind -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- React 18 + Recharts + Babel -->
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bcp: {
+          green:'#48A23F', lime:'#84B000', orange:'#EA7600',
+          gray:'#BBBCBC', black:'#2D2926', dgray:'#888B8D',
+          white:'#FFFFFF', blue:'#005B99', turq:'#00B2A9',
+        },
+      },
+      fontFamily: { sans:["DB Ozone X","Prompt","sans-serif"] },
+      boxShadow: {
+        card:'0 1px 4px rgba(45,41,38,.05), 0 6px 20px rgba(45,41,38,.06)',
+        lift:'0 8px 32px rgba(45,41,38,.14)',
+      },
+    },
+  },
+};
+</script>
+
+<style>
+html{scroll-behavior:smooth}
+body{
+  background:
+    radial-gradient(ellipse 900px 400px at 100% 0%, rgba(132,176,0,.07), transparent),
+    radial-gradient(ellipse 800px 400px at 0% 100%, rgba(0,178,169,.06), transparent),
+    #F5F6F3;
+}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.fade-up{animation:fadeUp .5s cubic-bezier(.22,1,.36,1) both}
+
+@keyframes popIn{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:none}}
+.pop-in{animation:popIn .35s cubic-bezier(.22,1,.36,1) both}
+
+@keyframes flow{to{stroke-dashoffset:-24}}
+.anim-flow{stroke-dasharray:6 8;animation:flow .8s linear infinite}
+
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 0 0 rgba(234,118,0,.4)}70%{box-shadow:0 0 0 10px rgba(234,118,0,0)}}
+.pulse-glow{animation:pulseGlow 2s infinite}
+
+@keyframes svgPulse{0%,100%{opacity:.4;r:28}50%{opacity:0;r:38}}
+
+/* Glassmorphism */
+.glass{background:rgba(255,255,255,.78);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%);border:1px solid rgba(255,255,255,.6)}
+
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:#D1D5CF;border-radius:8px}
+.recharts-surface:focus{outline:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const {useState, useEffect, useMemo, useCallback} = React;
+const {
+  ResponsiveContainer, ComposedChart, LineChart, Line, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip:RTooltip, ReferenceLine, Legend, BarChart, Bar, Cell,
+} = Recharts;
+
+/* ═══════════════════ CONFIG ═══════════════════ */
+const CFG = {
+  DATA_DIR: './data',
+  CIT_TARGET: 250,
+  MIN_CIT: 242,
+  NEXT_TAM: '2028-06-01',
+};
+const BCP = {green:'#48A23F',lime:'#84B000',orange:'#EA7600',gray:'#BBBCBC',black:'#2D2926',dgray:'#888B8D',blue:'#005B99',turq:'#00B2A9'};
+
+/* ═══════════════ PFD NODE LAYOUT (matches reference SVG) ═══════════════ */
+const PFD_LAYOUT = {
+  'E101AB':  {x:130, y:70,  group:'cold'},
+  'E101CD':  {x:130, y:170, group:'cold'},
+  'E101EF':  {x:130, y:270, group:'cold'},
+  'E101G':   {x:130, y:370, group:'cold'},
+  'E102':    {x:290, y:170, group:'mid'},
+  'E106AB':  {x:500, y:70,  group:'warm'},
+  'E107AB':  {x:640, y:70,  group:'warm'},
+  'E108AB':  {x:780, y:70,  group:'hot'},
+  'E109AB':  {x:920, y:70,  group:'hot'},
+  'E110ABC': {x:500, y:195, group:'warm'},
+  'E111':    {x:640, y:195, group:'hot'},
+  'E112AB':  {x:780, y:195, group:'hot'},
+  'E113A':   {x:980, y:195, group:'hot'},
+  'E103AB':  {x:500, y:320, group:'mid'},
+  'E104':    {x:640, y:320, group:'mid'},
+  'E105AB':  {x:780, y:320, group:'mid'},
+  'E112C':   {x:780, y:420, group:'hot'},
+};
+const PFD_W = 1080, PFD_H = 480;
+
+const ALL_HX = Object.keys(PFD_LAYOUT);
+
+/* ═══════════════ HELPERS ═══════════════ */
+const fmt = (v,d=1) => (v==null||Number.isNaN(+v)) ? '—' : Number(v).toFixed(d);
+const daysBetween = (a,b) => Math.round((new Date(b)-new Date(a))/864e5);
+const parseISO = s => new Date(s+'T00:00:00');
+async function loadJSON(n){ const r=await fetch(`${CFG.DATA_DIR}/${n}`); if(!r.ok) throw new Error(`${n}: ${r.status}`); return r.json(); }
+
+function statusOf(u){
+  if(!u||!u.recommended_action) return 'none';
+  const a=u.recommended_action;
+  if(a.startsWith('Clean now')) return 'critical';
+  if(/^\d{4}-\d{2}-\d{2}$/.test(a)) return 'scheduled';
+  if(a.startsWith('Stable / long')) return 'stable';
+  return 'ok';
+}
+const ST = {
+  critical: {color:BCP.orange, bg:'bg-bcp-orange', label:'Clean-Now', th:'ต้องล้างด่วน'},
+  scheduled:{color:BCP.lime,   bg:'bg-bcp-lime',   label:'Scheduled', th:'มีกำหนดล้าง'},
+  ok:       {color:BCP.green,  bg:'bg-bcp-green',  label:'Healthy',   th:'ปกติ'},
+  stable:   {color:BCP.green,  bg:'bg-bcp-green',  label:'Stable',    th:'เสถียร'},
+  none:     {color:BCP.gray,   bg:'bg-bcp-gray',   label:'No Data',   th:'ไม่มีข้อมูล'},
+};
+
+/* ═══════════════ URGENCY CLASSIFICATION ═══════════════ */
+const EFFORT_TH = {'ONLINE_CLEAN_DEMONSTRATED':'ล้างออนไลน์ได้','SWAP_CAPABLE':'สลับเชลล์ได้','TAM_ONLY':'รอ TAM เท่านั้น'};
+
+const URG = {
+  do_now:   {label:'ถึงจุดต้องทำความสะอาดแล้ว —\nทำได้เลย',        color:'#EF4444', badge:'ล้างได้เลย',  order:1},
+  tam_wait: {label:'ถึงจุดแล้ว แต่ ทำไม่ได้ จนกว่าจะ\nถึง TAM',    color:'#888B8D', badge:'ล็อกรอ TAM', order:2},
+  near_0_3: {label:'คาดว่าจะถึงจุดใน 0–3 เดือน',                    color:'#EA7600', badge:'ใกล้ถึงจุด',  order:3},
+  near_3_6: {label:'คาดว่าจะถึงจุดใน 3–6 เดือน',                    color:'#D9A400', badge:'เฝ้าระวัง',   order:4},
+  near_6_12:{label:'คาดว่าจะถึงจุดใน 6–12 เดือน',                   color:'#D9A400', badge:'เฝ้าระวัง',   order:5},
+  stable:   {label:'เสถียร / ดีขึ้น — ยังไม่ถึงจุดใน\n12 เดือน',    color:'#48A23F', badge:'เสถียร',     order:6},
+};
+
+function computeDaysFromForecast(fc){
+  if(!fc) return null;
+  if(fc.current_deviation > fc.threshold) return 0;
+  const today = new Date().toISOString().slice(0,10);
+  for(let i=0;i<fc.dates.length;i++){
+    if(fc.dates[i]>=today && fc.projected_deviation[i]>fc.threshold){
+      return daysBetween(new Date(), fc.dates[i]);
+    }
+  }
+  return null;
+}
+function classifyHX(u,fc){
+  if(!fc) return 'stable';
+  const crossed = fc.current_deviation > fc.threshold;
+  const tamOnly = u?.effort_tier==='TAM_ONLY';
+  if(crossed && tamOnly) return 'tam_wait';
+  if(crossed) return 'do_now';
+  const days = u?.days_to_threshold_6mo ?? computeDaysFromForecast(fc);
+  if(days!=null && days>0 && days<=90)  return 'near_0_3';
+  if(days!=null && days>90 && days<=180) return 'near_3_6';
+  if(days!=null && days>180 && days<=365) return 'near_6_12';
+  return 'stable';
+}
+function getProjectedDate(u,fc){
+  if(u?.projected_clean_date) return u.projected_clean_date;
+  if(!fc) return null;
+  const today = new Date().toISOString().slice(0,10);
+  for(let i=0;i<fc.dates.length;i++){
+    if(fc.dates[i]>=today && fc.projected_deviation[i]>fc.threshold) return fc.dates[i];
+  }
+  return null;
+}
+function thaiDate(iso){ if(!iso) return '—'; return parseISO(iso).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}); }
+
+function buildClassified(forecast, units){
+  return Object.keys(forecast).map(hx=>{
+    const fc=forecast[hx], u=units[hx]||{};
+    const urg=classifyHX(u,fc);
+    const days=u.days_to_threshold_6mo ?? computeDaysFromForecast(fc);
+    const projDate=getProjectedDate(u,fc);
+    let dateLabel='';
+    if(urg==='do_now'||urg==='tam_wait'){
+      dateLabel='ถึงจุดแล้ว';
+      if(urg==='tam_wait') dateLabel+=' · รอ TAM';
+    } else if(urg==='stable'){
+      if(days!=null && days>365) dateLabel=`~${Math.round(days/30)} เดือน (เกินกรอบ)`;
+      else if(fc.projected_deviation[fc.projected_deviation.length-1]<fc.current_deviation) dateLabel='ดีขึ้น';
+      else dateLabel='เสถียร';
+    } else if(projDate){
+      const d=daysBetween(new Date(),projDate);
+      dateLabel=thaiDate(projDate)+(d>0?` (~${d} วัน)`:'');
+    }
+    let rec='';
+    if(urg==='do_now') rec='จัดคิวล้าง/สลับเชลล์เร็วที่สุด';
+    else if(urg==='tam_wait') rec='เฝ้าระวัง / ปรับ CIT ระหว่างรอ TAM';
+    else if(urg==='near_0_3'||urg==='near_3_6') rec='เตรียมแผนล้าง/สลับเชลล์ล่วงหน้า';
+    else if(urg==='stable'){
+      const declining = fc.projected_deviation[fc.projected_deviation.length-1]<fc.current_deviation;
+      rec = declining ? 'ไม่ต้องดำเนินการ เฝ้าติดตามตามปกติ' : 'ไม่ต้องดำเนินการในรอบ 12 เดือนนี้';
+    }
+    return {
+      hx, urgency:urg, effortLabel:EFFORT_TH[u.effort_tier]||'ไม่ระบุ',
+      daysToThreshold:days, projectedDate:projDate, dateLabel,
+      currentDeviation:fc.current_deviation, threshold:fc.threshold,
+      foulingRate:u.Q_fouling_rate_abs, recommendation:rec,
+    };
+  }).sort((a,b)=>{
+    const oa=URG[a.urgency]?.order??99, ob=URG[b.urgency]?.order??99;
+    return oa!==ob ? oa-ob : (a.daysToThreshold??999)-(b.daysToThreshold??999);
+  });
+}
+
+/* ═══════════════ COMPONENTS ═══════════════ */
+
+/* ── Header ── */
+function Header(){
+  return (
+    <header className="sticky top-0 z-30 glass border-b border-black/[.05]">
+      <div className="max-w-[1360px] mx-auto px-6 h-[60px] flex items-center justify-between">
+        <img src="bangchak-logo.png" alt="Bangchak" className="h-8 object-contain"/>
+        <div className="hidden md:block text-center">
+          <div className="text-[14px] font-bold text-bcp-black tracking-tight">Crude Preheat Train · Predictive Maintenance</div>
+          <div className="text-[11px] text-bcp-dgray">Plant 3 TPU · ระบบคาดการณ์การสกปรก & วางแผนล้าง Heat Exchanger</div>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-bcp-dgray">
+          <span className="h-2 w-2 rounded-full bg-bcp-green animate-pulse"></span>
+          {new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'})}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ── KPI Card ── */
+function Kpi({icon,label,value,sub,tone='green',delay=0,foot}){
+  const rings = {green:'from-bcp-green/10 to-bcp-lime/10',orange:'from-bcp-orange/12 to-bcp-orange/5',blue:'from-bcp-blue/10 to-bcp-turq/10',gray:'from-bcp-gray/20 to-white'};
+  const accents = {green:BCP.green,orange:BCP.orange,blue:BCP.blue,gray:BCP.dgray};
+  const accent = accents[tone];
+  return (
+    <div className="fade-up relative overflow-hidden rounded-2xl bg-white shadow-card border border-black/[.04] p-5"
+         style={{animationDelay:`${delay}ms`}}>
+      <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${rings[tone]}`}/>
+      <div className="relative">
+        <div className="flex items-start justify-between">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[.12em] text-bcp-dgray">{label}</div>
+            <div className="mt-2 text-[28px] leading-none font-bold text-bcp-black">{value}</div>
+            {sub && <div className="mt-1 text-[12px] font-medium" style={{color:accent}}>{sub}</div>}
+          </div>
+          <div className="text-xl grid place-items-center h-9 w-9 rounded-xl" style={{background:`${accent}14`,color:accent}}>{icon}</div>
+        </div>
+        {foot && <div className="mt-3 pt-2.5 border-t border-black/[.04] text-[10.5px] text-bcp-dgray">{foot}</div>}
+      </div>
+    </div>
+  );
+}
+
+/* ── PFD (Process Flow Diagram) ── */
+function PFD({units, selected, onSelect}){
+  const [hover, setHover] = useState(null);
+
+  const groups = [
+    {label:'CPHT Cold End', sub:'เย็น · Desalted Crude', x:40, y:30, w:220, h:400, color:BCP.blue},
+    {label:'CPHT-2 Mid', x:225, y:110, w:135, h:120, color:BCP.turq},
+    {label:'Hot Product Returns', sub:'ร้อน · Residue / Side-cuts', x:435, y:30, w:600, h:430, color:BCP.orange},
+  ];
+
+  return (
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] overflow-hidden fade-up" style={{animationDelay:'120ms'}}>
+      <div className="px-5 pt-4 pb-2 flex items-center justify-between">
+        <div>
+          <h2 className="text-[15px] font-bold text-bcp-black">Process Flow Diagram · แผนผังตัวแลกเปลี่ยนความร้อน</h2>
+          <p className="text-[11px] text-bcp-dgray mt-0.5">คลิกเพื่อดูข้อมูลและพยากรณ์ · จัดวางตามตำแหน่งจริงในโรงกลั่น</p>
+        </div>
+        <div className="hidden sm:flex items-center gap-3 text-[10.5px]">
+          {[['critical','Clean-Now'],['scheduled','Scheduled'],['ok','Healthy'],['none','No Data']].map(([s,l])=>(
+            <span key={s} className="flex items-center gap-1.5 text-bcp-dgray">
+              <span className="h-2.5 w-2.5 rounded-full" style={{background:ST[s].color}}/>{l}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="relative px-2 pb-3">
+        <svg viewBox={`0 0 ${PFD_W} ${PFD_H}`} className="w-full h-auto" onMouseLeave={()=>setHover(null)}>
+          {/* Group backgrounds */}
+          {groups.map((g,i)=>(
+            <g key={i}>
+              <rect x={g.x} y={g.y} width={g.w} height={g.h} rx="16"
+                    fill={g.color} opacity=".04" stroke={g.color} strokeOpacity=".12" strokeWidth="1"/>
+              <text x={g.x+10} y={g.y+18} fontFamily="Prompt" fontSize="10" fontWeight="600" fill={g.color} opacity=".7">{g.label}</text>
+              {g.sub && <text x={g.x+10} y={g.y+30} fontFamily="Prompt" fontSize="8" fill={BCP.dgray} opacity=".6">{g.sub}</text>}
+            </g>
+          ))}
+
+          {/* Flow direction arrows */}
+          <defs>
+            <marker id="arrowG" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,4 L0,8 Z" fill={BCP.green} opacity=".5"/>
+            </marker>
+            <marker id="arrowO" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="8" markerHeight="6" orient="auto">
+              <path d="M0,0 L10,4 L0,8 Z" fill={BCP.orange} opacity=".5"/>
+            </marker>
+          </defs>
+
+          {/* Crude flow backbone — simplified */}
+          <line x1="50" y1="445" x2="130" y2="395" stroke={BCP.blue} strokeWidth="2" opacity=".25" markerEnd="url(#arrowG)"/>
+          <text x="20" y="462" fontFamily="Prompt" fontSize="10" fontWeight="600" fill={BCP.blue} opacity=".6">Crude In</text>
+
+          {/* Vertical pipe: E101 series */}
+          <line x1="130" y1="95" x2="130" y2="370" stroke={BCP.turq} strokeWidth="2.5" opacity=".18"/>
+
+          {/* E101CD → E102 */}
+          <line x1="160" y1="170" x2="260" y2="170" stroke={BCP.turq} strokeWidth="2" opacity=".2" className="anim-flow"/>
+
+          {/* E102 → right section */}
+          <line x1="320" y1="170" x2="470" y2="130" stroke={BCP.lime} strokeWidth="2" opacity=".15" strokeDasharray="4 6"/>
+
+          {/* Furnace block */}
+          <rect x={PFD_W-70} y="140" width="60" height="72" rx="10" fill={BCP.black}/>
+          <text x={PFD_W-40} y="168" textAnchor="middle" fill="#fff" fontFamily="Prompt" fontSize="9" fontWeight="600">FURNACE</text>
+          <text x={PFD_W-40} y="183" textAnchor="middle" fill={BCP.lime} fontFamily="Prompt" fontSize="12" fontWeight="700">CIT</text>
+          <text x={PFD_W-40} y="200" textAnchor="middle" fill={BCP.gray} fontFamily="Prompt" fontSize="8">→ เตาเผา</text>
+
+          {/* Animated flow to furnace */}
+          <line x1="960" y1="195" x2={PFD_W-72} y2="180" stroke={BCP.orange} strokeWidth="2.5" opacity=".25" className="anim-flow"/>
+
+          {/* HX nodes */}
+          {ALL_HX.map(hx => {
+            const pos = PFD_LAYOUT[hx];
+            const u = units[hx];
+            const st = statusOf(u);
+            const meta = ST[st];
+            const isSel = selected===hx;
+            const hasData = !!u && u.priority_rank!=null;
+
+            return (
+              <g key={hx} style={{cursor:'pointer'}}
+                 onClick={()=>onSelect(hx)}
+                 onMouseEnter={()=>setHover(hx)}
+                 onMouseMove={()=>setHover(hx)}>
+                {/* Critical pulse */}
+                {st==='critical' && <circle cx={pos.x} cy={pos.y} r="28" fill={BCP.orange} style={{animation:'svgPulse 2s infinite'}}/>}
+                {/* Selection ring */}
+                {isSel && <circle cx={pos.x} cy={pos.y} r="32" fill="none" stroke={BCP.green} strokeWidth="2.5" strokeDasharray="4 3" opacity=".7"/>}
+                {/* Node */}
+                <circle cx={pos.x} cy={pos.y} r="24" fill="#fff" stroke={meta.color} strokeWidth={isSel?3.5:2.5}/>
+                <circle cx={pos.x} cy={pos.y} r="17" fill={meta.color} opacity={st==='ok'||st==='stable'?.12:.18}/>
+                {/* Label */}
+                <text x={pos.x} y={pos.y+4} textAnchor="middle" fontFamily="Prompt" fontSize={hx.length>5?'8.5':'10'}
+                      fontWeight="700" fill={BCP.black}>{hx}</text>
+                {/* Rank badge */}
+                {hasData && u.priority_rank<=5 && (
+                  <g>
+                    <circle cx={pos.x+18} cy={pos.y-18} r="9" fill={meta.color}/>
+                    <text x={pos.x+18} y={pos.y-14.5} textAnchor="middle" fontFamily="Prompt" fontSize="8" fontWeight="700" fill="#fff">
+                      {u.priority_rank}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+
+        {/* Tooltip */}
+        {hover && (()=>{
+          const pos = PFD_LAYOUT[hover];
+          const u = units[hover];
+          const st = statusOf(u);
+          const meta = ST[st];
+          const leftPct = (pos.x/PFD_W)*100;
+          const topPct = (pos.y/PFD_H)*100;
+          const above = pos.y > PFD_H*0.4;
+          return (
+            <div className="pointer-events-none absolute z-20 pop-in"
+                 style={{left:`${leftPct}%`, top:`${topPct}%`, transform:`translate(-50%, ${above?'-115%':'30%'})`}}>
+              <div className="glass rounded-xl shadow-lift px-4 py-3 w-[210px]">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-bcp-black text-[14px]">{hover}</span>
+                  <span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:meta.color}}>{meta.label}</span>
+                </div>
+                {u && u.priority_rank!=null ? (
+                  <div className="space-y-1.5 text-[11px]">
+                    <TipRow k="Priority Rank" v={`#${u.priority_rank}`}/>
+                    <TipRow k="Fouling Rate" v={fmt(u.Q_fouling_rate_abs,2)+' /100d'}/>
+                    <TipRow k="Duty Drop ΔQ" v={u['Q_drop_%']!=null?fmt(u['Q_drop_%'],1)+'%':'—'}/>
+                    <TipRow k="CIT Gain (ถ้าล้าง)" v={u.expected_CIT_gain_C!=null?'+'+fmt(u.expected_CIT_gain_C,1)+'°C':'—'}/>
+                    <TipRow k="Effort" v={(u.effort_tier||'—').replace(/_/g,' ').toLowerCase()}/>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-bcp-dgray">ไม่มีข้อมูลจัดอันดับสำหรับ HX นี้</div>
+                )}
+                <div className="mt-2 pt-2 border-t border-black/[.06] text-[10px] text-bcp-dgray text-center">คลิกเพื่อดูพยากรณ์</div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+    </div>
+  );
+}
+function TipRow({k,v}){
+  return <div className="flex justify-between gap-2"><span className="text-bcp-dgray">{k}</span><span className="font-semibold text-bcp-black">{v}</span></div>;
+}
+
+/* ── Detail Panel (selected HX) ── */
+function DetailPanel({hx, unit, fc, onSimulate, simActive}){
+  if(!hx) return null;
+  const st = statusOf(unit);
+  const meta = ST[st];
+  const hasRank = unit && unit.priority_rank!=null;
+  const hasFc = !!fc;
+
+  return (
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up h-full" style={{animationDelay:'200ms'}}>
+      <div className="flex items-center gap-3 mb-4">
+        <div className="h-11 w-11 rounded-xl grid place-items-center text-white font-bold text-[14px]" style={{background:meta.color}}>
+          {hasRank ? `#${unit.priority_rank}` : '—'}
+        </div>
+        <div>
+          <div className="text-[18px] font-bold text-bcp-black">{hx}</div>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:meta.color}}>{meta.th} · {meta.label}</span>
+          </div>
+        </div>
+      </div>
+
+      {hasRank ? (
+        <div className="space-y-3">
+          <MetricRow label="Fouling Rate" value={fmt(unit.Q_fouling_rate_abs,2)} unit="/100d" icon="📈"/>
+          <MetricRow label="Duty Drop ΔQ" value={unit['Q_drop_%']!=null?fmt(unit['Q_drop_%'],1):'—'} unit="%" icon="⚡"
+                     warn={unit['Q_drop_%']>30}/>
+          <MetricRow label="SHAP CIT Importance" value={fmt(unit.cit_shap_importance,3)} icon="🎯"/>
+          <MetricRow label="CIT Recovery (ถ้าล้าง)" value={unit.expected_CIT_gain_C!=null?'+'+fmt(unit.expected_CIT_gain_C,1):'—'} unit="°C" icon="🌡"
+                     good={unit.expected_CIT_gain_C>3}/>
+          <MetricRow label="Effort Tier" value={(unit.effort_tier||'—').replace(/_/g,' ')} icon="🔧"/>
+
+          <div className="pt-2 border-t border-black/[.05]">
+            <div className="flex items-center gap-2 text-[11px] mb-1.5">
+              {unit.safety_flag && <span className="bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">⚠ Safety Risk</span>}
+              {unit.worsening && <span className="bg-bcp-orange/10 text-bcp-orange font-semibold px-2 py-0.5 rounded-full">↗ Worsening</span>}
+              {unit.at_risk_within_6mo && <span className="bg-bcp-blue/10 text-bcp-blue font-semibold px-2 py-0.5 rounded-full">⏱ At-Risk 6mo</span>}
+            </div>
+          </div>
+
+          {hasFc && (
+            <button onClick={onSimulate}
+              className={`w-full mt-1 text-[12px] font-semibold py-2.5 rounded-xl transition-all
+                ${simActive
+                  ? 'bg-bcp-green text-white shadow-md'
+                  : 'bg-bcp-green/10 text-bcp-green hover:bg-bcp-green hover:text-white'}`}>
+              {simActive ? '● Simulating Cleaning' : '🧪 Simulate Cleaning'}
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="text-[13px] text-bcp-dgray py-8 text-center">
+          <div className="text-3xl mb-2">📭</div>
+          ไม่มีข้อมูล ranking / recommendation<br/>สำหรับ {hx}
+        </div>
+      )}
+    </div>
+  );
+}
+function MetricRow({label,value,unit='',icon,warn,good}){
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-[12px] text-bcp-dgray flex items-center gap-1.5">
+        <span className="text-[14px]">{icon}</span>{label}
+      </span>
+      <span className={`text-[14px] font-bold ${warn?'text-bcp-orange':good?'text-bcp-green':'text-bcp-black'}`}>
+        {value}<span className="text-[10px] font-normal text-bcp-dgray ml-0.5">{unit}</span>
+      </span>
+    </div>
+  );
+}
+
+/* ── Forecast Chart ── */
+function ForecastChart({hx, fc, simActive, unit}){
+  if(!fc) return (
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-6 text-center text-bcp-dgray fade-up h-full grid place-items-center">
+      <div><div className="text-3xl mb-2">📊</div>เลือก HX จาก PFD เพื่อดูพยากรณ์</div>
+    </div>
+  );
+
+  const data = useMemo(()=>{
+    return fc.dates.map((d,i)=>({
+      date: d,
+      deviation: +fc.projected_deviation[i].toFixed(3),
+      threshold: +fc.threshold.toFixed(3),
+      cleaned: simActive ? +fc.threshold.toFixed(3) * 0.3 : undefined,
+    }));
+  },[fc, simActive]);
+
+  const breach = data.find(p => p.deviation > p.threshold);
+  const tickFmt = d => parseISO(d).toLocaleDateString('en-US',{month:'short'});
+  const gain = unit?.expected_CIT_gain_C;
+
+  return (
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up h-full" style={{animationDelay:'260ms'}}>
+      <div className="flex items-start justify-between flex-wrap gap-2 mb-1">
+        <div>
+          <h2 className="text-[15px] font-bold text-bcp-black">
+            6-Month Fouling Forecast · <span className="text-bcp-green">{hx}</span>
+          </h2>
+          <p className="text-[11px] text-bcp-dgray mt-0.5">
+            ค่าเบี่ยงเบนจากสภาพสะอาด — เมื่อข้ามเส้นประ = ถึงเวลาล้าง
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[10.5px]">
+          <Pill color={BCP.black} text="Projected"/>
+          <Pill color={BCP.orange} dashed text="Threshold"/>
+          {simActive && <Pill color={BCP.green} dashed text="After Cleaning"/>}
+        </div>
+      </div>
+
+      {simActive && (
+        <div className="mb-3 flex items-center gap-2 text-[11.5px] bg-bcp-green/[.06] border border-bcp-green/15 rounded-lg px-3 py-2 pop-in">
+          <span className="text-bcp-green font-semibold">🧪 Sandbox:</span>
+          <span className="text-bcp-black/80">ถ้าล้าง <b>{hx}</b> → ค่าเบี่ยงเบนรีเซ็ตใกล้ 0{gain ? ` · คืน CIT +${fmt(gain,1)}°C` : ''}</span>
+        </div>
+      )}
+
+      <div style={{width:'100%', height:280}}>
+        <ResponsiveContainer>
+          <ComposedChart data={data} margin={{top:8,right:12,left:-8,bottom:0}}>
+            <defs>
+              <linearGradient id="devFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={BCP.orange} stopOpacity=".18"/>
+                <stop offset="1" stopColor={BCP.orange} stopOpacity="0"/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="#EEF0ED" vertical={false}/>
+            <XAxis dataKey="date" tickFormatter={tickFmt} minTickGap={40}
+                   tick={{fill:BCP.dgray,fontSize:11}} axisLine={{stroke:'#E4E7E3'}} tickLine={false}/>
+            <YAxis tick={{fill:BCP.dgray,fontSize:11}} axisLine={false} tickLine={false} width={42}/>
+            <RTooltip content={<DevTip simActive={simActive}/>}/>
+            <Area type="monotone" dataKey="deviation" stroke="none" fill="url(#devFill)"/>
+            <Line type="monotone" dataKey="deviation" name="Fouling Deviation" stroke={BCP.black}
+                  strokeWidth={2.2} dot={false} activeDot={{r:4}} animationDuration={600}/>
+            <Line type="monotone" dataKey="threshold" name="Threshold" stroke={BCP.orange}
+                  strokeWidth={1.5} strokeDasharray="6 4" dot={false} animationDuration={0}/>
+            {simActive &&
+              <Line type="monotone" dataKey="cleaned" name="After Cleaning" stroke={BCP.green}
+                    strokeWidth={2.2} strokeDasharray="6 5" dot={false} animationDuration={600}/>}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-bcp-dgray">
+        <span>Threshold: <b className="text-bcp-black">{fmt(fc.threshold,2)}</b></span>
+        <span>Current: <b className="text-bcp-black">{fmt(fc.current_deviation,2)}</b></span>
+        {breach && <span className="text-bcp-orange font-semibold">
+          ⚠ คาดว่าข้ามเกณฑ์ ~ {parseISO(breach.date).toLocaleDateString('th-TH',{day:'numeric',month:'short'})}
+        </span>}
+      </div>
+    </div>
+  );
+}
+function Pill({color,text,dashed}){
+  return (
+    <span className="flex items-center gap-1.5 text-bcp-dgray">
+      <svg width="16" height="6"><line x1="0" y1="3" x2="16" y2="3" stroke={color} strokeWidth="2.2" strokeDasharray={dashed?'4 3':'0'}/></svg>{text}
+    </span>
+  );
+}
+function DevTip({active,payload,label,simActive}){
+  if(!active||!payload?.length) return null;
+  const dev = payload.find(p=>p.dataKey==='deviation');
+  const thr = payload.find(p=>p.dataKey==='threshold');
+  const cln = payload.find(p=>p.dataKey==='cleaned');
+  return (
+    <div className="glass rounded-lg shadow-lift px-3 py-2.5 text-[12px]">
+      <div className="font-semibold text-bcp-black mb-1">{parseISO(label).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'})}</div>
+      {dev && <div className="flex items-center gap-2"><span className="h-2 w-2 rounded-full" style={{background:BCP.black}}/> Deviation <b>{fmt(dev.value,2)}</b></div>}
+      {thr && <div className="flex items-center gap-2 text-bcp-orange"><span className="h-2 w-2 rounded-full" style={{background:BCP.orange}}/> Threshold <b>{fmt(thr.value,2)}</b></div>}
+      {simActive && cln && <div className="flex items-center gap-2 text-bcp-green"><span className="h-2 w-2 rounded-full" style={{background:BCP.green}}/> After clean <b>{fmt(cln.value,2)}</b></div>}
+    </div>
+  );
+}
+
+/* ── Action Plan ── */
+function ActionPlan({units, selected, onSelect}){
+  const list = useMemo(()=>
+    Object.values(units).filter(u=>u.priority_rank!=null).sort((a,b)=>a.priority_rank-b.priority_rank),
+  [units]);
+  const critCount = list.filter(u=>statusOf(u)==='critical').length;
+
+  return (
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] fade-up" style={{animationDelay:'320ms'}}>
+      <div className="px-5 pt-4 pb-3 border-b border-black/[.04] flex items-center justify-between">
+        <div>
+          <h2 className="text-[15px] font-bold text-bcp-black">Action Plan · แผนการล้าง HX</h2>
+          <p className="text-[11px] text-bcp-dgray mt-0.5">จัดอันดับตาม Engineering Priority Score (Risk × Consequence ÷ Effort)</p>
+        </div>
+        <span className="text-[11px] font-bold text-bcp-orange bg-bcp-orange/10 px-3 py-1 rounded-full">{critCount} ต้องล้างด่วน</span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px]">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-wider text-bcp-dgray border-b border-black/[.04]">
+              <th className="px-4 py-2.5 w-12">#</th>
+              <th className="px-3 py-2.5">HX</th>
+              <th className="px-3 py-2.5">Status</th>
+              <th className="px-3 py-2.5 text-right">Priority Score</th>
+              <th className="px-3 py-2.5 text-right">Fouling Rate</th>
+              <th className="px-3 py-2.5 text-right">ΔQ %</th>
+              <th className="px-3 py-2.5 text-right">CIT Gain</th>
+              <th className="px-3 py-2.5">Effort</th>
+              <th className="px-3 py-2.5">Clean By</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-black/[.03]">
+            {list.map(u => {
+              const st = statusOf(u); const meta = ST[st];
+              const active = selected===u.HX;
+              return (
+                <tr key={u.HX} onClick={()=>onSelect(u.HX)}
+                    className={`cursor-pointer transition-colors hover:bg-bcp-green/[.03] ${active?'bg-bcp-green/[.06]':''}`}>
+                  <td className="px-4 py-2.5">
+                    <span className="inline-grid place-items-center h-6 w-6 rounded-md text-white text-[10px] font-bold" style={{background:meta.color}}>
+                      {u.priority_rank}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 font-bold text-bcp-black">{u.HX}</td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:meta.color}}>{meta.label}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{fmt(u.priority_score,3)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{fmt(u.Q_fouling_rate_abs,2)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    <span className={u['Q_drop_%']>30?'text-bcp-orange font-semibold':''}>{u['Q_drop_%']!=null?fmt(u['Q_drop_%'],1)+'%':'—'}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {u.expected_CIT_gain_C!=null && u.expected_CIT_gain_C>0
+                      ? <span className="text-bcp-green font-semibold">+{fmt(u.expected_CIT_gain_C,1)}°C</span>
+                      : '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-[10.5px] text-bcp-dgray">{(u.effort_tier||'—').replace(/_/g,' ')}</td>
+                  <td className="px-3 py-2.5 text-[11px]">
+                    {u.projected_clean_date
+                      ? <span className="font-semibold">{parseISO(u.projected_clean_date).toLocaleDateString('th-TH',{day:'numeric',month:'short'})}</span>
+                      : <span className="text-bcp-dgray">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════ DARK THEME: 12-Month Cleaning Plan ══════════════════════ */
+
+function CleaningPlanSection({classified}){
+  const groups = ['do_now','tam_wait','near_0_3','near_3_6','near_6_12','stable'];
+  const counts = {};
+  groups.forEach(g=>{ counts[g]=classified.filter(c=>c.urgency===g).length; });
+
+  return (
+    <section className="rounded-2xl bg-[#1e1e2a] p-6 md:p-8 space-y-6 fade-up" style={{animationDelay:'320ms'}}>
+      {/* Header */}
+      <div>
+        <h2 className="text-[20px] font-bold text-white">แผนทำความสะอาด Heat Exchanger — มองไปข้างหน้า 12 เดือน</h2>
+        <p className="text-[12px] text-white/40 mt-1">Crude Preheat Train (CPHT-1 / CPHT-2) · {classified.length} เครื่อง · สำหรับผู้ปฏิบัติการหน้างาน</p>
+        <p className="text-[11px] text-white/30 mt-0.5">ข้อมูลล่าสุด ณ วันที่ {new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'})} | อ้างอิงจากอัตราการเกิดตะกรัน (fouling rate) ที่วัดได้จริงในรอบเดินเครื่องปัจจุบัน ของแต่ละเครื่อง</p>
+      </div>
+
+      {/* 6 KPI cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {groups.map(g=>{
+          const meta=URG[g];
+          return (
+            <div key={g} className="rounded-xl border border-white/10 p-4">
+              <div className="text-[36px] font-bold leading-none" style={{color:meta.color}}>{counts[g]}</div>
+              <div className="text-[11px] text-white/50 mt-2 leading-snug whitespace-pre-line">{meta.label}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Timeline */}
+      <CleaningTimeline classified={classified}/>
+
+      {/* Grouped Action Table */}
+      <GroupedActionTable classified={classified}/>
+
+      {/* Operator Summary */}
+      <OperatorSummary classified={classified}/>
+
+      <div className="text-[10px] text-white/25 text-center pt-2">
+        จัดทำจากผลวิเคราะห์ fouling-rate forecast (3a/3b) และ engineering priority ranking (2d) · ใช้เป็นแนวทางวางแผน ไม่ใช่คำสั่งปฏิบัติงานขั้นสุดท้าย
+      </div>
+    </section>
+  );
+}
+
+function CleaningTimeline({classified}){
+  const milestones=[{label:'วันนี้',pct:0},{label:'3 เดือน',pct:25},{label:'6 เดือน',pct:50},{label:'9 เดือน',pct:75},{label:'12\nเดือน',pct:100}];
+
+  return (
+    <div className="rounded-xl border border-white/10 p-5 overflow-x-auto">
+      <h3 className="text-[15px] font-bold text-white mb-1">ไทม์ไลน์ 12 เดือน — เมื่อไหร่แต่ละเครื่องจะถึงจุดต้องทำความสะอาด</h3>
+      <p className="text-[10px] text-white/30 mb-1">จุดสี = วันที่คาดว่าตะกรันจะถึงระดับที่เคยกระตุ้นให้ต้องล้างเครื่องในอดีต (คำนวณจากอัตราสะสมตะกรันปัจจุบัน) เส้นแนวตั้งเข้ม = วันนี้</p>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-4 mb-4 text-[10px]">
+        {[['do_now','ทำได้เลยตอนนี้ (ถึงจุดแล้ว)'],['tam_wait','ถึงจุดแล้ว แต่ล็อกรอ TAM'],['near_0_3','ภายใน 0–3 เดือน'],['near_3_6','ภายใน 3–6 เดือน'],['stable','เสถียร / เกินขอบเขต 12 เดือน']].map(([k,l])=>(
+          <span key={k} className="flex items-center gap-1.5 text-white/40">
+            <span className="h-2.5 w-2.5 rounded-full" style={{background:URG[k].color}}/>{l}
+          </span>
+        ))}
+      </div>
+
+      {/* Timeline grid */}
+      <div className="min-w-[700px]">
+        {/* Header row */}
+        <div className="flex items-end mb-2 pl-[180px]">
+          <div className="flex-1 relative h-5">
+            {milestones.map(m=>(
+              <span key={m.label} className="absolute text-[10px] text-white/35 font-medium whitespace-pre-line leading-tight"
+                    style={{left:`${m.pct}%`,transform:m.pct===100?'translateX(-100%)':'translateX(-50%)'}}>{m.label}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="divide-y divide-white/[.06]">
+          {classified.map(item=>{
+            const meta=URG[item.urgency];
+            let pct;
+            if(item.urgency==='do_now'||item.urgency==='tam_wait') pct=0;
+            else if(item.urgency==='stable') pct=97;
+            else pct=Math.min(Math.max((item.daysToThreshold||0)/365*100,2),95);
+
+            return (
+              <div key={item.hx} className="flex items-center py-2">
+                <div className="w-[180px] shrink-0 flex items-baseline gap-2">
+                  <span className="text-[13px] font-bold text-white">{item.hx}</span>
+                  <span className="text-[9px] text-white/25">{item.effortLabel}</span>
+                </div>
+                <div className="flex-1 relative h-7">
+                  {/* Today vertical line */}
+                  <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-white/15"/>
+                  {/* Grid lines */}
+                  {[25,50,75,100].map(p=>(
+                    <div key={p} className="absolute top-0 bottom-0 w-px bg-white/[.04]" style={{left:`${p}%`}}/>
+                  ))}
+                  {/* Track */}
+                  <div className="absolute top-1/2 left-0 right-0 h-px bg-white/[.06] -translate-y-1/2"/>
+                  {/* Dot + label */}
+                  <div className="absolute top-1/2 flex items-center gap-1.5" style={{left:`${pct}%`,transform:'translate(-6px,-50%)'}}>
+                    <div className="h-3 w-3 rounded-full shrink-0 shadow-lg" style={{background:meta.color}}/>
+                    <span className="text-[10px] text-white/50 whitespace-nowrap">{item.dateLabel}</span>
+                  </div>
+                  {/* Stable: refresh icon */}
+                  {item.urgency==='stable' && (
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 text-[12px] text-white/20">↻</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GroupedActionTable({classified}){
+  const groupOrder=['do_now','tam_wait','near_0_3','near_3_6','near_6_12','stable'];
+  const groupedItems={};
+  classified.forEach(c=>{ (groupedItems[c.urgency]=groupedItems[c.urgency]||[]).push(c); });
+
+  const groupHeaders={
+    do_now:   {icon:'🔴',text:'ทำได้เลยตอนนี้ — ถึงจุดแล้วและล้างได้ทันที'},
+    tam_wait: {icon:'⚫',text:'ถึงจุดแล้ว แต่ต้องรอ TAM (ปิดซ่อมใหญ่ ~มิ.ย. 2028)'},
+    near_0_3: {icon:'🟠',text:'คาดว่าจะถึงจุดภายใน 0–3 เดือน'},
+    near_3_6: {icon:'🟡',text:'คาดว่าจะถึงจุดภายใน 3–6 เดือน'},
+    near_6_12:{icon:'🟡',text:'คาดว่าจะถึงจุดภายใน 6–12 เดือน'},
+    stable:   {icon:'🟢',text:'เสถียร / ดีขึ้น / เกิน 12 เดือน'},
+  };
+
+  return (
+    <div className="rounded-xl border border-white/10 overflow-hidden">
+      <div className="px-5 py-4">
+        <h3 className="text-[15px] font-bold text-white">ตารางแผนปฏิบัติการ — เรียงตามความเร่งด่วน</h3>
+        <p className="text-[10px] text-white/30 mt-0.5">แบ่งกลุ่มตามสิ่งที่ผู้ปฏิบัติการต้องทำจริง ไม่ใช่แค่คะแนนทางสถิติ</p>
+      </div>
+
+      <table className="w-full text-[12px]">
+        <thead>
+          <tr className="text-left text-[10px] uppercase tracking-wider text-white/30 border-b border-white/[.08]">
+            <th className="px-5 py-2">HX</th>
+            <th className="px-3 py-2">ตำแหน่ง / ประเภท</th>
+            <th className="px-3 py-2">สถานะ</th>
+            <th className="px-3 py-2 text-right">ค่าตะกรันปัจจุบัน</th>
+            <th className="px-3 py-2 text-right">เกณฑ์ล้าง</th>
+            <th className="px-3 py-2">คาดว่าจะถึงจุดวันที่</th>
+            <th className="px-3 py-2">สิ่งที่ต้องทำ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {groupOrder.map(g=>{
+            const items=groupedItems[g];
+            if(!items||!items.length) return null;
+            const hdr=groupHeaders[g];
+            return [
+              <tr key={`hdr-${g}`}>
+                <td colSpan={7} className="px-5 py-2.5 text-[12px] font-bold border-t border-white/[.08]" style={{color:URG[g].color}}>
+                  {hdr.icon} {hdr.text}
+                </td>
+              </tr>,
+              ...items.map(item=>(
+                <tr key={item.hx} className="border-t border-white/[.04] hover:bg-white/[.02] transition-colors">
+                  <td className="px-5 py-2.5 font-bold text-white">{item.hx}</td>
+                  <td className="px-3 py-2.5 text-white/50">{item.effortLabel}</td>
+                  <td className="px-3 py-2.5">
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:URG[item.urgency].color}}>
+                      {URG[item.urgency].badge}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right text-white/70 tabular-nums">{fmt(item.currentDeviation,1)}</td>
+                  <td className="px-3 py-2.5 text-right text-white/40 tabular-nums">{fmt(item.threshold,1)}</td>
+                  <td className="px-3 py-2.5 text-white/60">
+                    {item.urgency==='do_now'||item.urgency==='tam_wait'
+                      ? <span>ถึงแล้ว ({thaiDate(new Date().toISOString().slice(0,10))})</span>
+                      : item.projectedDate
+                        ? <span>{thaiDate(item.projectedDate)}{item.daysToThreshold>0?` (~${Math.round(item.daysToThreshold)} วัน)`:''}</span>
+                        : <span className="text-white/30">— (ค่าตะกรันลดลง)</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-bcp-orange font-semibold text-[11px]">{item.recommendation}</td>
+                </tr>
+              ))
+            ];
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OperatorSummary({classified}){
+  const doNow=classified.filter(c=>c.urgency==='do_now').map(c=>c.hx);
+  const tamWait=classified.filter(c=>c.urgency==='tam_wait').map(c=>c.hx);
+  const near=classified.filter(c=>c.urgency==='near_0_3'||c.urgency==='near_3_6');
+  const stable=classified.filter(c=>c.urgency==='stable').map(c=>c.hx);
+
+  const cards=[
+    {color:'#EF4444',title:`ทำได้เลยตอนนี้ (แดง)`,
+     body:doNow.length
+       ? <><b>{doNow.join(', ')}</b> — เครื่องกลุ่มนี้ตะกรันถึงระดับที่เคยกระตุ้นให้ต้องล้างในอดีตแล้ว และ<b className="text-red-400">สามารถล้างออนไลน์หรือสลับเชลล์ได้ทันที</b> ไม่ต้องรอปิดหน่วย</>
+       : 'ไม่มีเครื่องในกลุ่มนี้'},
+    {color:'#888B8D',title:`ถึงจุดแล้วแต่ล็อกรอ TAM (เทา)`,
+     body:tamWait.length
+       ? <><b>{tamWait.join(', ')}</b> — เครื่องกลุ่มนี้<b>ไม่มีเชลล์สำรองหรือวิธีล้างออนไลน์</b> ต้องรอปิดซ่อมใหญ่ครั้งถัดไป (TAM) ซึ่งกำหนดเชิงคร่าวๆ ที่ <b>1 มิ.ย. 2028</b> (ยังไม่ยืนยันวันที่แน่นอน) — สิ่งที่ทำได้ระหว่างนี้คือ<b className="text-bcp-turq">เฝ้าระวังและปรับ CIT/อัตราการไหลเพื่อลดผลกระทบ</b> ไม่ใช่การล้างเครื่อง</>
+       : 'ไม่มีเครื่องในกลุ่มนี้'},
+    {color:'#EA7600',title:`ใกล้ถึงจุดใน 0–3 เดือน (ส้ม)`,
+     body:near.length
+       ? <>{near.map(c=><span key={c.hx}><b>{c.hx}</b> (~{Math.round(c.daysToThreshold)} วัน{c.effortLabel!=='ไม่ระบุ'?`, ${c.effortLabel}`:''})</span>).reduce((prev,curr)=>[prev,' และ ',curr])} — ควร<b className="text-bcp-orange">เตรียมแผนล้าง/สลับเชลล์ล่วงหน้า</b> สำหรับเครื่องเหล่านี้ และเฝ้าระวังใกล้ชิด</>
+       : 'ไม่มีเครื่องในกลุ่มนี้'},
+    {color:'#48A23F',title:`เสถียร/ดีขึ้น (เขียว)`,
+     body:stable.length
+       ? <><b>{stable.join(', ')}</b> — เพิ่งผ่านการล้างมา ค่าตะกรันกำลัง<b className="text-bcp-green">ลดลง</b> (ยังไม่มีความเสี่ยง) ส่วน E112AB คาดว่าจะถึงจุดในอีก ~18 เดือน (เกินขอบเขต 12 เดือนที่แสดงในกราฟนี้)</>
+       : 'ไม่มีเครื่องในกลุ่มนี้'},
+  ];
+
+  return (
+    <div className="rounded-xl border border-white/10 p-5 space-y-3">
+      <h3 className="text-[15px] font-bold text-white">คำอธิบายสั้น ๆ สำหรับหน้างาน</h3>
+      <div className="space-y-2.5">
+        {cards.map((c,i)=>(
+          <div key={i} className="rounded-lg bg-white/[.04] border border-white/[.06] px-4 py-3">
+            <div className="text-[12px] font-bold mb-1" style={{color:c.color}}>{c.title}</div>
+            <div className="text-[11.5px] text-white/60 leading-relaxed">{c.body}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── SHAP + Model Confidence ── */
+function InsightStrip({ranking, models}){
+  const shap = useMemo(()=>
+    [...ranking].sort((a,b)=>b.cit_shap_importance-a.cit_shap_importance).slice(0,10)
+      .map(r=>({hx:r.HX, v:+r.cit_shap_importance.toFixed(3)})),
+  [ranking]);
+  const best = useMemo(()=>[...models].sort((a,b)=>b.R2-a.R2)[0],[models]);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* SHAP Chart */}
+      <div className="lg:col-span-2 rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up" style={{animationDelay:'380ms'}}>
+        <h2 className="text-[15px] font-bold text-bcp-black">HX Influence on CIT · SHAP Importance</h2>
+        <p className="text-[11px] text-bcp-dgray mt-0.5 mb-2">ตัวแลกเปลี่ยนความร้อนที่ส่งผลต่อ CIT มากที่สุด (aggregated |SHAP value|)</p>
+        <div style={{width:'100%',height:260}}>
+          <ResponsiveContainer>
+            <BarChart data={shap} layout="vertical" margin={{left:8,right:16,top:4,bottom:0}}>
+              <CartesianGrid stroke="#EEF0ED" horizontal={false}/>
+              <XAxis type="number" tick={{fill:BCP.dgray,fontSize:11}} axisLine={false} tickLine={false}/>
+              <YAxis type="category" dataKey="hx" width={62} tick={{fill:BCP.black,fontSize:11,fontWeight:600}} axisLine={false} tickLine={false}/>
+              <RTooltip cursor={{fill:'rgba(72,162,63,.06)'}}
+                        contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:12}}/>
+              <Bar dataKey="v" name="SHAP Importance" radius={[0,6,6,0]} barSize={18}>
+                {shap.map((d,i)=><Cell key={i} fill={i<3?BCP.orange:BCP.green}/>)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Model Card */}
+      <div className="rounded-2xl bg-gradient-to-br from-bcp-black to-[#403a35] text-white shadow-card p-5 fade-up" style={{animationDelay:'440ms'}}>
+        <h2 className="text-[15px] font-bold">Model Confidence</h2>
+        <p className="text-[11px] text-white/50 mb-5">CIT Predictive Model · Held-out Test</p>
+        <div className="text-[50px] font-bold leading-none tracking-tight">
+          {best ? best.R2.toFixed(2) : '—'}
+          <span className="text-[18px] text-bcp-lime font-semibold ml-1.5">R²</span>
+        </div>
+        <div className="text-[13px] text-bcp-lime font-semibold mt-1">{best?.model} · Best of {models.length}</div>
+        <div className="mt-6 space-y-2.5">
+          {models.map(m=>(
+            <div key={m.model} className="flex items-center justify-between">
+              <span className="text-[12px] text-white/60">{m.model}</span>
+              <div className="flex items-center gap-3 text-[12px]">
+                <span className="text-white/40">R² {fmt(m.R2,3)}</span>
+                <span className="text-white/40">RMSE {fmt(m.RMSE,2)}</span>
+                <span className="font-semibold">
+                  {fmt(m['within_10C_%'],0)}%
+                  <span className="text-white/30 text-[10px] ml-0.5">±10°C</span>
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 pt-4 border-t border-white/10">
+          <div className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Primary Metric</div>
+          <div className="flex items-end gap-2">
+            <span className="text-[32px] font-bold leading-none text-bcp-lime">{best?fmt(best['within_10C_%'],0):'—'}%</span>
+            <span className="text-[11px] text-white/50 mb-1">predictions within ±10°C</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════ APP ═══════════════ */
+function App(){
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(null);
+  const [ranking, setRanking] = useState([]);
+  const [recs, setRecs] = useState([]);
+  const [models, setModels] = useState([]);
+  const [forecast, setForecast] = useState({});
+  const [selected, setSelected] = useState('E113A');
+  const [simHX, setSimHX] = useState(null);
+
+  useEffect(()=>{
+    Promise.all([
+      loadJSON('hx_ranking.json'),
+      loadJSON('cleaning_recommendations.json'),
+      loadJSON('model_metrics.json'),
+      loadJSON('forecast_6mo.json'),
+    ]).then(([rk,rc,md,fc])=>{
+      setRanking(rk); setRecs(rc); setModels(md); setForecast(fc); setLoading(false);
+    }).catch(e=>{ setErr(e.message); setLoading(false); });
+  },[]);
+
+  const units = useMemo(()=>{
+    const m = {};
+    ALL_HX.forEach(hx => { m[hx]={HX:hx}; });
+    ranking.forEach(r => { m[r.HX] = {...(m[r.HX]||{HX:r.HX}), ...r}; });
+    recs.forEach(r => { m[r.HX] = {...(m[r.HX]||{HX:r.HX}), ...r}; });
+    Object.keys(forecast).forEach(hx => {
+      if(m[hx]) m[hx] = {...m[hx], threshold:forecast[hx].threshold, current_deviation:forecast[hx].current_deviation};
+    });
+    return m;
+  },[ranking,recs,forecast]);
+
+  const urgentCount = useMemo(()=> recs.filter(r=>(r.recommended_action||'').startsWith('Clean now')).length, [recs]);
+  const atRisk6mo = useMemo(()=> recs.filter(r=>r.at_risk_within_6mo).length, [recs]);
+  const tamDays = daysBetween(new Date(), CFG.NEXT_TAM);
+  const bestModel = useMemo(()=>[...models].sort((a,b)=>b.R2-a.R2)[0], [models]);
+
+  const handleSelect = useCallback((hx) => {
+    setSelected(hx);
+    if(simHX && simHX!==hx) setSimHX(null);
+  },[simHX]);
+
+  const handleSimulate = useCallback(()=>{
+    setSimHX(prev => prev===selected ? null : selected);
+  },[selected]);
+
+  if(loading) return <Splash/>;
+  if(err) return <ErrBox msg={err}/>;
+
+  const curUnit = units[selected];
+  const curFc = forecast[selected];
+  const simActive = simHX===selected;
+
+  return (
+    <div className="min-h-screen font-sans text-bcp-black">
+      <Header/>
+
+      <main className="max-w-[1360px] mx-auto px-5 py-6 space-y-5">
+        {/* KPIs */}
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon="🌡" tone={urgentCount>5?'orange':'green'} delay={0}
+               label="Urgent · ต้องล้างด่วน"
+               value={`${urgentCount} HX`}
+               sub={`จาก ${recs.length} ตัวที่ติดตาม`}
+               foot={`เสี่ยงภายใน 6 เดือน: ${atRisk6mo} หน่วย`}/>
+          <Kpi icon="🛠" tone="blue" delay={80}
+               label="Next TAM · ปิดซ่อมใหญ่"
+               value={`${tamDays} วัน`}
+               sub={parseISO(CFG.NEXT_TAM).toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'})}
+               foot="Turnaround Maintenance"/>
+          <Kpi icon="📊" tone="green" delay={160}
+               label="Model Confidence"
+               value={bestModel ? `${fmt(bestModel['within_10C_%'],0)}%` : '—'}
+               sub={bestModel ? `${bestModel.model} · R² ${fmt(bestModel.R2,3)}` : ''}
+               foot="ทำนาย CIT ภายใน ±10°C"/>
+          <Kpi icon="🏆" tone="orange" delay={240}
+               label="Top Priority · อันดับ 1"
+               value={recs.length?recs[0].HX:'—'}
+               sub={recs.length?`Priority Score: ${fmt(recs[0].priority_score,3)}`:''}
+               foot={recs.length?`${(recs[0].effort_tier||'').replace(/_/g,' ')}`:''}/>
+        </section>
+
+        {/* PFD */}
+        <PFD units={units} selected={selected} onSelect={handleSelect}/>
+
+        {/* Detail + Forecast */}
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div className="lg:col-span-4">
+            <DetailPanel hx={selected} unit={curUnit} fc={curFc}
+                         onSimulate={handleSimulate} simActive={simActive}/>
+          </div>
+          <div className="lg:col-span-8">
+            <ForecastChart hx={selected} fc={curFc} simActive={simActive} unit={curUnit}/>
+          </div>
+        </section>
+
+        {/* Action Plan Table */}
+        <ActionPlan units={units} selected={selected} onSelect={handleSelect}/>
+
+        {/* SHAP + Model */}
+        <InsightStrip ranking={ranking} models={models}/>
+
+        {/* Footer */}
+        <footer className="pt-2 pb-8 text-center text-[11px] text-bcp-dgray">
+          Bangchak CPHT Predictive Maintenance Dashboard · Data: <code className="text-bcp-black/60">dashboard/data/*.json</code>
+          (notebooks 6a/6b/6c) · Layout ตาม PFD จริงของ Plant 3 TPU
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function Splash(){
+  return (
+    <div className="min-h-screen grid place-items-center bg-white">
+      <div className="text-center">
+        <div className="mx-auto h-14 w-14 rounded-full border-[3px] border-bcp-gray/30 border-t-bcp-green animate-spin"/>
+        <div className="mt-5 text-bcp-dgray text-sm font-medium">กำลังโหลดข้อมูล Predictive Maintenance…</div>
+      </div>
+    </div>
+  );
+}
+function ErrBox({msg}){
+  return (
+    <div className="min-h-screen grid place-items-center p-6">
+      <div className="max-w-md bg-white rounded-2xl shadow-card p-6 border-l-4 border-bcp-orange">
+        <div className="font-bold text-bcp-orange text-lg">โหลดข้อมูลไม่สำเร็จ</div>
+        <p className="text-sm text-bcp-black/80 mt-2">{msg}</p>
+        <p className="text-[12px] text-bcp-dgray mt-4">เปิดผ่าน HTTP server จากโฟลเดอร์ <code>dashboard/</code>:</p>
+        <pre className="mt-2 bg-bcp-black text-bcp-lime text-[12px] rounded-lg p-3 overflow-x-auto">python -m http.server 8811</pre>
+        <p className="text-[12px] text-bcp-dgray mt-2">เปิด <code>http://localhost:8811/dashboard_pro.html</code></p>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

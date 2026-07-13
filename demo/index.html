@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Bangchak · CPHT Predictive Maintenance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<script>
+tailwind.config={theme:{extend:{
+ colors:{bcp:{green:'#48A23F',lime:'#84B000',orange:'#EA7600',gray:'#BBBCBC',black:'#2D2926',dgray:'#888B8D',blue:'#005B99',turq:'#00B2A9',red:'#E4572E'}},
+ fontFamily:{sans:['Prompt','sans-serif']},
+ boxShadow:{card:'0 1px 3px rgba(45,41,38,.06),0 6px 20px rgba(45,41,38,.05)',lift:'0 10px 34px rgba(45,41,38,.16)'}}}};
+</script>
+<style>
+html{scroll-behavior:smooth}
+body{background:radial-gradient(ellipse 900px 400px at 100% 0%,rgba(132,176,0,.06),transparent),radial-gradient(ellipse 800px 380px at 0% 100%,rgba(0,178,169,.05),transparent),#F4F6F2}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.fade-up{animation:fadeUp .45s cubic-bezier(.22,1,.36,1) both}
+@keyframes flow{to{stroke-dashoffset:-22}}
+.anim-flow{stroke-dasharray:5 7;animation:flow 1s linear infinite}
+@keyframes svgPulse{0%,100%{opacity:.35;r:26}50%{opacity:0;r:36}}
+.glass{background:rgba(255,255,255,.82);backdrop-filter:blur(14px) saturate(160%);-webkit-backdrop-filter:blur(14px) saturate(160%)}
+::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#Cfd3cc;border-radius:8px}
+.recharts-surface:focus{outline:none}
+.tabbtn.active{color:#2D2926;font-weight:600}
+.tabbtn.active::after{content:'';position:absolute;left:10px;right:10px;bottom:-9px;height:3px;border-radius:3px;background:#48A23F}
+</style>
+</head>
+<body>
+<script>window.__DEMO__=true;</script>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const {useState,useEffect,useMemo,useCallback,useRef}=React;
+const {ResponsiveContainer,ComposedChart,Line,Area,XAxis,YAxis,CartesianGrid,Tooltip:RTooltip,BarChart,Bar,Cell,ReferenceLine,Legend}=Recharts;
+
+/* ═════════ THEME / HELPERS ═════════ */
+const BCP={green:'#48A23F',lime:'#84B000',orange:'#EA7600',gray:'#BBBCBC',black:'#2D2926',dgray:'#888B8D',blue:'#005B99',turq:'#00B2A9',red:'#E4572E'};
+const DATA_DIR='./data';
+const DEMO = (typeof window!=='undefined') && !!window.__DEMO__;  // set true in demo/index.html (anonymized, no backend)
+const fmt=(v,d=1)=>(v==null||Number.isNaN(+v))?'—':Number(v).toFixed(d);
+const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
+const parseISO=s=>new Date(s+'T00:00:00');
+const thaiDate=iso=>iso?parseISO(iso).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}):'—';
+async function loadJSON(n){const r=await fetch(`${DATA_DIR}/${n}?t=${Date.now()}`);if(!r.ok)throw new Error(`${n}: ${r.status}`);return r.json();}
+
+/* default optimization params (user-adjustable, mirror cpht_features / brief) */
+const DEFAULT_PARAMS={
+  CIT_TARGET:258.05, CIT_MIN:250, CP_CRUDE:2.2, RHO_CRUDE:850,
+  LHV_FG:48000, FURNACE_EFF:0.88, NEXT_TAM:'2028-06-01',
+  W_SAFETY:2.0, W_ENERGY:1.0, W_CO2:0.5,
+  // economic assumptions (ค่าสมมติ — ปรับได้; ยังไม่มีค่าจริงจากโรงงาน)
+  FG_PRICE:18000, CLEANING_COST:1500000, CO2_PRICE:1000, CO2_FACTOR:2.75,
+};
+
+/* ═════════ P&ID LAYOUT ═════════ */
+const POS={
+ 'E101AB':{x:150,y:80},'E101CD':{x:150,y:150},'E101EF':{x:150,y:220},'E101G':{x:150,y:290},
+ 'E102':{x:300,y:150},
+ 'E106AB':{x:520,y:90},'E107AB':{x:660,y:90},'E108AB':{x:800,y:90},'E109AB':{x:940,y:90},
+ 'E110ABC':{x:520,y:240},'E111':{x:660,y:240},'E112AB':{x:800,y:240},
+ 'E103AB':{x:520,y:390},'E104':{x:660,y:390},'E105AB':{x:800,y:390},
+ 'E113A':{x:1030,y:195},'E112C':{x:1030,y:300},
+};
+const CANVAS={w:1240,h:500};
+const HOT_COLOR={'Residue':'#C0392B','Gas Oil':'#E67E22','Kerosene':'#8E44AD'};
+const hotColor=s=>{for(const k in HOT_COLOR)if((s||'').includes(k))return HOT_COLOR[k];return '#B9770E';};
+function tempColor(t){if(t==null)return '#BBBCBC';const f=Math.max(0,Math.min(1,(t-40)/220));const a=[0,91,153],b=[228,87,46];const m=a.map((x,i)=>Math.round(x+(b[i]-x)*f));return `rgb(${m[0]},${m[1]},${m[2]})`;}
+
+/* ═════════ STATUS ═════════ */
+function statusOf(u){if(!u||u.priority_rank==null)return 'none';const a=u.recommended_action||'';if(a.startsWith('Clean now'))return 'critical';if(/^\d{4}-\d{2}-\d{2}$/.test(a))return 'scheduled';if(a.startsWith('Stable'))return 'stable';return 'ok';}
+const ST={critical:{c:BCP.orange,label:'Clean-Now',th:'ต้องล้างด่วน'},scheduled:{c:BCP.lime,label:'Scheduled',th:'มีกำหนดล้าง'},ok:{c:BCP.green,label:'Healthy',th:'ปกติ'},stable:{c:BCP.green,label:'Stable',th:'เสถียร'},none:{c:BCP.gray,label:'No Data',th:'ไม่มีข้อมูล'}};
+const effortTH={'ONLINE_CLEAN_DEMONSTRATED':'ล้างออนไลน์ได้','SWAP_CAPABLE':'สลับเชลล์ได้','TAM_ONLY':'รอ TAM'};
+
+/* ═════════════════════════ P&ID DIAGRAM (vibrant node-network) ═════════════════════════ */
+/* palette taken from the user's own E101AB.svg design */
+const STREAM_C={'Residue':'#ff66c4','Gas Oil':'#ff751f','Kerosene':'#8c52ff'};
+const streamColor=s=>{for(const k in STREAM_C)if((s||'').includes(k))return STREAM_C[k];return '#0cc0df';};
+const crudeColor=t=>{if(t==null)return '#5b6472';const f=Math.max(0,Math.min(1,(t-40)/220));const a=[56,182,255],b=[255,102,196];const m=a.map((x,i)=>Math.round(x+(b[i]-x)*f));return `rgb(${m[0]},${m[1]},${m[2]})`;};
+const NODE_GRAD={critical:['#ffb14d','#ff4d6d'],scheduled:['#ffe066','#ff8a3c'],ok:['#66e0a3','#0097b2'],stable:['#66e0a3','#0097b2'],none:['#7a828c','#3a4150']};
+const curve=(x1,y1,x2,y2)=>{const mx=(x1+x2)/2;return `M ${x1},${y1} C ${mx},${y1} ${mx},${y2} ${x2},${y2}`;};
+
+function PID({topo,units,selected,onSelect}){
+  const [hover,setHover]=useState(null);
+  if(!topo) return <div className="p-10 text-center text-bcp-dgray">กำลังโหลดแผนผัง…</div>;
+  const nodes=topo.nodes;
+  const HX=Object.keys(POS);
+  const pipes=[];
+  HX.forEach(hx=>{const n=nodes[hx]; if(!n)return; const p=n.predecessor; if(p&&POS[p])pipes.push({from:POS[p],to:POS[hx],t:n.cold_in_val});});
+  // hot-stream connections: link HX where one's hot outlet == next's hot inlet (counter-current path)
+  const hotPipes=[];
+  HX.forEach(a=>{const na=nodes[a]; if(!na||!na.hot_out_tag)return;
+    HX.forEach(b=>{const nb=nodes[b]; if(!nb||a===b||!nb.hot_in_tag)return;
+      if(na.hot_out_tag===nb.hot_in_tag&&POS[a]&&POS[b]) hotPipes.push({from:POS[a],to:POS[b],c:streamColor(na.hot_stream)});});});
+
+  return (
+   <div className="rounded-2xl shadow-card overflow-hidden fade-up" style={{background:'linear-gradient(160deg,#171733 0%,#1e1b3a 55%,#241a38 100%)'}}>
+    <div className="px-5 pt-4 pb-2 flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <h2 className="text-[15px] font-bold text-white">Process Flow Diagram · แผนผังโยงสาย Crude Preheat Train</h2>
+        <p className="text-[11px] text-white/45 mt-0.5">โหนดสี = สถานะล้าง · เส้นฟ้า→ชมพู = crude (เย็น→ร้อน) · เส้นสีอื่น = hot stream · คลิกโหนดเพื่อดูรายละเอียด · ค่า ณ {topo.last_timestamp?.slice(0,10)}</p>
+      </div>
+      <div className="flex flex-col items-end gap-1.5">
+        <div className="flex flex-wrap items-center gap-3 text-[10.5px] text-white/55">
+          {[['critical','Clean-Now'],['scheduled','Scheduled'],['ok','Healthy'],['none','No Data']].map(([s,l])=>
+            <span key={s} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{background:`linear-gradient(135deg,${NODE_GRAD[s][0]},${NODE_GRAD[s][1]})`}}/>{l}</span>)}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-white/40">
+          <span className="text-white/30">Hot streams:</span>
+          {[['Residue','Residue'],['Gas Oil','Gas Oil'],['Kerosene','Kerosene'],['Side Run','Side-run']].map(([k,l])=>
+            <span key={k} className="flex items-center gap-1"><svg width="14" height="4"><line x1="0" y1="2" x2="14" y2="2" stroke={streamColor(k)} strokeWidth="3"/></svg>{l}</span>)}
+        </div>
+      </div>
+    </div>
+    <div className="relative px-2 pb-3 overflow-x-auto">
+     <svg viewBox={`0 0 ${CANVAS.w} ${CANVAS.h}`} className="w-full min-w-[920px] h-auto" onMouseLeave={()=>setHover(null)}>
+      <defs>
+        {Object.entries(NODE_GRAD).map(([k,[a,b]])=>(
+          <linearGradient key={k} id={`ng-${k}`} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={a}/><stop offset="1" stopColor={b}/></linearGradient>))}
+        <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="4.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+
+      {/* group frames */}
+      <rect x="40" y="42" width="330" height="298" rx="16" fill="#ffffff" opacity=".03" stroke="#38b6ff" strokeOpacity=".22"/>
+      <text x="56" y="62" fontSize="11" fontWeight="600" fill="#38b6ff" opacity=".85">CPHT-1 · ก่อน Desalter</text>
+      <rect x="450" y="42" width="662" height="440" rx="16" fill="#ffffff" opacity=".03" stroke="#ff66c4" strokeOpacity=".18"/>
+      <text x="466" y="62" fontSize="11" fontWeight="600" fill="#ff8fd6" opacity=".85">CPHT-2 · เพิ่ม CIT ก่อนเข้าเตา</text>
+
+      {/* crude header + inlet */}
+      <text x="30" y="330" fontSize="10.5" fontWeight="600" fill="#38b6ff">Crude In →</text>
+      <path d={curve(95,325,150,290)} fill="none" stroke={crudeColor(40)} strokeWidth="3.5" opacity=".7"/>
+      <line x1="110" y1="80" x2="110" y2="290" stroke={crudeColor(60)} strokeWidth="3" opacity=".4"/>
+      {['E101AB','E101CD','E101EF','E101G'].map(hx=><path key={hx} d={curve(110,POS[hx].y,POS[hx].x-24,POS[hx].y)} fill="none" stroke={crudeColor(nodes[hx]?.cold_in_val)} strokeWidth="3" opacity=".6"/>)}
+
+      {/* hot-stream connections (counter-current path, dashed, under nodes) */}
+      {hotPipes.map((p,i)=>(
+        <path key={'h'+i} d={curve(p.from.x,p.from.y,p.to.x,p.to.y)} fill="none"
+              stroke={p.c} strokeWidth="2.4" opacity=".45" strokeDasharray="2 5"/>
+      ))}
+
+      {/* crude pipes (predecessor chain) — glowing curves */}
+      {pipes.map((p,i)=>(
+        <path key={i} d={curve(p.from.x+24,p.from.y,p.to.x-24,p.to.y)} fill="none"
+              stroke={crudeColor(p.t)} strokeWidth="3.5" opacity=".8" className="anim-flow" style={{filter:'drop-shadow(0 0 3px rgba(120,180,255,.5))'}}/>
+      ))}
+
+      {/* desalter */}
+      <rect x="268" y="255" width="64" height="34" rx="9" fill="#0f0f26" stroke="#38b6ff" strokeWidth="1.5"/>
+      <text x="300" y="276" textAnchor="middle" fontSize="9" fontWeight="600" fill="#8fd0ff">Desalter</text>
+      <path d={curve(332,272,440,200)} fill="none" stroke={crudeColor(150)} strokeWidth="2.5" opacity=".45" strokeDasharray="5 5"/>
+
+      {/* Furnace */}
+      <rect x="1140" y="168" width="68" height="94" rx="12" fill="#0d0d20" stroke="#ff751f" strokeWidth="1.5" style={{filter:'drop-shadow(0 0 8px rgba(255,117,31,.4))'}}/>
+      <text x="1174" y="194" textAnchor="middle" fill="#fff" fontSize="9" fontWeight="600">FURNACE</text>
+      <text x="1174" y="210" textAnchor="middle" fill="#ffb14d" fontSize="8">F101</text>
+      <text x="1174" y="233" textAnchor="middle" fill="#ffde59" fontSize="13" fontWeight="700">CIT</text>
+      <text x="1174" y="250" textAnchor="middle" fill="#ffb14d" fontSize="11" fontWeight="600">{fmt(nodes['E113A']?.cold_out_val,0)}°</text>
+      <path d={curve(1056,200,1140,206)} fill="none" stroke={crudeColor(nodes['E113A']?.cold_out_val)} strokeWidth="4" opacity=".85" className="anim-flow"/>
+
+      {/* HX nodes */}
+      {HX.map(hx=>{
+        const n=nodes[hx]; const pos=POS[hx]; if(!pos) return null;
+        const u=units[hx]; const st=statusOf(u); const meta=ST[st];
+        const sel=selected===hx; const rank=u&&u.priority_rank; const noData=!n||n.cold_out_val==null;
+        const R=27;
+        return (
+         <g key={hx} style={{cursor:'pointer'}} onClick={()=>onSelect(hx)} onMouseEnter={()=>setHover(hx)}>
+           {/* hot stream stub */}
+           {n&&n.hot_stream&&n.hot_stream!=='—'&&(
+             <g>
+               <line x1={pos.x} y1={pos.y-R-14} x2={pos.x} y2={pos.y-R+2} stroke={streamColor(n.hot_stream)} strokeWidth="3" opacity=".9"/>
+               <text x={pos.x} y={pos.y-R-17} textAnchor="middle" fontSize="8" fill={streamColor(n.hot_stream)} fontWeight="600">{n.hot_stream}</text>
+             </g>)}
+           {st==='critical'&&<circle cx={pos.x} cy={pos.y} r={R} fill="#ff5e7e" style={{animation:'svgPulse 2s infinite'}}/>}
+           {sel&&<circle cx={pos.x} cy={pos.y} r={R+7} fill="none" stroke="#fff" strokeWidth="2" strokeDasharray="4 4" opacity=".8"/>}
+           {/* gradient circle node */}
+           <circle cx={pos.x} cy={pos.y} r={R} fill={`url(#ng-${st})`} stroke="#ffffff" strokeOpacity={sel?.9:.25} strokeWidth={sel?2.5:1.2}
+                   style={{filter:noData?'none':'drop-shadow(0 3px 8px rgba(0,0,0,.45))'}}/>
+           <text x={pos.x} y={pos.y+3.5} textAnchor="middle" fontSize={hx.length>5?'9':'10.5'} fontWeight="700" fill="#fff">{hx}</text>
+           {/* outlet tag */}
+           {n&&n.cold_out_val!=null&&(
+             <text x={pos.x} y={pos.y+R+13} textAnchor="middle" fontSize="8" fill="#ffffff" opacity=".55">{n.cold_out_tag?.replace('.pv','')} · {fmt(n.cold_out_val,0)}°</text>)}
+           {rank&&rank<=5&&(<g><circle cx={pos.x+R-4} cy={pos.y-R+4} r="9" fill="#fff"/><text x={pos.x+R-4} y={pos.y-R+7.3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill={NODE_GRAD[st][1]}>{rank}</text></g>)}
+         </g>);
+      })}
+     </svg>
+
+     {/* hover tooltip */}
+     {hover&&nodes[hover]&&(()=>{
+       const pos=POS[hover],n=nodes[hover],u=units[hover],st=statusOf(u),meta=ST[st];
+       const left=(pos.x/CANVAS.w)*100, top=(pos.y/CANVAS.h)*100, above=pos.y>CANVAS.h*0.45;
+       return (
+        <div className="pointer-events-none absolute z-20" style={{left:`${left}%`,top:`${top}%`,transform:`translate(-50%,${above?'-118%':'34%'})`}}>
+         <div className="rounded-xl shadow-lift px-3.5 py-2.5 w-[214px]" style={{background:'rgba(20,20,44,.94)',border:'1px solid rgba(255,255,255,.12)'}}>
+           <div className="flex items-center justify-between mb-1.5"><span className="font-bold text-white text-[14px]">{hover}</span>
+             <span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:`linear-gradient(135deg,${NODE_GRAD[st][0]},${NODE_GRAD[st][1]})`}}>{meta.label}</span></div>
+           <div className="space-y-1 text-[10.5px]">
+             <Row k={`เย็นเข้า (${n.cold_in_tag?.replace('.pv','')})`} v={`${fmt(n.cold_in_val,1)}°C`}/>
+             <Row k={`เย็นออก (${n.cold_out_tag?.replace('.pv','')})`} v={`${fmt(n.cold_out_val,1)}°C`}/>
+             <Row k={`${n.hot_stream} เข้า`} v={n.hot_in_val!=null?`${fmt(n.hot_in_val,1)}°C`:'—'}/>
+             {u&&u.priority_rank!=null&&<>
+               <div className="border-t border-white/10 my-1"/>
+               <Row k="อันดับล้าง" v={`#${u.priority_rank}`}/>
+               <Row k="Fouling rate" v={fmt(u.Q_fouling_rate_abs,2)+'/100d'}/>
+               <Row k="วิธีล้าง" v={effortTH[u.effort_tier]||'—'}/>
+             </>}
+           </div>
+         </div>
+        </div>);
+     })()}
+    </div>
+   </div>);
+}
+function Row({k,v}){return <div className="flex justify-between gap-2"><span className="text-white/50">{k}</span><span className="font-semibold text-white/90">{v}</span></div>;}
+
+/* ═════════════════════════ FURNACE PANEL ═════════════════════════ */
+function bandStatus(f){
+  if(!f.band){return 'na';}
+  const v=f.value,[al,nl,nh,ah]=f.band;
+  if(v<al||v>ah)return 'alarm'; if(v<nl||v>nh)return 'warn'; return 'ok';
+}
+const BAND_C={ok:BCP.green,warn:'#D9A400',alarm:BCP.red,na:BCP.dgray};
+
+const skinColor=t=>{if(t==null)return BCP.gray;const f=Math.max(0,Math.min(1,(t-320)/(410-320)));const a=[72,162,63],b=[228,87,46];const m=a.map((x,i)=>Math.round(x+(b[i]-x)*f));return `rgb(${m[0]},${m[1]},${m[2]})`;};
+
+/* Furnace F101 schematic (Honeywell-style, clean) with live tag values */
+function FurnaceSVG({F,passes,cit,params}){
+  const g=k=>F.find(x=>x.key===k)||{};
+  const o2=g('O2'),draft=g('DRAFT'),cot=g('COT'),fg=g('FG_FLOW'),b1=g('BODY1'),b2=g('BODY2'),stack=g('STACK');
+  const py=[112,150,188,226];
+  return(
+   <svg viewBox="0 0 360 300" className="w-full h-auto" style={{maxHeight:320}}>
+    {/* stack */}
+    <rect x="250" y="18" width="26" height="70" rx="3" fill="#c9ced6" stroke="#9aa1ac"/>
+    <path d="M263,18 l0,-8" stroke="#9aa1ac"/>
+    <text x="263" y="14" textAnchor="middle" fontSize="7" fill={BCP.dgray}>Stack {fmt(stack.value,0)}°</text>
+    {/* convection section */}
+    <rect x="98" y="60" width="120" height="40" rx="4" fill="#dfe3e8" stroke="#aab0ba"/>
+    <text x="158" y="55" textAnchor="middle" fontSize="8" fill={BCP.dgray} fontWeight="600">Convection</text>
+    <path d="M218,70 L250,55" stroke="#9aa1ac" strokeWidth="6" opacity=".5"/>
+    {/* O2 / draft near stack */}
+    <text x="284" y="40" fontSize="8" fill={bandStatus(o2)==='alarm'?BCP.red:BCP.black}>O₂ {fmt(o2.value,2)}%</text>
+    <text x="284" y="54" fontSize="8" fill={BCP.dgray}>draft {fmt(draft.value,1)}</text>
+    {/* radiation box */}
+    <rect x="90" y="100" width="140" height="160" rx="6" fill="url(#furnGrad)" stroke="#8a9099" strokeWidth="1.5"/>
+    <defs><linearGradient id="furnGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#f3f4f6"/><stop offset="1" stopColor="#e2e5ea"/></linearGradient></defs>
+    <text x="160" y="118" textAnchor="middle" fontSize="9" fontWeight="700" fill={BCP.black}>F101 Radiation</text>
+    {/* 4 coil passes colored by skin temp */}
+    {passes.map((p,i)=>(<g key={i}>
+      <line x1="100" y1={py[i]} x2="220" y2={py[i]} stroke={skinColor(p.skin_val)} strokeWidth="5" strokeLinecap="round"/>
+      <text x="96" y={py[i]+3} textAnchor="end" fontSize="7" fill={BCP.dgray}>P{p.pass}</text>
+      <text x="224" y={py[i]+3} fontSize="7" fill={skinColor(p.skin_val)}>{fmt(p.skin_val,0)}°</text>
+    </g>))}
+    {/* body temps */}
+    <text x="86" y="180" textAnchor="end" fontSize="7.5" fill={BCP.dgray}>body {fmt((b1.value+b2.value)/2,0)}°</text>
+    {/* crude in (CIT) bottom-left */}
+    <path d="M20,250 L90,250" stroke={crudeColor(cit)} strokeWidth="4" markerEnd="url(#fmar)"/>
+    <defs><marker id="fmar" viewBox="0 0 10 8" refX="8" refY="4" markerWidth="7" markerHeight="6" orient="auto"><path d="M0,0 L10,4 L0,8 Z" fill={crudeColor(cit)}/></marker></defs>
+    <text x="20" y="244" fontSize="8" fill={crudeColor(cit)} fontWeight="600">Crude เข้า · CIT {fmt(cit,0)}°</text>
+    {/* COT out top-right */}
+    <path d="M230,105 L300,105" stroke={crudeColor(cot.value)} strokeWidth="4" markerEnd="url(#fmar)"/>
+    <text x="300" y="99" textAnchor="end" fontSize="8" fill="#c0392b" fontWeight="600">COT ออก {fmt(cot.value,0)}°</text>
+    {/* burners + FG at bottom */}
+    {[120,160,200].map(x=><path key={x} d={`M${x},262 l-6,14 l12,0 z`} fill="#ff751f" opacity=".85"/>)}
+    <text x="160" y="292" textAnchor="middle" fontSize="8" fill="#e6550d" fontWeight="600">🔥 Fuel Gas {fmt(fg.value,2)} t/h</text>
+   </svg>);
+}
+
+function FurnacePanel({topo,params,setParams,ranking}){
+  if(!topo) return null;
+  const F=topo.furnace, passes=topo.passes;
+  const cit=F.find(x=>x.key==='CIT')?.value;
+  const citDef=Math.max(0,params.CIT_TARGET-cit);
+  const charge=topo.nodes['E113A']?.cold_flow_val||525;
+  const dFG=(dC)=>charge*params.RHO_CRUDE*params.CP_CRUDE*dC/(params.LHV_FG*params.FURNACE_EFF); // kg/h
+  const fgFlow=F.find(x=>x.key==='FG_FLOW')?.value||6.66;
+  const grouped={}; F.forEach(f=>{(grouped[f.group||'อื่น ๆ']=grouped[f.group||'อื่น ๆ']||[]).push(f);});
+  const maxSkin=Math.max(...passes.map(p=>p.skin_val||0));
+
+  // --- what-if optimization: cumulative cleaning benefit + economics ---
+  const cand=[...ranking].filter(r=>r.expected_CIT_gain_C>0).sort((a,b)=>a.priority_rank-b.priority_rank);
+  const wf=useMemo(()=>{let cCIT=0,cFG=0; return cand.map(r=>{
+    const fgTh=dFG(r.expected_CIT_gain_C)/1000; cCIT+=r.expected_CIT_gain_C; cFG+=fgTh;
+    const bahtDay=fgTh*24*params.FG_PRICE; const co2Day=fgTh*24*params.CO2_FACTOR;
+    const payback=params.CLEANING_COST>0&&bahtDay>0?params.CLEANING_COST/bahtDay:null;
+    return {hx:r.HX,gain:r.expected_CIT_gain_C,fgTh,bahtDay,co2Day,payback,cumCIT:cCIT,cumFG:cFG,
+            cumBaht:cFG*24*params.FG_PRICE,cumCO2:cFG*24*params.CO2_FACTOR};
+  });},[cand,params]);
+
+  const econ=[['FG_PRICE','ราคา FG (฿/t)'],['CLEANING_COST','ค่าล้าง/ครั้ง (฿)'],['CO2_PRICE','ราคา CO₂ (฿/t)'],['CO2_FACTOR','CO₂ ต่อ FG (t/t)']];
+
+  return (
+   <div className="space-y-5 fade-up">
+    {/* alert banner if CIT low */}
+    {cit<params.CIT_MIN&&(
+      <div className="rounded-xl bg-bcp-red/[.07] border border-bcp-red/25 px-4 py-3 flex items-start gap-3">
+        <span className="text-bcp-red text-lg">⚠</span>
+        <div className="text-[12.5px] text-bcp-black/85">
+          <b className="text-bcp-red">CIT ต่ำกว่าเกณฑ์:</b> ปัจจุบัน {fmt(cit,1)}°C (ขั้นต่ำ {params.CIT_MIN}, เป้า {params.CIT_TARGET}°C)
+          — ขาด {fmt(citDef,1)}°C → เตาเผา FG เพิ่ม ~<b>{fmt(dFG(citDef)/1000,3)} t/h</b> (~{fmt(dFG(citDef)/1000/fgFlow*100,1)}% ของ {fmt(fgFlow,2)})
+        </div>
+      </div>)}
+
+    {/* furnace picture + problem cascade */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-4">
+        <h2 className="text-[15px] font-bold text-bcp-black mb-1">เตา F101 · ภาพรวมสด</h2>
+        <p className="text-[11px] text-bcp-dgray mb-1">สี pass = อุณหภูมิผิว tube (เขียว→แดง = ร้อนขึ้น/เสี่ยง coking) · ค่าจริง ณ {topo.last_timestamp?.slice(0,10)}</p>
+        <FurnaceSVG F={F} passes={passes} cit={cit} params={params}/>
+      </div>
+      <div className="rounded-2xl bg-gradient-to-br from-[#2a1a10] to-[#3a2415] text-white shadow-card p-5">
+        <h3 className="text-[14px] font-bold mb-1">Problem: fouling → เตาทำงานหนักขึ้น</h3>
+        <p className="text-[11px] text-white/45 mb-3">โซ่ผลกระทบเมื่อ preheat train สกปรก (ไฮไลต์ = กำลังเกิดตอนนี้)</p>
+        {[['Preheat-train fouling','ตะกรันสะสมใน HX',true],
+          ['CIT ↓','CIT ตกจากเป้า '+fmt(citDef,1)+'°C',cit<params.CIT_TARGET],
+          ['Firing ↑','เผา FG เพิ่ม ~'+fmt(dFG(citDef)/1000,2)+' t/h',citDef>0.5],
+          ['Draft ↑ / O₂ ต้องจัดการ','flue gas มากขึ้น',bandStatus(F.find(x=>x.key==='O2'))!=='ok'],
+          ['Tube skin ร้อน → Coking / Hot spot','pass ร้อนสุด '+fmt(maxSkin,0)+'°C',maxSkin>380],
+          ['NOx ↑ · Flame length ↑','ความเสี่ยง combustion',false],
+          ['Economic loss + อายุเตาสั้นลง','ต้นทุน + เสี่ยง forced outage',citDef>2]].map(([t,sub,hot],i)=>(
+          <div key={i} className={`flex items-start gap-2 py-1.5 ${i<6?'border-b border-white/[.06]':''}`}>
+            <span className="mt-0.5 text-[13px]">{hot?'🔴':'⚪'}</span>
+            <div><div className={`text-[12px] font-semibold ${hot?'text-bcp-orange':'text-white/70'}`}>{t}</div>
+              <div className="text-[10px] text-white/40">{sub}</div></div>
+          </div>))}
+      </div>
+    </div>
+
+    {/* full constraint table (grouped, editable optimize-limit) */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black mb-1">Constraint ทั้งหมด · ค่าที่ตั้งไว้ (สำหรับตั้ง Optimization)</h3>
+      <p className="text-[11px] text-bcp-dgray mb-3">ค่าปัจจุบัน (สด) · setpoint/target ที่ตั้ง · limit ที่ optimizer ต้องไม่ละเมิด · แก้ limit ได้ในช่อง</p>
+      {Object.entries(grouped).map(([grp,items])=>(
+        <div key={grp} className="mb-3">
+          <div className="text-[11px] font-bold text-bcp-turq uppercase tracking-wide mb-1">{grp}</div>
+          <table className="w-full text-[12px]"><tbody className="divide-y divide-black/[.03]">
+            {items.map(f=>{const s=bandStatus(f);return(
+              <tr key={f.key}>
+                <td className="py-1.5 w-[16%]"><span className="font-semibold text-bcp-black">{f.tag.replace('.pv','')}</span></td>
+                <td className="py-1.5 text-[11px] text-bcp-dgray">{f.name}</td>
+                <td className="py-1.5 text-right w-[13%]"><span className="font-bold tabular-nums" style={{color:s==='alarm'?BCP.red:s==='warn'?'#D9A400':BCP.black}}>{fmt(f.value,f.unit==='%'?2:1)}</span> <span className="text-[9px] text-bcp-dgray">{f.unit}</span></td>
+                <td className="py-1.5 text-right w-[11%] text-[11px] text-bcp-dgray">SP {fmt(f.target,1)}</td>
+                <td className="py-1.5 text-right w-[12%]"><span className="text-[10px] text-bcp-dgray mr-1">limit</span>
+                  <input type="number" step="any" defaultValue={f.limit}
+                    onChange={e=>{f.limit=parseFloat(e.target.value);}}
+                    className="w-16 text-[11px] text-right rounded border border-black/10 px-1 py-0.5 focus:border-bcp-green outline-none"/></td>
+                <td className="py-1.5 text-center w-[8%]"><span className="h-2.5 w-2.5 rounded-full inline-block" style={{background:BAND_C[s]}}/></td>
+              </tr>);})}
+          </tbody></table>
+        </div>))}
+      <p className="text-[10px] text-bcp-dgray mt-1">🔴 alarm · 🟡 เฝ้าระวัง · 🟢 ปกติ · SP = setpoint/target</p>
+    </div>
+
+    {/* 4-pass detail (conv/skin/coil + flow) */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black mb-1">4 Passes · convection/skin/coil + flow</h3>
+      <p className="text-[11px] text-bcp-dgray mb-3">tube-skin temp คือค่าวิกฤต (โลหะร้อน→coking/creep เมื่อ &gt; {passes[0]?.skin_alarm||400}°C)</p>
+      <table className="w-full text-[12px]">
+        <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+          <th className="py-2">Pass</th><th className="py-2 text-right">Convection out</th><th className="py-2 text-right">Tube skin</th><th className="py-2 text-right">Coil out</th><th className="py-2 text-right">Flow</th></tr></thead>
+        <tbody className="divide-y divide-black/[.03]">
+          {passes.map(p=>{const hot=p.skin_val>=(p.skin_alarm||400)*0.98;return(
+            <tr key={p.pass}><td className="py-2 font-semibold">Pass {p.pass}</td>
+              <td className="py-2 text-right tabular-nums">{fmt(p.conv_val,1)}°</td>
+              <td className={`py-2 text-right tabular-nums font-bold ${hot?'text-bcp-red':''}`} style={{color:hot?undefined:skinColor(p.skin_val)}}>{fmt(p.skin_val,1)}°{hot?' ⚠':''}</td>
+              <td className="py-2 text-right tabular-nums">{fmt(p.coil_val,1)}°</td>
+              <td className="py-2 text-right tabular-nums text-bcp-dgray">{fmt(p.flow_val,1)}</td></tr>);})}
+        </tbody></table>
+    </div>
+
+    {/* what-if optimization */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h3 className="text-[14px] font-bold text-bcp-black">What-if Optimization · ล้างตามลำดับแล้วได้อะไร</h3>
+        <span className="text-[10px] text-bcp-orange bg-bcp-orange/10 px-2 py-0.5 rounded-full">ค่าเศรษฐกิจเป็นค่าสมมติ (ยังไม่มีค่าจริง)</span>
+      </div>
+      <p className="text-[11px] text-bcp-dgray mb-3">ล้าง HX ตามลำดับ priority → คืน CIT สะสม → ประหยัด FG → ประเมินเป็น ฿/วัน + CO₂ (สมมติฐานเศรษฐกิจปรับได้)</p>
+      <div className="flex flex-wrap gap-3 mb-4">
+        {econ.map(([k,label])=>(
+          <label key={k} className="text-[11px]"><span className="text-bcp-dgray">{label}</span>
+            <input type="number" step="any" value={params[k]} onChange={e=>setParams({...params,[k]:parseFloat(e.target.value)})}
+              className="ml-1 w-24 text-[12px] rounded border border-black/10 px-1.5 py-0.5 focus:border-bcp-green outline-none"/></label>))}
+      </div>
+      <div className="overflow-x-auto"><table className="w-full text-[12px]">
+        <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+          <th className="py-2">ล้างถึง</th><th className="py-2 text-right">CIT gain</th><th className="py-2 text-right">FG ประหยัด</th>
+          <th className="py-2 text-right">฿/วัน</th><th className="py-2 text-right">คืนทุน</th>
+          <th className="py-2 text-right">CO₂ ลด/วัน</th><th className="py-2 text-right">รวม CIT</th><th className="py-2 text-right">รวม ฿/วัน</th></tr></thead>
+        <tbody className="divide-y divide-black/[.03]">
+          {wf.map((r,i)=>(<tr key={r.hx}>
+            <td className="py-2 font-semibold text-bcp-black">{i+1}. {r.hx}</td>
+            <td className="py-2 text-right tabular-nums text-bcp-green">+{fmt(r.gain,1)}°</td>
+            <td className="py-2 text-right tabular-nums">{fmt(r.fgTh,3)} t/h</td>
+            <td className="py-2 text-right tabular-nums">{Math.round(r.bahtDay).toLocaleString()}</td>
+            <td className="py-2 text-right tabular-nums text-bcp-dgray">{r.payback?Math.round(r.payback)+' วัน':'—'}</td>
+            <td className="py-2 text-right tabular-nums text-bcp-dgray">{fmt(r.co2Day,2)} t</td>
+            <td className="py-2 text-right tabular-nums font-semibold">+{fmt(r.cumCIT,1)}°</td>
+            <td className="py-2 text-right tabular-nums font-semibold text-bcp-green">{Math.round(r.cumBaht).toLocaleString()}</td></tr>))}
+        </tbody></table></div>
+      {wf.length>0&&<div className="mt-3 rounded-lg bg-bcp-green/[.06] border border-bcp-green/15 px-3 py-2 text-[12px]">
+        ล้างครบทั้ง {wf.length} ตัว → คืน CIT รวม <b>+{fmt(wf[wf.length-1].cumCIT,1)}°C</b> · ประหยัด FG <b>{fmt(wf[wf.length-1].cumFG,3)} t/h</b> ·
+        ประหยัด <b className="text-bcp-green">~{Math.round(wf[wf.length-1].cumBaht).toLocaleString()} ฿/วัน</b> · ลด CO₂ <b>{fmt(wf[wf.length-1].cumCO2,1)} t/วัน</b>
+      </div>}
+      <div className="mt-2 text-[10px] text-bcp-dgray">สมมติฐานฟิสิกส์: Cp={params.CP_CRUDE} · ρ={params.RHO_CRUDE} · LHV={params.LHV_FG} · eff={params.FURNACE_EFF} · CIT gain จากผลวิเคราะห์ (ปรับได้ในแท็บ Optimization)</div>
+    </div>
+   </div>);
+}
+
+/* ═════════════════════════ DETAIL + FORECAST ═════════════════════════ */
+/* per-HX shell-and-tube drawing (counter-current), styled after the user's E101AB.svg */
+function HXSchematic({hx,node}){
+  const n=node; if(!n) return null;
+  const cin=crudeColor(n.cold_in_val), cout=crudeColor(n.cold_out_val), hot=streamColor(n.hot_stream);
+  const tag=t=>t?t.replace('.pv',''):'';
+  const uid=`hx-${hx}`;
+  const AH=(id,c)=>(<marker id={id} key={id} viewBox="0 0 8 8" refX="6" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill={c}/></marker>);
+  return (
+   <div className="rounded-xl mb-4 px-3 pt-2 pb-1" style={{background:'linear-gradient(150deg,#171733,#241a38)'}}>
+    <div className="flex items-center justify-between mb-0.5">
+      <span className="text-[10px] text-white/45">ผังตัวแลกเปลี่ยน · {n.hot_stream&&n.hot_stream!=='—'?`Crude vs ${n.hot_stream}`:'Crude'}</span>
+      <span className="text-[9px] text-white/30">{n.cold_flow_tag?.replace('.pv','')} · {fmt(n.cold_flow_val,0)} m³/h</span>
+    </div>
+    <svg viewBox="0 0 320 138" className="w-full h-auto">
+      <defs>
+        <linearGradient id={`${uid}-sg`} x1="0" x2="1"><stop offset="0" stopColor="#2a2350"/><stop offset="1" stopColor="#3a2748"/></linearGradient>
+        {AH(`${uid}-ac`,cout)}{AH(`${uid}-ah`,hot)}
+      </defs>
+      {/* shell + tube bundle */}
+      <rect x="96" y="48" width="128" height="44" rx="12" fill={`url(#${uid}-sg)`} stroke="#ffffff" strokeOpacity=".25"/>
+      {[58,70,82].map(y=><line key={y} x1="96" y1={y} x2="224" y2={y} stroke="#ffffff" strokeOpacity=".16" strokeWidth="1.5"/>)}
+      <text x="160" y="74" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fff">{hx}</text>
+      {/* hot stream: top, right -> left (counter-current) */}
+      <path d="M300,32 L210,32 L210,48" fill="none" stroke={hot} strokeWidth="3"/>
+      <path d={`M110,48 L110,32 L20,32`} fill="none" stroke={hot} strokeWidth="3" markerEnd={`url(#${uid}-ah)`}/>
+      {/* cold stream: bottom, left -> right */}
+      <path d="M20,106 L110,106 L110,92" fill="none" stroke={cin} strokeWidth="3"/>
+      <path d={`M210,92 L210,106 L300,106`} fill="none" stroke={cout} strokeWidth="3" markerEnd={`url(#${uid}-ac)`}/>
+      {/* labels */}
+      <text x="18" y="24" fontSize="8.5" fill={hot} fontWeight="600">{n.hot_stream} ออก {n.hot_out_val!=null?fmt(n.hot_out_val,0)+'°':''}</text>
+      <text x="302" y="24" textAnchor="end" fontSize="8.5" fill={hot} fontWeight="600">{n.hot_stream} เข้า {n.hot_in_val!=null?fmt(n.hot_in_val,0)+'°':''}</text>
+      <text x="18" y="124" fontSize="8.5" fill="#8fd0ff" fontWeight="600">{tag(n.cold_in_tag)} · {fmt(n.cold_in_val,0)}°</text>
+      <text x="302" y="124" textAnchor="end" fontSize="8.5" fill={cout} fontWeight="600">{tag(n.cold_out_tag)} · {fmt(n.cold_out_val,0)}°</text>
+    </svg>
+   </div>);
+}
+
+function DetailPanel({hx,unit,onSim,simActive,fc,node}){
+  if(!hx)return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-6 text-center text-bcp-dgray grid place-items-center h-full"><div><div className="text-3xl mb-2">👆</div>เลือก HX จากแผนผัง</div></div>;
+  const st=statusOf(unit),meta=ST[st],hasRank=unit&&unit.priority_rank!=null;
+  return(
+   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 h-full">
+    <div className="flex items-center gap-3 mb-4">
+      <div className="h-11 w-11 rounded-xl grid place-items-center text-white font-bold" style={{background:meta.c}}>{hasRank?`#${unit.priority_rank}`:'—'}</div>
+      <div><div className="text-[18px] font-bold text-bcp-black">{hx}</div>
+        <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:meta.c}}>{meta.th} · {meta.label}</span></div>
+    </div>
+    {node&&<HXSchematic hx={hx} node={node}/>}
+    {hasRank?(<div className="space-y-3">
+      <Metric label="Fouling Rate" v={fmt(unit.Q_fouling_rate_abs,2)} u="/100d"/>
+      <Metric label="ΔQ Duty Drop" v={unit['Q_drop_%']!=null?fmt(unit['Q_drop_%'],1):'—'} u="%" warn={unit['Q_drop_%']>30}/>
+      <Metric label="CIT คืนถ้าล้าง" v={unit.expected_CIT_gain_C!=null?'+'+fmt(unit.expected_CIT_gain_C,1):'—'} u="°C" good={unit.expected_CIT_gain_C>3}/>
+      <Metric label="วิธีล้าง" v={effortTH[unit.effort_tier]||'—'}/>
+      {/* sub-scores (A4) */}
+      <div className="pt-2 border-t border-black/[.05]">
+        <div className="text-[10px] uppercase tracking-wide text-bcp-dgray mb-1.5">Priority sub-scores</div>
+        <SubBar label="Probability (จะถึงจุด)" v={unit.probability_score}/>
+        <SubBar label="Consequence (ผลกระทบ)" v={unit.consequence_score}/>
+      </div>
+      <div className="flex flex-wrap gap-1.5 pt-1">
+        {unit.safety_flag&&<span className="bg-red-50 text-red-600 text-[10px] font-semibold px-2 py-0.5 rounded-full">⚠ Safety</span>}
+        {unit.worsening&&<span className="bg-bcp-orange/10 text-bcp-orange text-[10px] font-semibold px-2 py-0.5 rounded-full">↗ แย่ลง</span>}
+        {unit.at_risk_within_6mo&&<span className="bg-bcp-blue/10 text-bcp-blue text-[10px] font-semibold px-2 py-0.5 rounded-full">⏱ เสี่ยง 6ด.</span>}
+      </div>
+      {fc&&<button onClick={onSim} className={`w-full mt-1 text-[12px] font-semibold py-2.5 rounded-xl transition-all ${simActive?'bg-bcp-green text-white':'bg-bcp-green/10 text-bcp-green hover:bg-bcp-green hover:text-white'}`}>{simActive?'● กำลังจำลองการล้าง':'🧪 จำลองการล้าง (Sandbox)'}</button>}
+    </div>):(<div className="text-[13px] text-bcp-dgray py-8 text-center"><div className="text-3xl mb-2">📭</div>ไม่มีข้อมูล ranking สำหรับ {hx}</div>)}
+   </div>);
+}
+function Metric({label,v,u='',warn,good}){return <div className="flex items-center justify-between"><span className="text-[12px] text-bcp-dgray">{label}</span><span className={`text-[14px] font-bold ${warn?'text-bcp-orange':good?'text-bcp-green':'text-bcp-black'}`}>{v}<span className="text-[10px] font-normal text-bcp-dgray ml-0.5">{u}</span></span></div>;}
+function SubBar({label,v}){const p=Math.max(0,Math.min(1,v||0))*100;return <div className="mb-1.5"><div className="flex justify-between text-[10.5px] text-bcp-dgray"><span>{label}</span><span className="font-semibold text-bcp-black">{fmt(v,2)}</span></div><div className="h-1.5 rounded bg-black/[.06] mt-0.5"><div className="h-full rounded bg-bcp-turq" style={{width:`${p}%`}}/></div></div>;}
+
+function ForecastChart({hx,fc,simActive,unit}){
+  if(!fc)return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-6 text-center text-bcp-dgray grid place-items-center h-full"><div><div className="text-3xl mb-2">📊</div>เลือก HX เพื่อดูพยากรณ์ตะกรัน</div></div>;
+  const data=useMemo(()=>fc.dates.map((d,i)=>({date:d,dev:+fc.projected_deviation[i].toFixed(3),
+    lo:fc.projected_lower?+fc.projected_lower[i].toFixed(3):undefined,
+    hi:fc.projected_upper?+fc.projected_upper[i].toFixed(3):undefined,
+    thr:+fc.threshold.toFixed(3),cleaned:simActive?+(fc.threshold*0.3).toFixed(3):undefined})),[fc,simActive]);
+  const breach=data.find(p=>p.dev>p.thr);
+  return(
+   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 h-full">
+    <div className="flex items-start justify-between flex-wrap gap-2 mb-1">
+      <div><h2 className="text-[15px] font-bold text-bcp-black">พยากรณ์ตะกรัน 6 เดือน · <span className="text-bcp-green">{hx}</span></h2>
+        <p className="text-[11px] text-bcp-dgray mt-0.5">ค่าเบี่ยงเบนจากสภาพสะอาด — ข้ามเส้นประ = ถึงเวลาล้าง</p></div>
+      <div className="flex flex-wrap gap-3 text-[10.5px] text-bcp-dgray">
+        <Pill c={BCP.black} t="พยากรณ์"/><Pill c={BCP.orange} dashed t="เกณฑ์ล้าง"/>
+        {fc.projected_lower&&<Pill c={BCP.gray} t="ช่วงความเชื่อมั่น"/>}
+        {simActive&&<Pill c={BCP.green} dashed t="หลังล้าง"/>}</div>
+    </div>
+    <div style={{width:'100%',height:270}}>
+      <ResponsiveContainer><ComposedChart data={data} margin={{top:8,right:12,left:-8,bottom:0}}>
+        <defs><linearGradient id="dev" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={BCP.orange} stopOpacity=".16"/><stop offset="1" stopColor={BCP.orange} stopOpacity="0"/></linearGradient></defs>
+        <CartesianGrid stroke="#EEF0ED" vertical={false}/>
+        <XAxis dataKey="date" tickFormatter={d=>parseISO(d).toLocaleDateString('en-US',{month:'short'})} minTickGap={40} tick={{fill:BCP.dgray,fontSize:11}} axisLine={{stroke:'#E4E7E3'}} tickLine={false}/>
+        <YAxis tick={{fill:BCP.dgray,fontSize:11}} axisLine={false} tickLine={false} width={42}/>
+        <RTooltip contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:12}}/>
+        {fc.projected_upper&&<Area type="monotone" dataKey="hi" stroke="none" fill={BCP.gray} fillOpacity=".18"/>}
+        {fc.projected_lower&&<Area type="monotone" dataKey="lo" stroke="none" fill="#fff" fillOpacity="1"/>}
+        <Area type="monotone" dataKey="dev" stroke="none" fill="url(#dev)"/>
+        <Line type="monotone" dataKey="dev" stroke={BCP.black} strokeWidth={2.2} dot={false}/>
+        <Line type="monotone" dataKey="thr" stroke={BCP.orange} strokeWidth={1.5} strokeDasharray="6 4" dot={false}/>
+        {simActive&&<Line type="monotone" dataKey="cleaned" stroke={BCP.green} strokeWidth={2.2} strokeDasharray="6 5" dot={false}/>}
+      </ComposedChart></ResponsiveContainer>
+    </div>
+    <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-bcp-dgray">
+      <span>เกณฑ์: <b className="text-bcp-black">{fmt(fc.threshold,2)}</b></span>
+      <span>ปัจจุบัน: <b className="text-bcp-black">{fmt(fc.current_deviation,2)}</b></span>
+      {breach&&<span className="text-bcp-orange font-semibold">⚠ คาดข้ามเกณฑ์ ~{thaiDate(breach.date)}</span>}
+      {unit&&unit.days_to_threshold_6mo!=null&&<span>ถึงจุดใน ~<b className="text-bcp-black">{Math.round(unit.days_to_threshold_6mo)}</b> วัน</span>}
+    </div>
+   </div>);
+}
+function Pill({c,t,dashed}){return <span className="flex items-center gap-1.5"><svg width="16" height="6"><line x1="0" y1="3" x2="16" y2="3" stroke={c} strokeWidth="2.2" strokeDasharray={dashed?'4 3':'0'}/></svg>{t}</span>;}
+
+/* ═════════════════════════ CLEANING PLAN TABLE ═════════════════════════ */
+function printPlan(list){
+  const today=new Date().toLocaleDateString('th-TH',{day:'numeric',month:'long',year:'numeric'});
+  const rows=list.map(u=>{const st=statusOf(u),m=ST[st];return `<tr>
+    <td class=c>${u.priority_rank}</td><td><b>${u.HX}</b></td>
+    <td><span class=pill style="background:${m.c}">${m.th}</span></td>
+    <td class=r>${fmt(u.priority_score,3)}</td><td class=r>${fmt(u.Q_fouling_rate_abs,2)}</td>
+    <td class=r>${u['Q_drop_%']!=null?fmt(u['Q_drop_%'],1)+'%':'—'}</td>
+    <td class=r>${u.expected_CIT_gain_C>0?'+'+fmt(u.expected_CIT_gain_C,1)+'°':'—'}</td>
+    <td>${effortTH[u.effort_tier]||'—'}</td>
+    <td>${u.projected_clean_date?thaiDate(u.projected_clean_date):'—'}</td></tr>`;}).join('');
+  const html=`<!doctype html><html lang=th><head><meta charset=utf-8><title>แผนการล้าง HX</title>
+   <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap" rel=stylesheet>
+   <style>body{font-family:Prompt,sans-serif;color:#2D2926;padding:28px}
+   .hd{display:flex;align-items:center;gap:14px;border-bottom:3px solid #48A23F;padding-bottom:12px}
+   .hd img{height:34px} h1{font-size:18px;margin:0} .sub{font-size:12px;color:#888;margin-top:2px}
+   table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12px}
+   th{background:#f2f5f0;text-align:left;padding:7px 8px;border-bottom:2px solid #ddd;font-size:10px;text-transform:uppercase;color:#666}
+   td{padding:7px 8px;border-bottom:1px solid #eee} .c{text-align:center}.r{text-align:right}
+   .pill{color:#fff;font-size:9px;font-weight:600;padding:2px 8px;border-radius:20px}
+   .note{margin-top:16px;font-size:10.5px;color:#888;border-top:1px solid #eee;padding-top:10px}
+   @media print{body{padding:0}}</style></head><body>
+   <div class=hd><img src="${location.origin}/bangchak-logo.png"><div>
+     <h1>แผนการล้าง Heat Exchanger · Crude Preheat Train</h1>
+     <div class=sub>Bangchak Plant 3 TPU · จัดอันดับตาม Engineering Priority (Probability×Consequence÷Effort) · ณ ${today}</div></div></div>
+   <table><thead><tr><th>อันดับ</th><th>HX</th><th>สถานะ</th><th class=r>Priority</th><th class=r>Fouling</th><th class=r>ΔQ%</th><th class=r>CIT gain</th><th>วิธีล้าง</th><th>ล้างภายใน</th></tr></thead><tbody>${rows}</tbody></table>
+   <div class=note>หมายเหตุ: แนวทางวางแผนจากผลวิเคราะห์ fouling rate / engineering priority — ไม่ใช่คำสั่งปฏิบัติงานขั้นสุดท้าย · โมเดล CIT ใช้ SHAP attribution เท่านั้น (persistence เป็น baseline หลัก)</div>
+   <script>onload=()=>setTimeout(()=>print(),450)<\/script></body></html>`;
+  const w=window.open('','_blank'); if(!w){alert('เบราว์เซอร์บล็อกป็อปอัป — อนุญาต popup แล้วลองใหม่');return;}
+  w.document.write(html); w.document.close();
+}
+
+function PlanTable({units,selected,onSelect}){
+  const list=useMemo(()=>Object.values(units).filter(u=>u.priority_rank!=null).sort((a,b)=>a.priority_rank-b.priority_rank),[units]);
+  const crit=list.filter(u=>statusOf(u)==='critical').length;
+  return(
+   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] fade-up">
+    <div className="px-5 pt-4 pb-3 border-b border-black/[.04] flex items-center justify-between gap-2">
+      <div><h2 className="text-[15px] font-bold text-bcp-black">แผนการล้าง HX · จัดอันดับ</h2>
+        <p className="text-[11px] text-bcp-dgray mt-0.5">Engineering Priority = Probability × Consequence ÷ Effort</p></div>
+      <div className="flex items-center gap-2">
+        <button onClick={()=>printPlan(list)} className="text-[11px] font-semibold text-bcp-green bg-bcp-green/10 hover:bg-bcp-green hover:text-white px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap">🖨 พิมพ์ / Export PDF</button>
+        <span className="text-[11px] font-bold text-bcp-orange bg-bcp-orange/10 px-3 py-1 rounded-full whitespace-nowrap">{crit} ต้องล้างด่วน</span>
+      </div>
+    </div>
+    <div className="overflow-x-auto"><table className="w-full text-[12px]">
+      <thead><tr className="text-left text-[10px] uppercase tracking-wider text-bcp-dgray border-b border-black/[.04]">
+        <th className="px-4 py-2.5 w-10">#</th><th className="px-3 py-2.5">HX</th><th className="px-3 py-2.5">สถานะ</th>
+        <th className="px-3 py-2.5 text-right">Priority</th><th className="px-3 py-2.5 text-right">Prob</th><th className="px-3 py-2.5 text-right">Conseq</th>
+        <th className="px-3 py-2.5 text-right">Fouling</th><th className="px-3 py-2.5 text-right">ΔQ%</th><th className="px-3 py-2.5 text-right">CIT gain</th>
+        <th className="px-3 py-2.5">วิธีล้าง</th><th className="px-3 py-2.5">ล้างภายใน</th></tr></thead>
+      <tbody className="divide-y divide-black/[.03]">
+        {list.map(u=>{const st=statusOf(u),meta=ST[st],active=selected===u.HX;return(
+          <tr key={u.HX} onClick={()=>onSelect(u.HX)} className={`cursor-pointer hover:bg-bcp-green/[.03] ${active?'bg-bcp-green/[.06]':''}`}>
+            <td className="px-4 py-2.5"><span className="inline-grid place-items-center h-6 w-6 rounded-md text-white text-[10px] font-bold" style={{background:meta.c}}>{u.priority_rank}</span></td>
+            <td className="px-3 py-2.5 font-bold text-bcp-black">{u.HX}</td>
+            <td className="px-3 py-2.5"><span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:meta.c}}>{meta.label}</span></td>
+            <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{fmt(u.priority_score,3)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-bcp-dgray">{fmt(u.probability_score,2)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums text-bcp-dgray">{fmt(u.consequence_score,2)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{fmt(u.Q_fouling_rate_abs,2)}</td>
+            <td className="px-3 py-2.5 text-right tabular-nums"><span className={u['Q_drop_%']>30?'text-bcp-orange font-semibold':''}>{u['Q_drop_%']!=null?fmt(u['Q_drop_%'],1)+'%':'—'}</span></td>
+            <td className="px-3 py-2.5 text-right tabular-nums">{u.expected_CIT_gain_C>0?<span className="text-bcp-green font-semibold">+{fmt(u.expected_CIT_gain_C,1)}°</span>:'—'}</td>
+            <td className="px-3 py-2.5 text-[10.5px] text-bcp-dgray">{effortTH[u.effort_tier]||'—'}</td>
+            <td className="px-3 py-2.5 text-[11px]">{u.projected_clean_date?<b>{thaiDate(u.projected_clean_date)}</b>:<span className="text-bcp-dgray">—</span>}</td></tr>);})}
+      </tbody></table></div>
+   </div>);
+}
+
+/* ═════════════════════════ MODEL + OPTIMIZATION ═════════════════════════ */
+function ModelPanel({models,ranking}){
+  const list=models?.models||[];
+  const persist=list.find(m=>m.role==='baseline');
+  const shap=useMemo(()=>[...ranking].sort((a,b)=>b.cit_shap_importance-a.cit_shap_importance).slice(0,10).map(r=>({hx:r.HX,v:+r.cit_shap_importance.toFixed(3)})),[ranking]);
+  return(
+   <div className="space-y-5 fade-up">
+    {/* honest headline */}
+    <div className="rounded-2xl bg-bcp-black/[.03] border border-bcp-black/10 p-5">
+      <h2 className="text-[15px] font-bold text-bcp-black mb-1">ความน่าเชื่อถือของโมเดล CIT (รายงานตรงไปตรงมา)</h2>
+      <p className="text-[12px] text-bcp-black/70 leading-relaxed">{models?.headline}</p>
+      <div className="mt-3 text-[11px] text-bcp-dgray">Validation: <b className="text-bcp-black">{models?.validation}</b> · ข้อมูล {models?.n_rows} แถว ({models?.date_range?.join(' → ')})</div>
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* baseline card */}
+      <div className="rounded-2xl bg-gradient-to-br from-bcp-green to-[#2f6f2a] text-white shadow-card p-5">
+        <div className="text-[11px] text-white/60 uppercase tracking-wide">Baseline ที่ใช้จริง</div>
+        <div className="text-[15px] font-bold mt-1">Persistence</div>
+        <div className="text-[11px] text-white/60 mb-3">CIT วันนี้ = CIT เมื่อวาน</div>
+        <div className="text-[46px] font-bold leading-none">{fmt(persist?.R2,2)}<span className="text-[16px] text-bcp-lime ml-1">R²</span></div>
+        <div className="text-[12px] text-white/70 mt-1">walk-forward CV · ±{fmt(persist?.R2_sd,2)}</div>
+        <div className="mt-4 space-y-1.5 text-[12px]">
+          <div className="flex justify-between"><span className="text-white/60">RMSE</span><b>{fmt(persist?.RMSE,2)}°C</b></div>
+          <div className="flex justify-between"><span className="text-white/60">ภายใน ±10°C</span><b>{fmt(persist?.['within_10C_%'],0)}%</b></div>
+        </div>
+      </div>
+      {/* ml comparison */}
+      <div className="lg:col-span-2 rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+        <h3 className="text-[14px] font-bold text-bcp-black mb-3">เทียบโมเดล ML กับ baseline (walk-forward CV)</h3>
+        <table className="w-full text-[12px]">
+          <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+            <th className="py-2">Model</th><th className="py-2">บทบาท</th><th className="py-2 text-right">CV R²</th><th className="py-2 text-right">RMSE</th><th className="py-2 text-right">ชนะ baseline?</th></tr></thead>
+          <tbody className="divide-y divide-black/[.03]">
+            {list.map(m=>(<tr key={m.model}>
+              <td className="py-2 font-semibold text-bcp-black">{m.model}</td>
+              <td className="py-2 text-[10.5px]"><span className="px-2 py-0.5 rounded-full text-[9px] font-semibold" style={{background:(m.role==='baseline'?BCP.green:m.role==='rejected'?BCP.gray:m.role==='ablation'?BCP.blue:BCP.orange)+'22',color:m.role==='baseline'?BCP.green:m.role==='rejected'?BCP.dgray:m.role==='ablation'?BCP.blue:BCP.orange}}>{m.role}</span></td>
+              <td className="py-2 text-right tabular-nums">{m.R2!=null?fmt(m.R2,2):'—'}</td>
+              <td className="py-2 text-right tabular-nums">{fmt(m.RMSE,2)}</td>
+              <td className="py-2 text-right">{m.beats_persistence===false?<span className="text-bcp-red font-semibold">ไม่</span>:m.beats_persistence==null?'—':<span className="text-bcp-green">ใช่</span>}</td></tr>))}
+          </tbody>
+        </table>
+        <p className="text-[10.5px] text-bcp-dgray mt-3">💡 tree models มี single-split R²≈0.82 ที่ดูดี แต่ <b>แพ้ persistence ทุก fold</b> จึงเก็บไว้ใช้ SHAP attribution เท่านั้น ไม่ใช่ตัวพยากรณ์</p>
+        {list.some(m=>m.role==='ablation')&&<p className="text-[10.5px] text-bcp-blue bg-bcp-blue/[.06] rounded-lg px-3 py-2 mt-2">🔬 <b>ทดสอบแล้ว:</b> ลอง<b>ตัด CIT_lag1 ออก</b> (feature ทำนายจาก HX/crude อย่างเดียว) → CV R² แย่ลงอีก ({fmt(list.find(m=>m.role==='ablation')?.R2,2)} vs {fmt(list.find(m=>m.model==='XGBoost')?.R2,2)} ตอนมี lag) แปลว่า CIT_lag1 <b>ไม่ใช่จุดที่ต้องลบออก</b> — มันคือเหตุผลเดียวที่ทำให้โมเดลยังพอเดาได้ใกล้เคียง เพราะ HX feature ล้วน ๆ อธิบายระดับ CIT ไม่ได้เลย</p>}
+      </div>
+    </div>
+    {/* SHAP */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black">HX ที่สัมพันธ์กับ CIT มากสุด · SHAP (associative)</h3>
+      <p className="text-[11px] text-bcp-dgray mt-0.5 mb-2">ใช้จัดลำดับความสำคัญเชิงสัมพันธ์ ไม่ใช่การพยากรณ์ที่ผ่าน validation</p>
+      <div style={{width:'100%',height:250}}><ResponsiveContainer>
+        <BarChart data={shap} layout="vertical" margin={{left:8,right:16,top:4,bottom:0}}>
+          <CartesianGrid stroke="#EEF0ED" horizontal={false}/>
+          <XAxis type="number" tick={{fill:BCP.dgray,fontSize:11}} axisLine={false} tickLine={false}/>
+          <YAxis type="category" dataKey="hx" width={62} tick={{fill:BCP.black,fontSize:11,fontWeight:600}} axisLine={false} tickLine={false}/>
+          <RTooltip cursor={{fill:'rgba(72,162,63,.06)'}} contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:12}}/>
+          <Bar dataKey="v" radius={[0,6,6,0]} barSize={16}>{shap.map((d,i)=><Cell key={i} fill={i<3?BCP.orange:BCP.green}/>)}</Bar>
+        </BarChart></ResponsiveContainer></div>
+    </div>
+   </div>);
+}
+
+function OptimizePanel({params,setParams,onRerun,onRunFull,status}){
+  const [local,setLocal]=useState(params);
+  const [file,setFile]=useState(null);
+  const fields=[
+    ['CIT_TARGET','CIT เป้าหมาย (°C)'],['CIT_MIN','CIT ขั้นต่ำ (°C)'],
+    ['CP_CRUDE','Cp crude (kJ/kg·K)'],['RHO_CRUDE','ρ crude (kg/m³)'],
+    ['LHV_FG','LHV fuel gas (kJ/kg)'],['FURNACE_EFF','Furnace efficiency'],
+    ['W_SAFETY','น้ำหนัก Safety'],['W_ENERGY','น้ำหนัก Energy'],
+  ];
+  return(
+   <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 fade-up">
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black mb-1">พารามิเตอร์ Optimization</h3>
+      <p className="text-[11px] text-bcp-dgray mb-4">ปรับค่าสมมติฐาน แล้วมีผลกับการคำนวณ fuel-saving และการจัดอันดับทันที (client-side) หรือกด "วิเคราะห์ใหม่" เพื่อรัน pipeline หลังบ้าน</p>
+      <div className="grid grid-cols-2 gap-3">
+        {fields.map(([k,label])=>(
+          <label key={k} className="block"><span className="text-[10.5px] text-bcp-dgray">{label}</span>
+            <input type="number" step="any" value={local[k]} onChange={e=>setLocal({...local,[k]:parseFloat(e.target.value)})}
+              className="mt-1 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-[13px] focus:border-bcp-green outline-none"/></label>))}
+        <label className="block col-span-2"><span className="text-[10.5px] text-bcp-dgray">วันที่ TAM ถัดไป</span>
+          <input type="date" value={local.NEXT_TAM} onChange={e=>setLocal({...local,NEXT_TAM:e.target.value})}
+            className="mt-1 w-full rounded-lg border border-black/10 px-2.5 py-1.5 text-[13px] focus:border-bcp-green outline-none"/></label>
+      </div>
+      <button onClick={()=>setParams(local)} className="mt-4 w-full bg-bcp-green text-white text-[13px] font-semibold py-2.5 rounded-xl hover:bg-bcp-green/90">ใช้ค่านี้ (อัปเดตหน้าจอ)</button>
+    </div>
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black mb-1">อัปเดตข้อมูล / วิเคราะห์ใหม่</h3>
+      {DEMO ? (
+        <div className="text-[12px] text-bcp-dgray py-6 text-center">
+          <div className="text-3xl mb-2">🔒</div>
+          โหมด <b>DEMO (ข้อมูลจำลอง)</b> ปิดการอัปโหลด/วิเคราะห์ใหม่ไว้<br/>
+          ใช้งานเต็มรูปแบบได้เมื่อรันบนเครื่อง/Docker ที่มี backend + ข้อมูลจริง
+        </div>
+      ) : (<>
+      <p className="text-[11px] text-bcp-dgray mb-4">อัปโหลดไฟล์ process data ใหม่ (.xlsx/.csv) แล้วรัน pipeline สร้างผลวิเคราะห์ใหม่ (ต้องเปิด backend)</p>
+      <label className="block border-2 border-dashed border-black/15 rounded-xl p-6 text-center cursor-pointer hover:border-bcp-green/50 transition-colors">
+        <input type="file" accept=".xlsx,.csv" className="hidden" onChange={e=>setFile(e.target.files[0])}/>
+        <div className="text-3xl mb-2">📄</div>
+        <div className="text-[12.5px] text-bcp-black/70">{file?<b>{file.name}</b>:'ลากไฟล์มาวาง หรือคลิกเพื่อเลือก'}</div>
+      </label>
+      <div className="grid grid-cols-1 gap-2 mt-4">
+        <button onClick={()=>onRerun(file,local)} disabled={status?.busy}
+          className="w-full bg-bcp-green text-white text-[13px] font-semibold py-2.5 rounded-xl hover:bg-bcp-green/90 disabled:opacity-50">
+          {status?.busy?'⏳ กำลังอัปเดต…':'⚡ อัปเดตเร็ว (P&ID + Furnace เท่านั้น)'}</button>
+        <button onClick={()=>onRunFull(file)} disabled={status?.busy}
+          className="w-full bg-bcp-black text-white text-[13px] font-semibold py-2.5 rounded-xl hover:bg-bcp-black/90 disabled:opacity-50">
+          {status?.busy?'⏳ …':'▶ วิเคราะห์เต็มรูปแบบ (รัน pipeline ทุก notebook · หลายนาที)'}</button>
+      </div>
+      {status?.msg&&<div className={`mt-3 text-[12px] rounded-lg px-3 py-2 ${status.err?'bg-bcp-red/10 text-bcp-red':'bg-bcp-green/10 text-bcp-green'}`}>{status.msg}</div>}
+      <p className="text-[10.5px] text-bcp-dgray mt-3"><b>อัปเดตเร็ว</b>: ไฟล์ cleaned (Timestamp + tag ตาม cpht_config) รีเฟรช P&ID/Furnace ทันที · <b>เต็มรูปแบบ</b>: อัปโหลด raw Excel (หรือเว้นว่างเพื่อใช้ข้อมูลปัจจุบัน) รัน pipeline ใหม่ทั้งหมด แล้วรีเฟรชหน้าเมื่อเสร็จ · ต้องเปิด backend: <code>python backend/server.py</code></p>
+      </>)}
+    </div>
+   </div>);
+}
+
+/* ═════════════════════════ APP ═════════════════════════ */
+/* ═════════════════════════ HX รายตัว (per-HX detail plots) ═════════════════════════ */
+const EVENT_LABEL={DATA_START:'เริ่มข้อมูล',SWITCH:'สลับเชลล์',TAM:'TAM'};
+const EVENT_COLOR={DATA_START:BCP.blue,SWITCH:'#8c52ff',TAM:BCP.black};
+
+function TsChart({data,lines,refs,events,height=190,yDomain,unit}){
+  return(
+   <div style={{width:'100%',height}}><ResponsiveContainer>
+    <ComposedChart data={data} margin={{top:6,right:10,left:-12,bottom:0}}>
+      <CartesianGrid stroke="#EEF0ED" vertical={false}/>
+      <XAxis dataKey="date" tickFormatter={d=>parseISO(d).toLocaleDateString('en-US',{month:'short',year:'2-digit'})} minTickGap={50} tick={{fill:BCP.dgray,fontSize:10}} axisLine={{stroke:'#E4E7E3'}} tickLine={false}/>
+      <YAxis domain={yDomain||['auto','auto']} tick={{fill:BCP.dgray,fontSize:10}} axisLine={false} tickLine={false} width={44}/>
+      <RTooltip contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:11}} labelFormatter={d=>thaiDate(d)}/>
+      {(refs||[]).map((r,i)=><ReferenceLine key={'r'+i} y={r.y} stroke={r.c} strokeDasharray="5 4" strokeWidth={1} label={{value:r.label,position:'right',fill:r.c,fontSize:9}}/>)}
+      {(events||[]).map((e,i)=><ReferenceLine key={'e'+i} x={e.date} stroke={EVENT_COLOR[e.type]||BCP.gray} strokeWidth={1} strokeDasharray={e.type==='TAM'?'0':'2 3'} opacity={.6}/>)}
+      {lines.map(l=><Line key={l.key} type="monotone" dataKey={l.key} name={l.name} stroke={l.c} strokeWidth={l.w||1.8} dot={false} connectNulls/>)}
+      {lines.length>1&&<Legend verticalAlign="top" height={22} iconType="plainline" wrapperStyle={{fontSize:11}}/>}
+    </ComposedChart></ResponsiveContainer></div>);
+}
+
+function HXDetailPanel({hxts,units,selected,onSelect}){
+  if(!hxts) return(
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
+      <div className="text-3xl mb-2">📈</div>ยังไม่มีข้อมูล time-series — รัน <code className="text-bcp-black">python pipeline/export_hx_timeseries.py</code> ก่อน</div>);
+  const HXES=Object.keys(hxts);
+  const sel=hxts[selected]?selected:HXES[0];
+  const d=hxts[sel]; const s=d.series;
+  // build row-wise data for recharts
+  const rows=useMemo(()=>s.dates.map((dt,i)=>({date:dt,U:s.U_relative[i],Q:s.Q[i],pred:s.predicted_Q?.[i],
+    dev:s.deviation?.[i],cin:s.cold_in?.[i],cout:s.cold_out?.[i]})),[sel]);
+  const u=units[sel]||{}; const st=statusOf(u); const meta=ST[st];
+
+  return(
+   <div className="space-y-5 fade-up">
+    {/* HX selector */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-4">
+      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h2 className="text-[15px] font-bold text-bcp-black">รายละเอียดต่อ HX · เลือกเครื่องเพื่อดูกราฟ (เหมือน notebook 2)</h2>
+        <span className="text-[11px] text-bcp-dgray">คลิกเลือก HX ด้านล่าง</span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {HXES.map(hx=>{const m=ST[statusOf(units[hx])];const on=sel===hx;return(
+          <button key={hx} onClick={()=>onSelect(hx)}
+            className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold border transition-colors ${on?'text-white':'text-bcp-black bg-white hover:bg-black/[.03]'}`}
+            style={on?{background:m.c,borderColor:m.c}:{borderColor:'#e5e7eb'}}>{hx}</button>);})}
+      </div>
+    </div>
+
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <div className="flex items-center gap-3 mb-1">
+        <div className="h-9 w-9 rounded-lg grid place-items-center text-white font-bold text-[13px]" style={{background:meta.c}}>{u.priority_rank?`#${u.priority_rank}`:'—'}</div>
+        <div><div className="text-[17px] font-bold text-bcp-black">{sel}</div>
+          <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:meta.c}}>{meta.th} · {meta.label}</span></div>
+      </div>
+      <p className="text-[11px] text-bcp-dgray mb-2">เส้นตั้ง = เหตุการณ์ (<span style={{color:EVENT_COLOR.SWITCH}}>สลับเชลล์</span> / <span style={{color:BCP.black}}>TAM</span>)</p>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-3">
+        <div>
+          <div className="text-[12px] font-semibold text-bcp-black mb-0.5">1) U_relative (ตะกรัน) — sawtooth</div>
+          <p className="text-[10px] text-bcp-dgray mb-1">1.0 = สะอาด · ตกลง = สกปรก · กระโดดขึ้น = ล้าง/สลับเชลล์</p>
+          <TsChart data={rows} yDomain={[0,1.4]} events={d.events}
+            refs={[{y:1.0,c:BCP.green,label:'clean'},{y:0.5,c:BCP.orange,label:'50%'},{y:0.3,c:BCP.red,label:'30%'}]}
+            lines={[{key:'U',name:'U_relative',c:BCP.blue}]}/>
+        </div>
+        <div>
+          <div className="text-[12px] font-semibold text-bcp-black mb-0.5">2) Duty Q (kW)</div>
+          <p className="text-[10px] text-bcp-dgray mb-1">ภาระความร้อนจริงที่ HX ทำได้</p>
+          <TsChart data={rows} events={d.events} lines={[{key:'Q',name:'Q duty',c:'#e6550d'}]}/>
+        </div>
+        <div>
+          <div className="text-[12px] font-semibold text-bcp-black mb-0.5">3) ค่าทำนาย vs ค่าจริง (Q)</div>
+          <p className="text-[10px] text-bcp-dgray mb-1">เส้นทำนาย (ถ้าสะอาด) เทียบ Q จริง — ช่องว่าง = fouling</p>
+          <TsChart data={rows} events={d.events} lines={[
+            {key:'pred',name:'predicted (clean)',c:BCP.turq,w:1.6},{key:'Q',name:'actual',c:'#e6550d',w:1.8}]}/>
+        </div>
+        <div>
+          <div className="text-[12px] font-semibold text-bcp-black mb-0.5">4) อุณหภูมิ crude เข้า–ออก (°C)</div>
+          <p className="text-[10px] text-bcp-dgray mb-1">cold_in → cold_out</p>
+          <TsChart data={rows} events={d.events} lines={[
+            {key:'cin',name:'cold in',c:BCP.blue,w:1.5},{key:'cout',name:'cold out',c:'#17becf',w:1.8}]}/>
+        </div>
+      </div>
+    </div>
+
+    {/* fouling rate per run */}
+    {d.runs&&d.runs.length>0&&<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black mb-1">อัตราการเกิดตะกรันต่อรอบเดินเครื่อง (fouling rate per run)</h3>
+      <p className="text-[11px] text-bcp-dgray mb-3">dU_relative/เดือน (ยิ่งลบ = สกปรกเร็ว) · R² = ความชัดของแนวโน้ม · ธง = ผ่าน quality gate (R²≥0.3, ≥10 จุด)</p>
+      <table className="w-full text-[12px]">
+        <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+          <th className="py-2">Run</th><th className="py-2 text-right">ระยะ (วัน)</th><th className="py-2 text-right">dUrel/เดือน</th><th className="py-2 text-right">R²</th><th className="py-2 text-center">คุณภาพ</th></tr></thead>
+        <tbody className="divide-y divide-black/[.03]">
+          {d.runs.map((r,i)=>(<tr key={i}>
+            <td className="py-2 font-semibold">Run {r.run}</td>
+            <td className="py-2 text-right tabular-nums">{r.duration_days!=null?Math.round(r.duration_days):'—'}</td>
+            <td className={`py-2 text-right tabular-nums font-semibold ${r.dUrel_per_month<0?'text-bcp-red':'text-bcp-green'}`}>{r.dUrel_per_month!=null?(r.dUrel_per_month>0?'+':'')+fmt(r.dUrel_per_month,3):'—'}</td>
+            <td className="py-2 text-right tabular-nums text-bcp-dgray">{fmt(r.R2,2)}</td>
+            <td className="py-2 text-center">{r.reliable?<span className="text-bcp-green">✓ เชื่อได้</span>:<span className="text-bcp-orange">⚠ อ่อน</span>}</td></tr>))}
+        </tbody>
+      </table>
+    </div>}
+   </div>);
+}
+
+/* ═════════════════════════ PROGNOSTICS & RISK (PHM) ═════════════════════════ */
+function RangeBar({p10,p50,p90,max=180}){
+  if(p10==null)return <span className="text-bcp-dgray text-[11px]">— (เสถียร)</span>;
+  const sc=v=>Math.min(100,Math.max(0,v/max*100));
+  return(<div className="relative h-3 w-full rounded bg-black/[.05]">
+    <div className="absolute h-3 rounded bg-bcp-turq/30" style={{left:`${sc(p10)}%`,width:`${Math.max(sc(p90)-sc(p10),1.5)}%`}}/>
+    <div className="absolute top-[-1px] h-[14px] w-[2.5px] rounded bg-bcp-black" style={{left:`${sc(p50)}%`}}/>
+  </div>);
+}
+function ProbCell({v}){const c=v>=66?BCP.red:v>=33?BCP.orange:BCP.green;return <span className="font-semibold tabular-nums" style={{color:v>0?c:BCP.dgray}}>{v!=null?Math.round(v)+'%':'—'}</span>;}
+
+function PrognosticsPanel({phm,units,selected,onSelect}){
+  if(!phm||!phm.rul)return(
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
+      <div className="text-3xl mb-2">🔮</div>ยังไม่มีข้อมูล Prognostics — รัน <code className="text-bcp-black">python pipeline/phm_analysis.py</code> ก่อน</div>);
+  const {rul,rel,prop,drv}=phm;
+  const list=useMemo(()=>Object.keys(rul).filter(h=>units[h]).map(h=>({hx:h,...rul[h]}))
+    .sort((a,b)=>(b.prob_90??-1)-(a.prob_90??-1)),[rul,units]);
+  const sel=rul[selected]?selected:(list[0]?.hx);
+  const R=rul[sel], RL=rel&&rel[sel], PR=prop&&prop.per_hx&&prop.per_hx[sel];
+
+  return(
+   <div className="space-y-5 fade-up">
+    {/* header */}
+    <div className="rounded-2xl bg-gradient-to-br from-[#171733] to-[#241a38] text-white shadow-card p-5">
+      <h2 className="text-[16px] font-bold">Prognostics & Risk · พยากรณ์อายุคงเหลือ (RUL) และความเสี่ยง</h2>
+      <p className="text-[11.5px] text-white/55 mt-1">RUL = เวลาคงเหลือก่อนถึงเกณฑ์ล้าง (Monte-Carlo P10/P50/P90) · hazard rate จาก Weibull survival · หน่วยเชิงกายภาพ/ความน่าจะเป็นล้วน</p>
+    </div>
+
+    {/* RUL risk table */}
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04]">
+      <div className="px-5 pt-4 pb-2"><h3 className="text-[14px] font-bold text-bcp-black">อายุคงเหลือก่อนต้องล้าง (RUL) · เรียงตามความเสี่ยง</h3>
+        <p className="text-[11px] text-bcp-dgray mt-0.5">แถบ = ช่วง P10–P90 (วัน), ขีดดำ = ค่ากลาง P50 · P(30/60/90) = โอกาสถึงเกณฑ์ภายใน N วัน</p></div>
+      <div className="overflow-x-auto"><table className="w-full text-[12px]">
+        <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+          <th className="px-4 py-2">HX</th><th className="px-3 py-2">สถานะ</th><th className="px-3 py-2 text-right">P50 (วัน)</th>
+          <th className="px-3 py-2 w-[24%]">ช่วง P10–P90</th><th className="px-3 py-2 text-right">P(30d)</th><th className="px-3 py-2 text-right">P(60d)</th><th className="px-3 py-2 text-right">P(90d)</th></tr></thead>
+        <tbody className="divide-y divide-black/[.03]">
+          {list.map(r=>{const st=statusOf(units[r.hx]),meta=ST[st],active=sel===r.hx;return(
+            <tr key={r.hx} onClick={()=>onSelect(r.hx)} className={`cursor-pointer hover:bg-bcp-green/[.03] ${active?'bg-bcp-green/[.06]':''}`}>
+              <td className="px-4 py-2.5 font-bold text-bcp-black">{r.hx}</td>
+              <td className="px-3 py-2.5"><span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:meta.c}}>{meta.label}</span></td>
+              <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{r.past_threshold?'0 (เลยแล้ว)':r.p50!=null?Math.round(r.p50):'—'}</td>
+              <td className="px-3 py-2.5"><RangeBar p10={r.past_threshold?0:r.p10} p50={r.past_threshold?0:r.p50} p90={r.past_threshold?0:r.p90}/></td>
+              <td className="px-3 py-2.5 text-right"><ProbCell v={r.prob_30}/></td>
+              <td className="px-3 py-2.5 text-right"><ProbCell v={r.prob_60}/></td>
+              <td className="px-3 py-2.5 text-right"><ProbCell v={r.prob_90}/></td></tr>);})}
+        </tbody></table></div>
+    </div>
+
+    {/* selected HX: reliability + model comparison */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      {/* reliability / hazard */}
+      <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+        <h3 className="text-[14px] font-bold text-bcp-black">Reliability & Hazard · <span className="text-bcp-green">{sel}</span></h3>
+        <p className="text-[11px] text-bcp-dgray mt-0.5 mb-2">Weibull survival จากประวัติรอบเดินเครื่อง · เส้น = โอกาสยัง "สะอาดพอ" R(t)</p>
+        {RL?(<>
+          <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+            <div className="rounded-lg bg-black/[.03] p-2"><div className="text-[10px] text-bcp-dgray">Weibull shape</div><div className="text-[16px] font-bold">{fmt(RL.shape,2)}</div><div className="text-[8.5px] text-bcp-dgray">{RL.shape>1?'เสื่อมเร็วขึ้นตามเวลา':'สุ่ม'}</div></div>
+            <div className="rounded-lg bg-black/[.03] p-2"><div className="text-[10px] text-bcp-dgray">MTBC (เฉลี่ย)</div><div className="text-[16px] font-bold">{Math.round(RL.mtbc)}<span className="text-[10px] font-normal"> วัน</span></div></div>
+            <div className="rounded-lg bg-black/[.03] p-2"><div className="text-[10px] text-bcp-dgray">อายุปัจจุบัน</div><div className="text-[16px] font-bold">{Math.round(RL.days_on_duty)}<span className="text-[10px] font-normal"> วัน</span></div></div>
+          </div>
+          <div style={{width:'100%',height:170}}><ResponsiveContainer>
+            <ComposedChart data={RL.curve} margin={{top:6,right:8,left:-14,bottom:0}}>
+              <CartesianGrid stroke="#EEF0ED" vertical={false}/>
+              <XAxis dataKey="t" tick={{fill:BCP.dgray,fontSize:10}} axisLine={false} tickLine={false} tickFormatter={v=>v+'d'}/>
+              <YAxis tick={{fill:BCP.dgray,fontSize:10}} axisLine={false} tickLine={false} domain={[0,1]}/>
+              <RTooltip contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:11}} formatter={(v,n)=>n==='R'?[fmt(v,2),'R(t)']:[v,n]}/>
+              <Area type="monotone" dataKey="R" stroke={BCP.turq} strokeWidth={2} fill={BCP.turq} fillOpacity=".12" name="R"/>
+            </ComposedChart></ResponsiveContainer></div>
+          <div className="flex items-center justify-between mt-2 text-[11px]">
+            <span className="text-bcp-dgray">P(ต้องล้างภายใน): </span>
+            <span>30d <b style={{color:BCP.orange}}>{Math.round(RL.prob_30)}%</b> · 60d <b style={{color:BCP.orange}}>{Math.round(RL.prob_60)}%</b> · 90d <b style={{color:BCP.red}}>{Math.round(RL.prob_90)}%</b></span>
+          </div>
+          {RL.confidence!=='ok'&&<div className="mt-2 text-[10.5px] text-bcp-orange bg-bcp-orange/10 rounded px-2 py-1">⚠ n={RL.n_runs} รอบ (น้อย) — ใช้ค่า shape ร่วมจาก pool, ความเชื่อมั่นต่ำ</div>}
+        </>):<div className="text-bcp-dgray text-[12px] py-6 text-center">ไม่มีข้อมูล reliability</div>}
+      </div>
+
+      {/* model comparison */}
+      <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+        <h3 className="text-[14px] font-bold text-bcp-black">เทียบโมเดลการเสื่อม (Propagation) · {sel}</h3>
+        <p className="text-[11px] text-bcp-dgray mt-0.5 mb-3">เลือกโมเดลต่อ HX ด้วย AIC · backtest = ทำนายจาก 60% แรกของรอบเก่า เทียบวันล้างจริง (วัน)</p>
+        {PR?(<>
+          <div className="mb-3 text-[12px]">โมเดลที่เหมาะกับ {sel}: <span className="font-bold text-bcp-green">{PR.best_model||'—'}</span>
+            {PR.best_proj_days!=null?<span className="text-bcp-dgray"> · คาดถึงเกณฑ์อีก ~{PR.best_proj_days} วัน</span>:<span className="text-bcp-dgray"> · (เส้นอิ่มตัว — ไม่ถึงเกณฑ์ในกรอบ)</span>}</div>
+          <table className="w-full text-[12px] mb-3">
+            <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]"><th className="py-1.5">Model</th><th className="py-1.5 text-right">AIC (ต่ำ=ดี)</th><th className="py-1.5 text-right">Backtest RMSE (วัน)</th></tr></thead>
+            <tbody>{PR.models.map(m=>(<tr key={m.name} className="border-b border-black/[.03]">
+              <td className="py-1.5 font-semibold">{m.name}{m.name===PR.best_model&&<span className="ml-1 text-bcp-green">✓</span>}</td>
+              <td className="py-1.5 text-right tabular-nums">{fmt(m.aic,1)}</td>
+              <td className="py-1.5 text-right tabular-nums text-bcp-dgray">{prop.backtest_rmse_days?.[m.name]??'—'}</td></tr>))}</tbody>
+          </table>
+          <div className="text-[10.5px] text-bcp-dgray bg-black/[.02] rounded px-2.5 py-2">โมเดลรวมที่ back-test ดีสุด: <b className="text-bcp-black">{prop.best_overall_model}</b> · {prop.note}</div>
+        </>):<div className="text-bcp-dgray text-[12px] py-6 text-center">ไม่มีข้อมูลโมเดล</div>}
+      </div>
+    </div>
+
+    {/* drivers */}
+    {drv&&<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+      <h3 className="text-[14px] font-bold text-bcp-black">ตัวแปรที่มีผลต่ออัตราการเกิดตะกรัน (Degradation Drivers)</h3>
+      <p className="text-[11px] text-bcp-dgray mt-0.5 mb-3">SHAP importance จาก {drv.n} รอบเดินเครื่อง · ลูกศร = ทิศทาง (↑ ตัวแปร → ตะกรันเพิ่ม/ลด)</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div style={{width:'100%',height:200}}><ResponsiveContainer>
+          <BarChart data={drv.drivers.slice(0,7).map(d=>({name:d.label,v:+d.importance,dir:d.direction}))} layout="vertical" margin={{left:10,right:16,top:4,bottom:0}}>
+            <CartesianGrid stroke="#EEF0ED" horizontal={false}/>
+            <XAxis type="number" tick={{fill:BCP.dgray,fontSize:10}} axisLine={false} tickLine={false}/>
+            <YAxis type="category" dataKey="name" width={96} tick={{fill:BCP.black,fontSize:10.5}} axisLine={false} tickLine={false}/>
+            <RTooltip contentStyle={{borderRadius:10,border:'none',boxShadow:'0 8px 30px rgba(0,0,0,.12)',fontSize:11}}/>
+            <Bar dataKey="v" radius={[0,6,6,0]} barSize={15}>{drv.drivers.slice(0,7).map((d,i)=><Cell key={i} fill={d.direction>0?BCP.red:BCP.green}/>)}</Bar>
+          </BarChart></ResponsiveContainer></div>
+        <div>
+          <div className="text-[12px] font-semibold text-bcp-black mb-2">💡 แนวทางลดอัตราการเสื่อม (levers)</div>
+          {drv.levers.length?drv.levers.map((l,i)=><div key={i} className="text-[11.5px] text-bcp-black/80 mb-1.5 flex gap-1.5"><span className="text-bcp-green">▸</span>{l}</div>)
+            :<div className="text-[11.5px] text-bcp-dgray">ไม่มี lever ที่ควบคุมได้ชัดเจนจากข้อมูลชุดนี้</div>}
+          <div className="mt-3 text-[10.5px] text-bcp-orange bg-bcp-orange/10 rounded-lg px-3 py-2">
+            ⚠ <b>อ่านอย่างระวัง:</b> CV R² = {fmt(drv.cv_r2_mean,2)} (n={drv.n}) — โมเดลนี้ยัง<b>ทำนายไม่ได้ดี out-of-sample</b> ตัวแปรข้างต้นเป็น<b>ความสัมพันธ์เชิงสังเกต (associative)</b> ไม่ใช่สาเหตุที่พิสูจน์แล้ว ใช้เป็นสมมติฐานตั้งต้น
+          </div>
+        </div>
+      </div>
+    </div>}
+   </div>);
+}
+
+function App(){
+  const [tab,setTab]=useState('overview');
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState(null);
+  const [ranking,setRanking]=useState([]);
+  const [recs,setRecs]=useState([]);
+  const [models,setModels]=useState(null);
+  const [forecast,setForecast]=useState({});
+  const [topo,setTopo]=useState(null);
+  const [phm,setPhm]=useState(null);
+  const [selected,setSelected]=useState('E113A');
+  const [simHX,setSimHX]=useState(null);
+  const [params,setParams]=useState(DEFAULT_PARAMS);
+  const [rerun,setRerun]=useState({busy:false,msg:null,err:false});
+  const [hxts,setHxts]=useState(null);
+
+  const load=useCallback(()=>{
+    setLoading(true);
+    const opt=n=>loadJSON(n).catch(()=>null); // optional files (may not be generated yet)
+    Promise.all([loadJSON('hx_ranking.json'),loadJSON('cleaning_recommendations.json'),loadJSON('model_metrics.json'),loadJSON('forecast_6mo.json'),loadJSON('pfd_topology.json'),
+      opt('rul.json'),opt('reliability.json'),opt('propagation_models.json'),opt('drivers.json'),opt('hx_timeseries.json')])
+      .then(([rk,rc,md,fc,tp,rul,rel,prop,drv,ts])=>{setRanking(rk);setRecs(rc);setModels(md);setForecast(fc);setTopo(tp);
+        setPhm({rul,rel,prop,drv});setHxts(ts);setLoading(false);})
+      .catch(e=>{setErr(e.message);setLoading(false);});
+  },[]);
+  useEffect(load,[load]);
+
+  const units=useMemo(()=>{
+    const m={};(topo?.order||[]).forEach(hx=>m[hx]={HX:hx});
+    ranking.forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
+    recs.forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
+    return m;
+  },[ranking,recs,topo]);
+
+  const onSelect=useCallback(hx=>{setSelected(hx);setSimHX(s=>s&&s!==hx?null:s);},[]);
+  const onSim=useCallback(()=>setSimHX(p=>p===selected?null:selected),[selected]);
+  const onRerun=useCallback(async(file,p)=>{
+    if(!file){setRerun({busy:false,msg:'กรุณาเลือกไฟล์ก่อน',err:true});return;}
+    setRerun({busy:true,msg:null,err:false});
+    try{
+      // raw-body upload (no multipart) — filename + params travel in headers
+      const r=await fetch('/api/run',{method:'POST',body:file,
+        headers:{'X-Filename':file.name,'X-Params':JSON.stringify(p)}});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status)+(j.missing_tags?' — ขาด: '+j.missing_tags.join(', '):''));
+      setRerun({busy:false,msg:'✓ '+(j.message||'สำเร็จ')+' · โหลดผลใหม่แล้ว',err:false});
+      load();
+    }catch(e){
+      setRerun({busy:false,err:true,msg:'ไม่สำเร็จ: '+e.message+' — หากยังไม่เปิด backend ให้รัน: python backend/server.py แล้วเปิด http://localhost:8899'});
+    }
+  },[load]);
+  const onRunFull=useCallback(async(file)=>{
+    setRerun({busy:true,msg:null,err:false});
+    try{
+      const headers=file?{'X-Filename':file.name}:{};
+      const r=await fetch('/api/run-full',{method:'POST',body:file||null,headers});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+      setRerun({busy:false,err:false,msg:'✓ '+(j.message||'เริ่มแล้ว')+' — '+(j.note||'')});
+    }catch(e){
+      setRerun({busy:false,err:true,msg:'ไม่สำเร็จ: '+e.message+' — เปิด backend: python backend/server.py'});
+    }
+  },[]);
+
+  if(loading)return <Splash/>;
+  if(err)return <ErrBox msg={err}/>;
+
+  const curUnit=units[selected], curFc=forecast[selected], simActive=simHX===selected;
+  const urgent=recs.filter(r=>(r.recommended_action||'').startsWith('Clean now')).length;
+  const atRisk=recs.filter(r=>r.at_risk_within_6mo).length;
+  const cit=topo?.furnace?.find(x=>x.key==='CIT')?.value;
+  const tamDays=daysBetween(new Date(),params.NEXT_TAM);
+  const top1=recs.slice().sort((a,b)=>a.priority_rank-b.priority_rank)[0];
+
+  const TABS=[['overview','ภาพรวม & P&ID'],['hxdetail','HX รายตัว'],['furnace','เตา & Optimization'],['plan','แผนล้าง HX'],['phm','พยากรณ์ & ความเสี่ยง'],['model','โมเดล & Optimization']];
+
+  return(
+   <div className="min-h-screen font-sans text-bcp-black">
+    {DEMO && <div className="bg-bcp-orange text-white text-[12px] text-center py-1.5 px-4 font-medium">
+      🔒 DEMO · ข้อมูลจำลอง (anonymized) — tag และค่าทั้งหมดถูกสุ่มแทน ไม่ใช่ข้อมูลจริงของโรงงาน · ฟังก์ชันอัปโหลด/วิเคราะห์ปิดในโหมดนี้</div>}
+    <header className="sticky top-0 z-30 glass border-b border-black/[.06]">
+      <div className="max-w-[1440px] mx-auto px-6 h-[58px] flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <img src="bangchak-logo.png" alt="Bangchak" className="h-7 object-contain"/>
+          <div className="hidden sm:block border-l border-black/10 pl-3">
+            <div className="text-[13px] font-bold leading-tight">CPHT Predictive Maintenance</div>
+            <div className="text-[10.5px] text-bcp-dgray">Plant 3 TPU · ทำนายตะกรัน & วางแผนล้าง Heat Exchanger</div></div>
+        </div>
+        <div className="flex items-center gap-2 text-[11px] text-bcp-dgray">
+          <span className="h-2 w-2 rounded-full bg-bcp-green animate-pulse"/>ข้อมูล {topo?.last_timestamp?.slice(0,10)}</div>
+      </div>
+      <div className="max-w-[1440px] mx-auto px-6 flex gap-1 text-[13px]">
+        {TABS.map(([k,l])=>(<button key={k} onClick={()=>setTab(k)} className={`tabbtn relative px-3 py-2.5 text-bcp-dgray hover:text-bcp-black ${tab===k?'active':''}`}>{l}</button>))}
+      </div>
+    </header>
+
+    <main className="max-w-[1440px] mx-auto px-5 py-6 space-y-5">
+      {tab==='overview'&&<>
+        <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Kpi icon="🌡" tone={cit<params.CIT_MIN?'orange':'green'} label="CIT ปัจจุบัน" value={`${fmt(cit,1)}°C`} sub={cit<params.CIT_MIN?`ต่ำกว่าเกณฑ์ ${params.CIT_MIN}°C`:`เป้า ${params.CIT_TARGET}°C`} foot={`ขาด ${fmt(Math.max(0,params.CIT_TARGET-cit),1)}°C จากเป้า`}/>
+          <Kpi icon="🧽" tone={urgent>3?'orange':'green'} label="ต้องล้างด่วน" value={`${urgent} HX`} sub={`จาก ${recs.length} ที่ติดตาม`} foot={`เสี่ยงใน 6 เดือน: ${atRisk}`}/>
+          <Kpi icon="🏆" tone="orange" label="อันดับ 1" value={top1?.HX||'—'} sub={top1?`Priority ${fmt(top1.priority_score,2)}`:''} foot={top1?effortTH[top1.effort_tier]:''}/>
+          <Kpi icon="🛠" tone="blue" label="TAM ถัดไป" value={`${tamDays} วัน`} sub={thaiDate(params.NEXT_TAM)} foot="Turnaround Maintenance"/>
+        </section>
+        <PID topo={topo} units={units} selected={selected} onSelect={onSelect}/>
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          <div className="lg:col-span-4"><DetailPanel hx={selected} unit={curUnit} onSim={onSim} simActive={simActive} fc={curFc} node={topo?.nodes?.[selected]}/></div>
+          <div className="lg:col-span-8"><ForecastChart hx={selected} fc={curFc} simActive={simActive} unit={curUnit}/></div>
+        </section>
+      </>}
+      {tab==='hxdetail'&&<HXDetailPanel hxts={hxts} units={units} selected={selected} onSelect={onSelect}/>}
+      {tab==='furnace'&&<FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking}/>}
+      {tab==='phm'&&<PrognosticsPanel phm={phm} units={units} selected={selected} onSelect={onSelect}/>}
+      {tab==='plan'&&<PlanTable units={units} selected={selected} onSelect={s=>{onSelect(s);}}/>}
+      {tab==='model'&&<>
+        <ModelPanel models={models} ranking={ranking}/>
+        <OptimizePanel params={params} setParams={setParams} onRerun={onRerun} onRunFull={onRunFull} status={rerun}/>
+      </>}
+      <footer className="pt-2 pb-8 text-center text-[11px] text-bcp-dgray">
+        Bangchak CPHT Predictive Maintenance · ข้อมูลจาก <code className="text-bcp-black/60">dashboard/data/*.json</code> (notebooks 2d/3a/6a-6c) · P&ID ตาม cpht_config topology
+      </footer>
+    </main>
+   </div>);
+}
+
+function Kpi({icon,label,value,sub,foot,tone='green'}){
+  const ring={green:'from-bcp-green/10 to-bcp-lime/10',orange:'from-bcp-orange/12 to-bcp-orange/5',blue:'from-bcp-blue/10 to-bcp-turq/10'}[tone];
+  const acc={green:BCP.green,orange:BCP.orange,blue:BCP.blue}[tone];
+  return(<div className="fade-up relative overflow-hidden rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+    <div className={`absolute -right-8 -top-8 h-28 w-28 rounded-full bg-gradient-to-br ${ring}`}/>
+    <div className="relative"><div className="flex items-start justify-between">
+      <div><div className="text-[10px] font-semibold uppercase tracking-[.12em] text-bcp-dgray">{label}</div>
+        <div className="mt-2 text-[26px] leading-none font-bold text-bcp-black">{value}</div>
+        {sub&&<div className="mt-1 text-[12px] font-medium" style={{color:acc}}>{sub}</div>}</div>
+      <div className="text-xl grid place-items-center h-9 w-9 rounded-xl" style={{background:`${acc}14`,color:acc}}>{icon}</div></div>
+      {foot&&<div className="mt-3 pt-2.5 border-t border-black/[.04] text-[10.5px] text-bcp-dgray">{foot}</div>}</div>
+  </div>);
+}
+function Splash(){return <div className="min-h-screen grid place-items-center"><div className="text-center"><div className="mx-auto h-14 w-14 rounded-full border-[3px] border-bcp-gray/30 border-t-bcp-green animate-spin"/><div className="mt-5 text-bcp-dgray text-sm">กำลังโหลด…</div></div></div>;}
+function ErrBox({msg}){return <div className="min-h-screen grid place-items-center p-6"><div className="max-w-md bg-white rounded-2xl shadow-card p-6 border-l-4 border-bcp-orange"><div className="font-bold text-bcp-orange text-lg">โหลดข้อมูลไม่สำเร็จ</div><p className="text-sm mt-2">{msg}</p><pre className="mt-3 bg-bcp-black text-bcp-lime text-[12px] rounded-lg p-3 overflow-x-auto">cd dashboard{'\n'}python -m http.server 8811</pre><p className="text-[12px] text-bcp-dgray mt-2">เปิด http://localhost:8811/</p></div></div>;}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
