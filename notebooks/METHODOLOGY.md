@@ -226,6 +226,19 @@ design เทียบ U_clean_run ที่วัดได้ก่อน)
 มุมมองเสริม) พร้อมกล่องเทียบต้นทุนรวมและ Basis อธิบายวิธี+ข้อจำกัด — v1 ยังเป็นค่า default เพราะอธิบายง่ายกว่าและ
 พิสูจน์แล้วก่อน v2 ตามหลัก explainability-first ของโปรเจกต์
 
+### 8.5 Solver comparison — SLSQP relaxation vs mixed-integer (2026-07-13)
+v2 แก้ `y[hx,t]∈{0,1}` แบบ continuous relaxation (SLSQP) แล้ว round — ไม่รับประกันว่าเป็น optimum ของปัญหา integer
+จริง `pipeline/solver_comparison.py` + `16b_optimizer_solver_comparison.ipynb` เทียบ window เดียวกันทุกประการด้วย
+`scipy.optimize.differential_evolution(integrality=True)` (mixed-integer global search แบบไม่ต้องติดตั้งอะไรเพิ่ม
+— ไม่ใช่ Pyomo+Bonmin/Couenne เต็มรูปที่มี optimality-gap certificate ซึ่งหนักเกินไปสำหรับ dependency policy ของ
+โปรเจกต์นี้) และ GA เล็กๆ (dependency-free) **ผลจริงจากการรันครั้งแรก**: หน้าต่าง 2 เดือน ทั้งสามวิธีเท่ากัน, หน้าต่าง
+4 เดือน DE เจอคำตอบที่ดีกว่า SLSQP+round **3.19%**, หน้าต่าง 6 เดือน SLSQP กลับดีกว่า DE (DE แพ้ ~11%, น่าจะเพราะ
+`maxiter`/`popsize` ไม่พอสำหรับมิติที่ใหญ่ขึ้น ไม่ใช่ว่า SLSQP เก่งกว่าเชิงโครงสร้าง) — ผลไม่ชี้ขาดพอที่จะเปลี่ยน
+production solver ทันที (gap ที่เจอ <3-3.5% อยู่ในเกณฑ์ "close enough" ที่วางแผนไว้) แต่ยืนยันว่า SLSQP+round
+*อาจ* ทิ้ง saving เล็กน้อยไว้บนโต๊ะในบางกรณี ควรรัน notebook นี้ซ้ำเป็นระยะ (ไม่ใช่ production step, ไม่ได้ผูกกับ
+`run_all.py`) เพื่อติดตาม ไม่ใช่รันทุกครั้งที่กดปุ่ม "คำนวณใหม่" บนแดชบอร์ด (DE/GA ช้ากว่า SLSQP มาก — ดูตัวเลขเวลาใน
+notebook)
+
 ## 9. ภาคผนวก: รีวิววรรณกรรม 11 ฉบับ (`เอกสารงานวิจัย\`, ทบทวน 2026-07-10)
 
 พี่วิศวกรขอให้พิจารณางานวิจัย 12 ไฟล์ (มี 1 ไฟล์ซ้ำ: `applsci-13-00604-v2.pdf` = `Cleaning_Schedule_Optimization_of_
