@@ -15,10 +15,17 @@ method (engineer's slide, 3E-113 example):
 Slide check: ΔCIT=2°C, Feed=80 KBD, NG=390 → 8,311,680 THB/yr ✓ (reproduced in test).
 
 ΔCIT per HX: prefer the MEASURED median recovery from cleaning_history.json (the
-actual sawtooth jump audited against past cleans); fall back to the model value
-(expected_CIT_gain_C, known to over-estimate ~3x vs the plant's observed 2°C for
-E113A) with a flag. The legacy first-principles formula (charge·ρ·Cp/LHV/η) is
-kept as a cross-check field.
+actual sawtooth jump audited against past cleans). For the 8/16 HX with no
+measured clean of their own, fall back to the model value (expected_CIT_gain_C)
+CORRECTED by an event-study calibration factor (event_study_calibration()) —
+the model is known to over-estimate, and that "~3x" figure used to come from a
+single TAM event; it's now the median measured/model ratio across every real
+clean event with both values (32 events, 8 HX, as of 2026-07), split by
+terminal-vs-non-terminal train position since that split shows a real
+difference (~0.23 vs ~0.39 in this data) that a single pooled factor would
+wash out. See METHODOLOGY.md and cit_gain_model_calibration in the export.
+The legacy first-principles formula (charge·ρ·Cp/LHV/η) is kept as a
+cross-check field.
 
 Cleaning cost: per-HX table CLEANING_COST_BY_HX. Baseline set 2026-07-12 to match
 the plant engineer's real-world range (~100k-500k THB/event, never higher) —
@@ -65,7 +72,9 @@ COSTS_ASSUMED = True
 
 BASIS = ('สูตรโรงงาน: Saving[฿/ปี] = ΔCIT × 0.74 MMBTU/D/KBD/°C × Feed[KBD] × NG[฿/MMBTU] × 360 × 0.5(decay) ; '
          'Feed[KBD] = charge[m³/h]×24/158.987 ; ΔCIT ใช้ค่าวัดจริง (median จาก audit history) ก่อน, '
-         'fallback ค่าโมเดล (ระวัง over-estimate) ; ค่าล้างต่อ HX เป็นค่าสมมติ ~100k-500k บาท (ตามช่วงจริงหน้างาน) รอราคาจริง')
+         'fallback ค่าโมเดล คูณด้วย calibration factor จาก event-study (measured/model ratio จริงทุก clean event '
+         'แยกกลุ่ม terminal/non-terminal — ดู cit_gain_model_calibration) ; '
+         'ค่าล้างต่อ HX เป็นค่าสมมติ ~100k-500k บาท (ตามช่วงจริงหน้างาน) รอราคาจริง')
 
 
 def _load(name, default=None):
@@ -81,6 +90,59 @@ def measured_cit_gain(chist, hx):
     vals = [c['cit_measured_C'] for c in h.get('cleans', [])
             if c.get('gain_estimable') and c.get('cit_measured_C') is not None and c['cit_measured_C'] > 0]
     return round(float(np.median(vals)), 2) if vals else None
+
+
+CALIB_RATIO_CLIP = (0.15, 1.0)   # sane bounds on the correction factor: never inflate the
+                                  # model estimate, never let a lone noisy event zero it out
+
+
+def event_study_calibration(chist):
+    """Empirical measured/model ΔCIT ratio from EVERY real cleaning event with both
+    a measured and a model value (not just the single TAM event this correction used
+    to be pinned to) -- the fix for the model fallback's documented ~3x over-estimate.
+
+    Grouped by terminal-vs-non-terminal train position (cleaning_history.json's
+    sensitivity.is_terminal_CIT, the cheapest available chain-position proxy) rather
+    than pooled into one global number: terminal HX (E113A/E112C, right before the
+    furnace) show a materially different ratio than mid-train HX in this data, so a
+    single pooled factor would misrepresent both groups -- the same generalize-
+    across-dissimilar-HX pitfall the 3a leave-HX-out CV already ran into (R^2~0.10).
+    Falls back to the global ratio, then to no correction (1.0), if a group has too
+    few events to trust its own median."""
+    MIN_GROUP_N = 5
+    by_group = {True: [], False: []}
+    all_ratios = []
+    for h, v in (chist or {}).get('hx', {}).items():
+        term = bool((v.get('sensitivity') or {}).get('is_terminal_CIT'))
+        for c in v.get('cleans', []):
+            m, mdl = c.get('cit_measured_C'), c.get('cit_model_C')
+            if c.get('gain_estimable') and m is not None and mdl and mdl > 0:
+                ratio = m / mdl
+                by_group[term].append(ratio)
+                all_ratios.append(ratio)
+
+    def _med(xs):
+        return round(float(np.median(xs)), 3) if xs else None
+
+    global_ratio = _med(all_ratios)
+    group_ratio_raw = {'terminal': _med(by_group[True]), 'non_terminal': _med(by_group[False])}
+    group_n = {'terminal': len(by_group[True]), 'non_terminal': len(by_group[False])}
+    # a group with too few events falls back to the global (still-empirical) ratio
+    # rather than trusting a median of a handful of noisy points
+    group_ratio = {k: (v if v is not None and group_n[k] >= MIN_GROUP_N else global_ratio)
+                   for k, v in group_ratio_raw.items()}
+    return dict(n_events=len(all_ratios), global_ratio=global_ratio,
+                group_ratio=group_ratio, group_ratio_own_group_only=group_ratio_raw,
+                group_n=group_n, min_group_n=MIN_GROUP_N, clip=list(CALIB_RATIO_CLIP))
+
+
+def calibrated_model_gain(model_C, is_terminal, calib):
+    """Apply event_study_calibration()'s group ratio to a raw model estimate, clipped
+    to CALIB_RATIO_CLIP. Returns (calibrated_value, factor_used)."""
+    key = 'terminal' if is_terminal else 'non_terminal'
+    factor = (calib or {}).get('group_ratio', {}).get(key) or (calib or {}).get('global_ratio') or 1.0
+    factor = min(max(factor, CALIB_RATIO_CLIP[0]), CALIB_RATIO_CLIP[1])
+    return model_C * factor, round(factor, 3)
 
 
 def main():
@@ -101,18 +163,27 @@ def main():
         kgph = charge * LEGACY['RHO_CRUDE'] * LEGACY['CP_CRUDE'] * dC / (LEGACY['LHV_FG'] * LEGACY['FURNACE_EFF'])
         return kgph / 1000 * LEGACY['HOURS_PER_DAY'] * LEGACY['FG_PRICE']
 
+    calib = event_study_calibration(chist)
+
     cand = []
     for r in ranking:
         meas = measured_cit_gain(chist, r['HX'])
         model = r.get('expected_CIT_gain_C')
-        dC = meas if meas is not None else (model if model and model > 0 else None)
+        is_term = bool(((chist or {}).get('hx', {}).get(r['HX'], {}).get('sensitivity') or {}).get('is_terminal_CIT'))
+        if meas is not None:
+            dC, src, calib_factor = meas, 'measured', None
+        elif model and model > 0:
+            dC, calib_factor = calibrated_model_gain(model, is_term, calib)
+            src = 'model_calibrated'
+        else:
+            continue
         if dC is None or dC <= 0:
             continue
-        cand.append((r, dC, 'measured' if meas is not None else 'model'))
+        cand.append((r, dC, src, calib_factor))
     cand.sort(key=lambda t: t[0].get('priority_score', 0), reverse=True)
 
     per_hx, cum_cit, cum_yr = [], 0.0, 0.0
-    for i, (r, dC, src) in enumerate(cand, 1):
+    for i, (r, dC, src, calib_factor) in enumerate(cand, 1):
         yr = plant_saving_yr(dC)
         day = yr / PLANT['DAYS_PER_YEAR']
         cost = CLEANING_COST_BY_HX.get(r['HX'], DEFAULT_CLEANING_COST)
@@ -123,6 +194,7 @@ def main():
             cit_gain_C=round(dC, 2), cit_gain_source=src,
             cit_gain_model_C=(round(float(r['expected_CIT_gain_C']), 2)
                               if r.get('expected_CIT_gain_C') else None),
+            cit_gain_calibration_factor=calib_factor,
             saving_thb_yr=round(yr), baht_day=round(day),
             cleaning_cost=cost, cleaning_cost_assumed=COSTS_ASSUMED,
             payback_days=(round(cost / day, 1) if day > 0 else None),
@@ -142,11 +214,15 @@ def main():
                charge_m3h=round(float(charge), 1), feed_kbd=round(feed_kbd, 1),
                slide_check_thb_yr=round(check),
                cleaning_costs_assumed=COSTS_ASSUMED, basis=BASIS,
+               cit_gain_model_calibration=calib,
                per_hx=per_hx, totals=totals)
     OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
+    n_calibrated = sum(1 for p in per_hx if p['cit_gain_source'] == 'model_calibrated')
     print(f'Wrote {OUT.name}: {len(per_hx)} HX, feed {feed_kbd:.1f} KBD, '
           f'slide check {check:,.0f} THB/yr (expect 8,311,680), '
           f'total {totals["saving_thb_yr"]:,} THB/yr')
+    print(f'dCIT model calibration: {calib["n_events"]} events, global ratio={calib["global_ratio"]}, '
+          f'group ratio={calib["group_ratio"]} -> applied to {n_calibrated}/{len(per_hx)} HX with no measured history')
 
 
 if __name__ == '__main__':

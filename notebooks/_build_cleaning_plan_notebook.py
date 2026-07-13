@@ -415,10 +415,15 @@ cells.append(md_cell(r"""
   กรณี "ล้างได้บางส่วน" (`ONLINE_PARTIAL`, เช่น E101CD) ใช้ `duty_fraction` ลดสัดส่วน ΔCIT ที่คืนได้จริงตามจำนวน
   shell ที่ดึงออกมาล้างได้ — ไม่ได้สมมติว่าล้างได้เต็มเหมือนอีกกลุ่ม.
 - fouling rate ต่อ HX ใช้รอบ **reliable** ล่าสุด; HX ที่ไม่มีรอบ reliable (spare) inherit จากคู่ตำแหน่งเดียวกัน.
-- ΔCIT ต่อการล้าง = ค่าวัดจริง (median audit) ก่อน; fallback ค่าโมเดล (over-estimate ~3×) พร้อม flag.
+- ΔCIT ต่อการล้าง = ค่าวัดจริง (median audit) ก่อนเสมอ; fallback ค่าโมเดล คูณ **event-study calibration factor**
+  (measured/model ratio จริงจากทุก clean event ที่มีทั้งสองค่า — ไม่ใช่ TAM event เดียวเหมือนเดิม — แยกกลุ่ม
+  terminal/non-terminal train position เพราะสอง group มี ratio ต่างกันจริง ดู `export_economics.event_study_calibration`
+  และฟิลด์ `cit_gain_model_calibration` ใน economics.json).
 - **worth_it** เทียบมูลค่าเชื้อเพลิงเตาที่ประหยัดได้ต่อรอบล้าง (k×ΔCIT×T\*/2) กับค่าล้างตรง ๆ — ไม่ใช่แค่ net-saving
   เชิงทฤษฎี แต่เป็นคำตอบตรงคำถาม "คุ้มไหมเทียบเชื้อเพลิงที่เตาใช้จริง".
-- ค่าล้างต่อ HX, ทีมล้าง/เดือน, NEXT_TAM เป็น **ค่าสมมติ** รอวิศวกรยืนยัน (ปรับได้ผ่านปุ่ม "คำนวณใหม่" บนแดชบอร์ด
+- TAM รอบใกล้ (2028-06-01) ยืนยันแล้ว; รอบถัดไป (~2032-06-01, ทุก ~4 ปี) ยังเป็น**ค่าสมมติ**เพื่อให้ scheduler
+  มองเห็น horizon ยาวพอจะไม่ใช้งบล้าง online หมดก่อน 2028 (ดู `cleaning_scheduler_network.TAM_DATES`) —
+  ค่าล้างต่อ HX และทีมล้าง/เดือน ยังเป็น**ค่าสมมติ**รอวิศวกรยืนยันเช่นกัน (ปรับได้ผ่านปุ่ม "คำนวณใหม่" บนแดชบอร์ด
   ซึ่งจะรัน notebook นี้ใหม่ทั้งเซลล์ด้วยค่าที่แก้).
 - optimizer ใช้ reduced-form network coupling (ผลรวม CIT-deficit ที่วัดจริง) ไม่ใช่ ε-NTU DAE เต็มรูป — ดู METHODOLOGY §8.2.
 - น้ำหนักความเสี่ยง (W_*) เป็นค่าเริ่มต้นที่ปรับได้ ไม่ใช่ค่าตายตัว.
