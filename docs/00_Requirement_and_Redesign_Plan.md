@@ -43,7 +43,7 @@ Prepared after full review of `notebooks/0_*` ถึง `6c_*`, `cpht_config.py`
 E113A(‖E112C) → E112AB → E108AB → E110ABC
 ```
 
-**3 กรณี Case-Operate ที่ผู้ใช้ระบุ — เทียบกับโค้ดปัจจุบันใน `2a_operating_state_classification.ipynb`:**
+**3 กรณี Case-Operate ที่ผู้ใช้ระบุ — เทียบกับโค้ดปัจจุบันใน `03_operating_state_classification.ipynb`:**
 
 | กรณี | ผู้ใช้ระบุ | สถานะใน `2a` ปัจจุบัน | ต้องแก้/เสริม |
 |---|---|---|---|
@@ -143,7 +143,7 @@ engineering_priority = (probability_score × consequence_score) / effort_penalty
 | **Step 3** | `03_fouling_phase_and_rate.ipynb` | แทนที่ `2b` (campaign-linear) + `3a` (ML baseline) ด้วยกรอบเดียว: Initiation-phase baseline (ML, จาก 3a) + After-initiation rate fit เลือก linear/Kern-Seaton (หัวข้อ 3.3) | **เขียนใหม่บางส่วน** — รวม 2 แนวทางเดิมให้เป็นกรอบเดียวตามหลักวิชาการ |
 | **Step 4** | `04_time_to_clean_forecast.ipynb` | `3b_time_to_clean_prediction`, ใช้ output จาก Step 3 | ปรับ input source เท่านั้น logic เดิมใช้ได้ |
 | **Step 5** | `05_correlation_and_pca.ipynb` | `2_correlation` + `2_pca` | เก็บของเดิม เป็น exploratory/supporting evidence |
-| **Step 6** | `06_cleaning_priority_ranking.ipynb` | รวม `2c` + `2d`, ตัดส่วนซ้ำกับ `5` | ใช้สูตรกลางตามหัวข้อ 3.4 |
+| **Step 6** | `08_cleaning_priority_ranking.ipynb` | รวม `2c` + `2d`, ตัดส่วนซ้ำกับ `5` | ใช้สูตรกลางตามหัวข้อ 3.4 |
 | **Step 7** | `07_cit_model_training.ipynb` | รวม `5` (ML ส่วน CIT) + `6a` | ใช้ Train/Val/Test 3 ทาง (หัวข้อ 4) แทน 80/20 |
 | **Step 8** | `08_shap_and_validation.ipynb` | `6b_shap_importance_ranking` | เก็บของเดิม เชื่อมกลับเข้า Step 6 |
 | **Step 9** | `09_forecast_and_dashboard_export.ipynb` | `6c_six_month_forecast_and_dashboard_export`, ขยายเป็น 12 เดือน + what-if CIT-target simulation (หัวข้อ 5) | ต่อยอดของเดิม เขียนเพิ่มเฉพาะ what-if section |

@@ -1,7 +1,7 @@
 """
 Export per-HX time-series for the dashboard's "HX รายตัว" (per-HX detail) tab.
 
-Mirrors the plots in 2_Feature_calculation.ipynb section 3.2 (Per-HX Detailed
+Mirrors the plots in 02_feature_engineering.ipynb section 3.2 (Per-HX Detailed
 Dashboard) but as JSON the web can chart: one entry per HX with a down-sampled
 daily series of U_relative (fouling sawtooth), Q duty, model predicted_Q vs
 actual, deviation, cold-side temps, days_on_duty, the run-boundary events, and

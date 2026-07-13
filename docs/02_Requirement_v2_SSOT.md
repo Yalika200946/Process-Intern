@@ -88,7 +88,7 @@
 | 3 | `03_fouling_phase_and_rate.ipynb` | แทน `2b`+`3a` ด้วยกรอบ Initiation/After-initiation | **เขียนใหม่หลัก (L)** |
 | 4 | `04_time_to_clean_forecast.ipynb` | `3b` | เปลี่ยน input |
 | 5 | `05_correlation_and_pca.ipynb` | `2_correlation` + `2_pca` | รวม (exploratory) |
-| 6 | `06_cleaning_priority_ranking.ipynb` | `2c` + `2d` (สูตรเดียว + SHAP) | รวม |
+| 6 | `08_cleaning_priority_ranking.ipynb` | `2c` + `2d` (สูตรเดียว + SHAP) | รวม |
 | 7 | `07_cit_model_training.ipynb` | `5` + `6a` (train/val/test) | ปรับ split |
 | 8 | `08_shap_and_validation.ipynb` | `6b` | ต่อ |
 | 9 | `09_forecast_whatif_dashboard.ipynb` | `6c` + what-if + 12-month | ต่อยอด |

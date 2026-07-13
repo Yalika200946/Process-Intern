@@ -34,9 +34,9 @@ Step 0 (clean data)
 **Objective:** มีไฟล์ input สะอาด 1 ชุดที่ทุก Step ถัดไปใช้ร่วมกัน (ของเดิมถูกต้องแล้ว งานนี้คือ "รวมไฟล์" ไม่ใช่เขียนใหม่)
 
 **สิ่งที่ต้องทำ:**
-1. รวม `0_profilling_Crude.ipynb` (crude property cleaning) + `1_cleaning_data_process.ipynb` (TAM removal, outlier fix, merge crude) → ไฟล์เดียว `00_data_ingestion_and_cleaning.ipynb`
+1. รวม `00_data_prep_crude_assay.ipynb` (crude property cleaning) + `01_data_cleaning.ipynb` (TAM removal, outlier fix, merge crude) → ไฟล์เดียว `00_data_ingestion_and_cleaning.ipynb`
 2. เก็บ logic เดิมทั้งหมดไว้ (thresholds, IQR outlier, chain-consistency check) — **ไม่แก้สมการ**
-3. `0_profiling_process_control.ipynb` → เก็บแยกเป็น `00b_process_profiling.ipynb` (EDA อย่างเดียว, ไม่มีไฟล์ output ที่ step อื่นพึ่ง)
+3. `00_data_prep_process_control.ipynb` → เก็บแยกเป็น `00b_process_profiling.ipynb` (EDA อย่างเดียว, ไม่มีไฟล์ output ที่ step อื่นพึ่ง)
 4. Output ที่ต้องคงชื่อเดิมไว้ (มี notebook อื่นอ้างอิงอยู่): `Process_information_with_crude.csv`
 
 **Validation checklist:**
@@ -79,7 +79,7 @@ Step 0 (clean data)
 **สิ่งที่ต้องทำ:**
 1. ย้ายสมการ Q (Watson-Nelson Cp, Rackett density, `Q_norm`) จาก `2b`/`5` เข้าไปเป็น**ฟังก์ชันเดียวใน `cpht_features.py`** เช่น `compute_Q(flow, T_in, T_out, SG) -> Q_kW`
 2. ทุก notebook ถัดไป (`3`, `5→7`) เรียกฟังก์ชันนี้ ไม่ copy-paste สมการอีก
-3. รวม `2_Feature_calculation.ipynb` เข้าเป็น `02_engineering_features_Q.ipynb` ที่ output `Feature_Q.csv` (Q_norm ต่อ HX ต่อวัน) — ใช้ operating mask จาก Step 1 (`VALID_STATES`, `MIN_DT_COLD=3`, `MIN_FLOW_FRAC=0.10`)
+3. รวม `02_feature_engineering.ipynb` เข้าเป็น `02_engineering_features_Q.ipynb` ที่ output `Feature_Q.csv` (Q_norm ต่อ HX ต่อวัน) — ใช้ operating mask จาก Step 1 (`VALID_STATES`, `MIN_DT_COLD=3`, `MIN_FLOW_FRAC=0.10`)
 
 **Validation checklist:**
 - [ ] ค่า Q ที่ได้จากฟังก์ชันใหม่ตรงกับค่าเดิมใน `Feature_Q.csv` เดิม (diff < 0.1%) — เป็น regression test ว่าไม่ได้เปลี่ยนสมการโดยไม่ตั้งใจ

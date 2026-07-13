@@ -215,7 +215,7 @@ def v1_schedule_matrix(hx_ids, r, cost, dev0, n_periods, sched_v1):
 
 
 def compute_schedule(econ, chist, logi, sched_v1=None):
-    """Core computation, reusable in-memory (e.g. by notebook 8 with cost overrides
+    """Core computation, reusable in-memory (e.g. by notebook 16 with cost overrides
     applied to `econ` before calling) as well as by `main()` below which writes the
     static dashboard/data/cleaning_schedule_v2.json. Returns the `out` dict."""
     pc = econ.get('plant_constants', {})

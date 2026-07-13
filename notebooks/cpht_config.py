@@ -1,10 +1,10 @@
 """
 Shared CPHT (Crude Preheat Train) configuration.
 
-Single source of truth for the 2a/2b/2c/2d notebook series — import from here
+Single source of truth for the 03/04/05/08 notebook series — import from here
 instead of redefining HX_CONFIG / group lists per notebook. A stale, independently
 maintained copy of this exact config (wrong E112C tags) already caused a bug once
-in 1_cleaning_data_process.ipynb; that's the failure mode this module exists to
+in 01_data_cleaning.ipynb; that's the failure mode this module exists to
 prevent going forward.
 """
 import os
@@ -19,7 +19,7 @@ CPHT_2_HX = ['E106AB', 'E110ABC', 'E103AB', 'E107AB', 'E111', 'E104',
 # Cold-side (crude) tags only — Q duty is computed cold-side-only by design:
 # hot-side tags are exactly where the shell-switching/reconfiguration
 # complexity lives (E113A/E112C swap, E101EF/E101G swap — see
-# 2a_operating_state_classification.ipynb), so cold-side keeps Q clean without
+# 03_operating_state_classification.ipynb), so cold-side keeps Q clean without
 # needing to resolve which physical hot-side path was active.
 # E101G is excluded — no temperature instrumentation exists for it at all.
 HX_CONFIG = {
@@ -52,7 +52,7 @@ HX_CONFIG = {
 }
 
 # cold_out -> cold_in, in flow order — used for both physical-consistency
-# outlier checks (1_cleaning_data_process.ipynb section 4.2) and, here, to
+# outlier checks (01_data_cleaning.ipynb section 4.2) and, here, to
 # know each HX's own upstream crude temperature.
 CHAIN_PREDECESSOR = {
     '1TI101.pv': '1TI102.pv', '1TI104.pv': '1TI102.pv', '1TI109.pv': '1TI102.pv',

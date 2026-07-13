@@ -4,22 +4,22 @@ CPHT end-to-end pipeline orchestrator.
 Recomputes every dashboard artifact from process data by executing the VALIDATED
 notebooks in dependency order (reusing their logic rather than re-implementing
 it), then re-applying the honest post-processing so the dashboard's model card
-and forecast bands survive notebook 6c's exports.
+and forecast bands survive notebook 13's exports.
 
 Design notes:
   * Runs each notebook headless with `nbconvert --execute` under **UTF-8 mode**
     (`PYTHONUTF8=1`) — several notebooks read CSVs without an explicit encoding
     and crash under Windows cp1252 otherwise; UTF-8 mode fixes them all at once.
-  * A new raw Excel is STAGED at the path notebook 1 expects (after backing up
+  * A new raw Excel is STAGED at the path notebook 01 expects (after backing up
     the original), so no notebook needs editing to point at the upload.
   * Everything is backed up to Data/backup_<ts>/ and dashboard/data/backup_<ts>/
     first; `--rollback-on-fail` restores them if any notebook errors.
-  * `--only 6c` or `--from 3a` run partial chains for debugging.
+  * `--only 13` or `--from 06` run partial chains for debugging.
 
 Usage:
   python pipeline/run_all.py                      # recompute in place
   python pipeline/run_all.py --input new.xlsx     # stage a new raw Excel first
-  python pipeline/run_all.py --only 6c            # just the terminal exporter
+  python pipeline/run_all.py --only 13            # just the terminal exporter
 """
 import argparse, os, shutil, subprocess, sys, time
 from datetime import datetime
@@ -32,25 +32,25 @@ DASH_DATA = REPO / 'dashboard' / 'data'
 RAW_INPUT = DATA / 'Process information data (2024-2026).xlsx'   # notebook 1's FILEPATH
 
 # dependency-ordered chain that produces the dashboard artifacts.
-# (0/2c-analysis-only/pca/correlation excluded; 2c kept because 2d reads its
+# (00/00b EDA-only and 02b correlation/PCA excluded; 05 kept because 08 reads its
 #  Q_CIT_Sensitivity.csv.)
 CHAIN = [
-    '1_cleaning_data_process.ipynb',
-    '2_Feature_calculation.ipynb',
-    '2a_operating_state_classification.ipynb',
-    '2b_Q_duty_and_fouling.ipynb',
-    '2c_Q_CIT_relationship.ipynb',
-    '3a_fouling_rate_forecast.ipynb',
-    '3b_time_to_clean_prediction.ipynb',
-    '2d_cleaning_priority_ranking.ipynb',
-    '5_HX_fouling_CIT_ranking.ipynb',
-    '6a_model_benchmark_xgb_lstm_rf.ipynb',
-    '6b_shap_importance_ranking.ipynb',
-    '6d_clean_baseline_delta_cit.ipynb',
-    '6c_six_month_forecast_and_dashboard_export.ipynb',
+    '01_data_cleaning.ipynb',
+    '02_feature_engineering.ipynb',
+    '03_operating_state_classification.ipynb',
+    '04_fouling_rate_estimation.ipynb',
+    '05_fouling_cit_sensitivity.ipynb',
+    '06_fouling_rate_forecast.ipynb',
+    '07_time_to_clean_prediction.ipynb',
+    '08_cleaning_priority_ranking.ipynb',
+    '09_cit_ranking_baseline.ipynb',
+    '10_cit_model_benchmark.ipynb',
+    '11_cit_shap_importance.ipynb',
+    '12_economic_delta_cit.ipynb',
+    '13_cit_forecast_export.ipynb',
 ]
 
-# post-processors that MUST run after 6c to keep honest artifacts
+# post-processors that MUST run after 13 (CIT forecast export) to keep honest artifacts
 POST = [
     ('honest model_metrics.json', [sys.executable, str(REPO / 'pipeline' / 'gen_honest_metrics.py')]),
     ('forecast prediction bands', [sys.executable, str(NB / 'add_forecast_intervals.py')]),
@@ -61,15 +61,15 @@ POST = [
     ('cleaning audit history',       [sys.executable, str(REPO / 'pipeline' / 'export_cleaning_history.py')]),
     ('economics (CIT->฿)',           [sys.executable, str(REPO / 'pipeline' / 'export_economics.py')]),
     ('cleaning/bypass/TAM list',     [sys.executable, str(NB / 'cleaning_logistics.py')]),
-    ('TAM deep analysis (nb 4)',     [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+    ('TAM deep analysis (nb 14)',    [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                       '--inplace', '--ExecutePreprocessor.timeout=900',
-                                      str(NB / '4_tam_deep_analysis.ipynb')]),
+                                      str(NB / '14_tam_constraint_analysis.ipynb')]),
     ('cleaning schedule -> TAM2028', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler.py')]),
     ('cleaning schedule v2 (network)', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler_network.py')]),
     ('evidence & confidence surface', [sys.executable, str(REPO / 'pipeline' / 'export_evidence.py')]),
-    ('integrated cleaning plan (nb 8)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
-                                         '--inplace', '--ExecutePreprocessor.timeout=600',
-                                         str(NB / '8_cleaning_plan_optimization.ipynb')]),
+    ('integrated cleaning plan (nb 16)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+                                          '--inplace', '--ExecutePreprocessor.timeout=600',
+                                          str(NB / '16_cleaning_plan_optimization.ipynb')]),
 ]
 
 BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crude.csv',
@@ -103,7 +103,7 @@ def backup(ts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input', help='new raw process Excel to stage before running')
-    ap.add_argument('--only', help='run a single notebook basename fragment (e.g. 6c)')
+    ap.add_argument('--only', help='run a single notebook basename fragment (e.g. 13)')
     ap.add_argument('--from', dest='start', help='start the chain at this notebook fragment')
     ap.add_argument('--timeout', type=int, default=900, help='per-notebook timeout (s)')
     ap.add_argument('--rollback-on-fail', action='store_true')
@@ -139,13 +139,13 @@ def main():
             print('  --- stderr tail ---\n' + '\n'.join('    ' + l for l in err.splitlines()[-12:]))
             failed = nb
             break
-        # authoritative robust fouling rate needs Operating_State.csv (from 2a) — run it
-        # right after 2a so 2b/2d/3a/3b/exports downstream read the physical, reliable version.
-        if '2a_operating_state' in nb:
+        # authoritative robust fouling rate needs Operating_State.csv (from 03) — run it
+        # right after 03 so 04/08/06/07/exports downstream read the physical, reliable version.
+        if '03_operating_state' in nb:
             env = {**os.environ, 'PYTHONUTF8': '1'}
             r = subprocess.run([sys.executable, str(REPO / 'pipeline' / 'compute_fouling_rate.py')],
                                capture_output=True, text=True, env=env)
-            print(f'  [{"OK " if r.returncode == 0 else "FAIL"}] {"robust fouling rate (post-2a)":48s}')
+            print(f'  [{"OK " if r.returncode == 0 else "FAIL"}] {"robust fouling rate (post-03)":48s}')
             if r.returncode != 0:
                 print('    ' + (r.stderr or r.stdout or '')[-800:]); failed = 'compute_fouling_rate.py'; break
 
@@ -155,9 +155,9 @@ def main():
         for f in dash_bk.glob('*'): shutil.copy2(f, DASH_DATA / f.name)
         print('rolled back.'); sys.exit(1)
 
-    # post-processing (only if 6c ran, or --only wasn't a non-6c single step)
-    ran_6c = any('6c' in n and ok for n, ok, _ in results)
-    if ran_6c or not args.only:
+    # post-processing (only if 13_cit_forecast_export ran, or --only wasn't a non-13 single step)
+    ran_terminal = any('13_cit_forecast_export' in n and ok for n, ok, _ in results)
+    if ran_terminal or not args.only:
         print('post-processing (honest metrics / bands / topology):')
         for label, cmd in POST:
             env = {**os.environ, 'PYTHONUTF8': '1'}

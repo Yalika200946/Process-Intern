@@ -1,5 +1,5 @@
 """
-Helper: builds 8_cleaning_plan_optimization.ipynb from cell definitions.
+Helper: builds 16_cleaning_plan_optimization.ipynb from cell definitions.
 Run once: python _build_cleaning_plan_notebook.py
 
 This notebook is the SINGLE, transparent, practical cleaning-plan decision — it
@@ -419,6 +419,6 @@ nb = {"cells": cells,
                    "language_info": {"name": "python", "version": "3"}},
       "nbformat": 4, "nbformat_minor": 5}
 
-out_path = Path(__file__).resolve().parent / '8_cleaning_plan_optimization.ipynb'
+out_path = Path(__file__).resolve().parent / '16_cleaning_plan_optimization.ipynb'
 out_path.write_text(json.dumps(nb, ensure_ascii=False, indent=1), encoding='utf-8')
 print('Wrote', out_path.name, '·', len(cells), 'cells')

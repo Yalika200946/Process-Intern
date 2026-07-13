@@ -1,12 +1,12 @@
 """
 Authoritative per-run fouling-rate computation (robust, physically-constrained).
 
-WHY THIS IS A SEPARATE STEP (not in notebook 2): a trustworthy fouling rate needs the
+WHY THIS IS A SEPARATE STEP (not in notebook 02): a trustworthy fouling rate needs the
 per-HX OPERATING STATE (`Operating_State.csv`) to drop periods when the HX isn't actually
 transferring heat (OFF / SUBSTITUTED / BYPASS / mid-clean). That file is produced by
-`2a_operating_state_classification.ipynb`, which runs AFTER notebook 2 — so the rate is
-computed here, right after 2a, and OVERWRITES the rough `Fouling_Rate_By_Run.csv` that
-notebook 2 wrote as an interactive first pass. All downstream consumers (2b, 2d, 3a/3b,
+`03_operating_state_classification.ipynb`, which runs AFTER notebook 02 — so the rate is
+computed here, right after 03, and OVERWRITES the rough `Fouling_Rate_By_Run.csv` that
+notebook 02 wrote as an interactive first pass. All downstream consumers (04, 08, 06/07,
 exports) run after this and read the robust file.
 
 Method — `nb_audit.robust_fouling_rate` per HX per run (see METHODOLOGY §3.5):

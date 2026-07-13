@@ -18,13 +18,13 @@ python backend/server.py 8899
 ## 3. รัน pipeline เต็มจาก command line
 ```bash
 python pipeline/run_all.py                     # recompute จากข้อมูลปัจจุบัน
-python pipeline/run_all.py --input new.xlsx    # ใช้ raw Excel ใหม่ (stage ให้ notebook 1)
-python pipeline/run_all.py --only 6c           # รันเฉพาะตัว export (debug)
-python pipeline/run_all.py --from 3a           # รันตั้งแต่ 3a เป็นต้นไป
+python pipeline/run_all.py --input new.xlsx    # ใช้ raw Excel ใหม่ (stage ให้ notebook 01)
+python pipeline/run_all.py --only 13           # รันเฉพาะตัว export (debug)
+python pipeline/run_all.py --from 06           # รันตั้งแต่ 06 (fouling forecast) เป็นต้นไป
 ```
 - รันโน้ตบุ๊กตามลำดับ dependency ใน **UTF-8 mode** (แก้ปัญหา encoding บน Windows)
 - สำรองข้อมูลไป `Data/backup_<เวลา>/` และ `dashboard/data/backup_<เวลา>/` ก่อนเสมอ (`--rollback-on-fail` เพื่อย้อนกลับถ้าล้มเหลว)
-- หลังรัน 6c จะ **post-process** ให้อัตโนมัติ: `gen_honest_metrics.py` (model_metrics ที่ซื่อสัตย์), `add_forecast_intervals.py` (ช่วงความเชื่อมั่น), `build_dashboard_topology.py` (P&ID + furnace)
+- หลังรัน 13 (CIT forecast export) จะ **post-process** ให้อัตโนมัติ: `gen_honest_metrics.py` (model_metrics ที่ซื่อสัตย์), `add_forecast_intervals.py` (ช่วงความเชื่อมั่น), `build_dashboard_topology.py` (P&ID + furnace)
 
 ## ไฟล์สำคัญ
 | ไฟล์ | หน้าที่ |
@@ -40,7 +40,7 @@ python pipeline/run_all.py --from 3a           # รันตั้งแต่ 
 | `pipeline/export_hx_timeseries.py` | ส่งออก per-HX time-series (U_relative/Q/predicted/deviation/temps + run events + fouling rate) → `hx_timeseries.json` สำหรับแท็บ "HX รายตัว" |
 
 ## แท็บ "HX รายตัว" + "เตา & Optimization" (ใหม่)
-- **HX รายตัว** — เลือก HX → กราฟ U_relative sawtooth (เส้น clean/50/30 + จุดสลับเชลล์/TAM), Q duty, **ค่าทำนาย vs จริง**, temps, ตาราง fouling rate ต่อ run (เหมือน notebook 2 §3.2)
+- **HX รายตัว** — เลือก HX → กราฟ U_relative sawtooth (เส้น clean/50/30 + จุดสลับเชลล์/TAM), Q duty, **ค่าทำนาย vs จริง**, temps, ตาราง fouling rate ต่อ run (เหมือน notebook 02 §3.2)
 - **เตา & Optimization** — รูปเตา F101 สด (4 passes สีตาม skin temp), Problem cascade มีไฟสถานะสด, **constraint ทั้งหมด 13 ตัว จัด 5 กลุ่ม พร้อมค่าปัจจุบัน+setpoint+limit (แก้ได้)**, ตาราง pass conv/skin/coil, และ **What-if optimization** (ปรับค่าเศรษฐกิจสมมติ → ล้างตามลำดับได้ CIT/FG/฿/CO₂ + payback)
 
 ## Prognostics & Risk (PHM) — แท็บ "พยากรณ์ & ความเสี่ยง"

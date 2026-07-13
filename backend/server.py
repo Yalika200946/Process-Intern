@@ -15,7 +15,7 @@ endpoint the operators asked for:
                                 (P&ID latest values + furnace constraints) from
                                 the new data. Returns a JSON status report.
 
-The heavier ranking/forecast recompute (notebooks 1->2->2a->2d->3a->6c) is the
+The heavier ranking/forecast recompute (notebooks 01->02->03->08->06->13) is the
 `pipeline/` package (A6) — this endpoint refreshes the artifacts that a single
 cleaned-process file can regenerate on its own and reports exactly what it did.
 
@@ -125,7 +125,7 @@ class Handler(BaseHTTPRequestHandler):
                 'ok': True,
                 'message': f'อัปเดตแล้วจาก {filename} ({len(df)} แถว, ล่าสุด {df.index.max()})',
                 'refreshed': ['pfd_topology.json (P&ID + furnace)', 'opt_params.json'],
-                'note': 'การจัดอันดับ/พยากรณ์เต็มรูปแบบต้องรัน pipeline (notebooks 1->2->2d->3a->6c)',
+                'note': 'การจัดอันดับ/พยากรณ์เต็มรูปแบบต้องรัน pipeline (notebooks 01->02->08->06->13)',
             })
         except ValueError as e:
             self._send(422, {'error': str(e)})
@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _recompute_plan(self):
         """Apply per-HX cleaning-cost overrides from the dashboard's "คำนวณใหม่" button
-        and actually re-run notebook 8's optimizer (not a client-side approximation) so
+        and actually re-run notebook 16's optimizer (not a client-side approximation) so
         the returned schedule/priority genuinely reflects the new costs. Blocking —
         takes ~10-20s; the dashboard shows a loading state while this runs."""
         try:
@@ -155,10 +155,10 @@ class Handler(BaseHTTPRequestHandler):
             r = subprocess.run(
                 [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute', '--inplace',
                  '--ExecutePreprocessor.timeout=300',
-                 str(NB / '8_cleaning_plan_optimization.ipynb')],
+                 str(NB / '16_cleaning_plan_optimization.ipynb')],
                 capture_output=True, text=True, env=env, timeout=320)
             if r.returncode != 0:
-                return self._send(500, {'error': 'notebook 8 recompute failed', 'detail': (r.stderr or '')[-1500:]})
+                return self._send(500, {'error': 'notebook 16 recompute failed', 'detail': (r.stderr or '')[-1500:]})
 
             plan = json.loads((DASH / 'data' / 'cleaning_plan.json').read_text(encoding='utf-8'))
             self._send(200, {

@@ -3,8 +3,8 @@ Per-HX bypass capability, parsed from the plant's real list:
 `Data/list bypass Cleaning Heat Exchanger.xlsx` (received 2026-07-08).
 
 THIS FILE IS THE SINGLE SOURCE OF TRUTH for "can this HX be cleaned online" —
-2026-07-12 correction: earlier, `2d_cleaning_priority_ranking.ipynb` and
-`3b_time_to_clean_prediction.ipynb` each carried their OWN hand-written
+2026-07-12 correction: earlier, `08_cleaning_priority_ranking.ipynb` and
+`07_time_to_clean_prediction.ipynb` each carried their OWN hand-written
 SWAP_CAPABLE/TAM_ONLY lists that directly CONTRADICTED this real plant file
 (e.g. E103AB/E106AB/E107AB/E109AB were coded "online-clean demonstrated" despite
 the sheet marking them TAM-only; E101AB/E105AB were coded TAM-only despite

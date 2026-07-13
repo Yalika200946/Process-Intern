@@ -1,7 +1,7 @@
 """
 Shared CIT feature-matrix builder for the model-benchmark / SHAP notebooks (6a, 6b).
 
-Mirrors the feature engineering in `5_HX_fouling_CIT_ranking.ipynb` (sections 2, 3, 8)
+Mirrors the feature engineering in `09_cit_ranking_baseline.ipynb` (sections 2, 3, 8)
 exactly, so the XGBoost/RF/LSTM benchmark (6a) and SHAP explainability (6b) explain the
 same feature set that `outputs/hx_Q_cleaning_priority.csv` is built from. Extracted here
 instead of re-copied into two more notebooks -- same single-source-of-truth rationale as
@@ -37,10 +37,10 @@ TEMP_PHYS_HI     = 380   # degC -- physically impossible above this for crude in
 # The one confirmed plant-wide TAM in the dataset (verified: all 15 configured HX's
 # `days_on_duty` reset to 0 on this date simultaneously, per `Cold_Out_Deviation_Signal.csv`
 # -- i.e. the only time the *entire* preheat train is near-clean at once, not just one HX).
-# `2_Feature_calculation.ipynb`'s online-clean/shell-switch events only reset one HX at a
+# `02_feature_engineering.ipynb`'s online-clean/shell-switch events only reset one HX at a
 # time, so they can't be used for a whole-train clean baseline the way this TAM can.
 TAM_DATE            = pd.Timestamp('2024-06-14')
-CLEAN_BASELINE_DAYS  = 30   # matches `3a_fouling_rate_forecast.ipynb`'s BASELINE_WINDOW_DAYS
+CLEAN_BASELINE_DAYS  = 30   # matches `06_fouling_rate_forecast.ipynb`'s BASELINE_WINDOW_DAYS
 
 # With the 2021-2026 dataset there can be MORE than one plant-wide TAM. Notebook 2
 # already detects them (flow collapse + simultaneous U-jump) and stamps them into
@@ -261,7 +261,7 @@ def get_clean_baseline_mask(index, tam_date=None, window_days=CLEAN_BASELINE_DAY
     Boolean mask, True for rows within `window_days` after a plant-wide TAM --
     the stretches where the *entire* preheat train is simultaneously near-clean,
     i.e. the "Clean-State Baseline" calibration window (Ujevic Andrijic & Rimac,
-    Sensors 2025; same technique `3a_fouling_rate_forecast.ipynb` already uses
+    Sensors 2025; same technique `06_fouling_rate_forecast.ipynb` already uses
     per-HX for its Q-deviation signal, applied here to the whole train for CIT).
 
     `tam_date` may be a single Timestamp (back-compat), a list of Timestamps, or
@@ -359,7 +359,7 @@ def build_cit_feature_matrix(data_file=DATA_FILE, hx_config=HX_CONFIG,
     post-clean values and re-predict).
 
     `include_cit_lags=False` / `include_fouling_state=False` (used by
-    `6d_clean_baseline_delta_cit.ipynb`): drops the CIT persistence lags and/or
+    `12_economic_delta_cit.ipynb`): drops the CIT persistence lags and/or
     the fouling-state block entirely. Necessary for the "Expected Clean CIT"
     framing -- that model is trained *only* on clean-baseline rows (see
     `get_clean_baseline_mask`) and must predict CIT from operating conditions
