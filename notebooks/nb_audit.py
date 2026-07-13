@@ -202,7 +202,7 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                 rf1 = rf1[seg]
     span = float(d1.max() - d1.min()) if len(d1) else 0.0
 
-    out = dict(dUrel_per_day=None, dUrel_ci_lo=None, dUrel_ci_hi=None,
+    out = dict(dUrel_per_day=None, intercept=None, dUrel_ci_lo=None, dUrel_ci_hi=None,
                dUrel_per_day_recent=None, dRf_per_day=None, R2=None,
                N_regression_pts=int(len(d1)), span_days=round(span, 1),
                normal_frac=round(normal_frac, 3), n_winsorized=n_wins,
@@ -230,6 +230,7 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
         slope_rf = float(stats.theilslopes(rf1[mrf], d1[mrf])[0])
 
     out.update(dUrel_per_day=round(float(slope), 6),
+               intercept=round(float(intercept), 6),
                dUrel_ci_lo=round(float(lo), 6), dUrel_ci_hi=round(float(hi), 6),
                dUrel_per_day_recent=(round(float(slope_recent), 6) if slope_recent is not None else None),
                dRf_per_day=(round(slope_rf, 8) if slope_rf is not None else None),

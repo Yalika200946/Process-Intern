@@ -86,7 +86,7 @@ def main():
             rows.append(res)
 
     cols = ['HX', 'Run', 'Start_event', 'Run_start', 'Duration_days', 'U_clean_run',
-            'dUrel_per_day', 'dUrel_per_month', 'dUrel_per_day_raw', 'dUrel_ci_lo', 'dUrel_ci_hi',
+            'dUrel_per_day', 'intercept', 'dUrel_per_month', 'dUrel_per_day_raw', 'dUrel_ci_lo', 'dUrel_ci_hi',
             'dUrel_per_day_recent', 'dRf_per_day', 'R2', 'p_value', 'N_regression_pts',
             'span_days', 'normal_frac', 'n_winsorized', 'split_after_day',
             'reliable', 'rate_flag']
