@@ -41,8 +41,9 @@ LAST_TAM = get_tam_dates()[-1]   # latest plant-wide TAM detected in the data
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = HERE.parent / 'dashboard' / 'data' / 'cleaning_logistics.json'
 
-NEXT_TAM = '2028-06-01'      # PLACEHOLDER — รอวิศวกรยืนยัน
-NEXT_TAM_ASSUMED = True
+NEXT_TAM = '2028-06-01'      # ยืนยันแล้วจากผู้ใช้ 2026-07-13 (TAM รอบถัดไปอีก ~4 ปีหลังจากนี้ ~2032-06-01
+                              # ยังเป็นค่าสมมติ -- ดู cleaning_scheduler_network.TAM_DATES)
+NEXT_TAM_ASSUMED = False
 
 METHOD_TH = {
     'SWAP_CAPABLE':     'สลับเชลล์ออนไลน์ (มี spare) — ล้างได้โดยไม่หยุดเดินเครื่อง',
@@ -106,7 +107,8 @@ def main():
         hx=hx_rows,
     )
     OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
-    print(f'Wrote {OUT.name}: {len(hx_rows)} HX (last TAM {out["last_tam"]}, next {out["next_tam"]} [assumed])')
+    tam_tag = '[assumed]' if out['next_tam_assumed'] else '[confirmed]'
+    print(f'Wrote {OUT.name}: {len(hx_rows)} HX (last TAM {out["last_tam"]}, next {out["next_tam"]} {tam_tag})')
 
 
 if __name__ == '__main__':

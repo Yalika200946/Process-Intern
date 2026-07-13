@@ -715,18 +715,56 @@ function SlideChart({tamA}){
 /* ═════════ INTEGRATED CLEANING PLAN (แผนเดียว) — cleaning_plan.json ═════════
    Single practical plan: network-constrained schedule + per-HX economics + criticality,
    priority-ranked (net-saving × risk). Replaces the separate v1/v2 tables. */
+const CLEANING_METHOD_DEFAULTS=()=>({methods:[
+  {label:'ล้าง online (chemical)',base_cost:150000,variable_cost_per_day:5000,downtime_cost_per_day:20000,duration_days:2},
+  {label:'สลับเชลล์ / bundle pull',base_cost:300000,variable_cost_per_day:0,downtime_cost_per_day:0,duration_days:0},
+]});
+// mirrors pipeline/export_economics.resolve_cost_override -- same shape, same "cheapest method wins" rule,
+// so what the operator sees client-side matches what the backend actually computes after "คำนวณใหม่".
+const resolveCostOverride=(override,fallback)=>{
+  if(override==null) return {cost:fallback,meta:null};
+  if(typeof override==='number') return {cost:override,meta:null};
+  if(override.methods&&override.methods.length){
+    const priced=override.methods.map(m=>({label:m.label||'?',
+      cost:(+m.base_cost||0)+((+m.variable_cost_per_day||0)+(+m.downtime_cost_per_day||0))*(+m.duration_days||0)}))
+      .sort((a,b)=>a.cost-b.cost);
+    return {cost:priced[0].cost,meta:{chosen:priced[0].label,all:priced}};
+  }
+  return {cost:fallback,meta:null};
+};
+
 function CleaningPlanPanel({plan,onPlanUpdated}){
   const [costOv,setCostOv]=useState(()=>{try{return JSON.parse(localStorage.getItem('cpht_cleaning_cost_overrides')||'{}');}catch(e){return {};}});
   const [recompute,setRecompute]=useState({busy:false,msg:null,err:false});
+  const [formulaHX,setFormulaHX]=useState(null);   // HX whose formula editor is open, or null
   if(!plan||!plan.per_hx) return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
-    ยังไม่มี <code>cleaning_plan.json</code> — รัน <code>notebooks/8_cleaning_plan_optimization.ipynb</code> (หรือ run_all.py)</div>;
+    ยังไม่มี <code>cleaning_plan.json</code> — รัน <code>notebooks/16_cleaning_plan_optimization.ipynb</code> (หรือ run_all.py)</div>;
   const asOf=parseISO(plan.as_of), tam=parseISO(plan.next_tam), span=tam-asOf;
   const xPos=d=>Math.min(100,Math.max(0,(parseISO(d)-asOf)/span*100));
   const rows=[...plan.per_hx].sort((a,b)=>(a.priority_rank||99)-(b.priority_rank||99));
   const online=rows.filter(p=>p.online), tamOnly=rows.filter(p=>!p.online);
   const t=plan.totals||{}, c=plan.constraints||{};
-  const setCost=(hx,v)=>setCostOv(prev=>{const n={...prev};if(v==null||Number.isNaN(v))delete n[hx];else n[hx]=v;localStorage.setItem('cpht_cleaning_cost_overrides',JSON.stringify(n));return n;});
-  const liveCost=p=>costOv[p.HX]!=null?costOv[p.HX]:p.cleaning_cost;
+  const saveOv=n=>{localStorage.setItem('cpht_cleaning_cost_overrides',JSON.stringify(n));setCostOv(n);};
+  const setCost=(hx,v)=>{const n={...costOv};if(v==null||Number.isNaN(v))delete n[hx];else n[hx]=v;saveOv(n);};
+  const setMethodField=(hx,idx,field,val)=>{
+    const n={...costOv};
+    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS();
+    const methods=cur.methods.map((m,i)=>i===idx?{...m,[field]:val===''?0:+val}:m);
+    n[hx]={methods};
+    saveOv(n);
+  };
+  const setMethodLabel=(hx,idx,label)=>{
+    const n={...costOv};
+    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS();
+    n[hx]={methods:cur.methods.map((m,i)=>i===idx?{...m,label}:m)};
+    saveOv(n);
+  };
+  const toggleFormula=hx=>{
+    if(formulaHX===hx){setFormulaHX(null);return;}
+    if(!(costOv[hx]&&costOv[hx].methods)) setCost(hx,CLEANING_METHOD_DEFAULTS());
+    setFormulaHX(hx);
+  };
+  const liveCost=p=>resolveCostOverride(costOv[p.HX],p.cleaning_cost).cost;
   const livePayback=p=>{const cost=liveCost(p),base=p.cleaning_cost,pb=p.payback_days;return (cost&&base&&pb)?Math.round(pb*cost/base*10)/10:pb;};
   const doRecompute=async()=>{
     setRecompute({busy:true,msg:null,err:false});
@@ -780,15 +818,58 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
         <th className="py-2 text-right">ล้าง (ครั้ง)</th><th className="py-2">ครั้งถัดไป</th>
         <th className="py-2 text-right">Net ฿/ปี</th><th className="py-2 text-right">payback</th><th className="py-2">เหตุผล</th></tr></thead>
       <tbody className="divide-y divide-black/[.03]">
-        {online.map(p=>{const ov=costOv[p.HX]!=null;return(<tr key={p.HX}>
+        {online.map(p=>{
+          const ov=costOv[p.HX]!=null;
+          const isFormula=ov&&typeof costOv[p.HX]==='object';
+          const {meta}=resolveCostOverride(costOv[p.HX],p.cleaning_cost);
+          return (<React.Fragment key={p.HX}>
+          <tr>
           <td className="py-2 text-bcp-dgray">{p.priority_rank}</td>
           <td className="py-2 font-bold text-bcp-black">{p.HX}{p.safety&&<span className="ml-1 text-[9px] text-bcp-red">⚠</span>}{p.online_mode==='ONLINE_PARTIAL'&&<span className="ml-1 text-[9px] font-semibold text-bcp-orange bg-bcp-orange/10 px-1 py-0.5 rounded-full">บางส่วน {Math.round(p.duty_fraction*100)}%</span>}</td>
-          <td className="py-2 text-right"><input type="number" step="10000" value={liveCost(p)} onChange={e=>setCost(p.HX,e.target.value===''?null:+e.target.value)} className="w-20 text-right tabular-nums border border-black/10 rounded px-1 py-0.5 text-[11px] focus:outline-none focus:border-bcp-turq"/>{ov&&<button onClick={()=>setCost(p.HX,null)} className="ml-1 text-[9px] text-bcp-dgray underline">รีเซ็ต</button>}</td>
+          <td className="py-2 text-right">
+            {!isFormula&&<input type="number" step="10000" value={liveCost(p)} onChange={e=>setCost(p.HX,e.target.value===''?null:+e.target.value)} className="w-20 text-right tabular-nums border border-black/10 rounded px-1 py-0.5 text-[11px] focus:outline-none focus:border-bcp-turq"/>}
+            {isFormula&&<span className="tabular-nums text-[11px] font-semibold text-bcp-turq">{liveCost(p).toLocaleString()}</span>}
+            <button onClick={()=>toggleFormula(p.HX)} title="ใส่สมการต้นทุนแยกตามวิธีล้าง (ให้ optimizer เลือกวิธีที่ถูกที่สุด)"
+              className={`ml-1 text-[9px] underline ${formulaHX===p.HX||isFormula?'text-bcp-turq font-semibold':'text-bcp-dgray'}`}>🧮</button>
+            {ov&&<button onClick={()=>{setCost(p.HX,null);if(formulaHX===p.HX)setFormulaHX(null);}} className="ml-1 text-[9px] text-bcp-dgray underline">รีเซ็ต</button>}
+            {meta&&<div className="text-[9px] text-bcp-turq mt-0.5">เลือก: {meta.chosen}</div>}
+          </td>
           <td className="py-2 text-right tabular-nums font-semibold">{p.n_cleans_to_tam}</td>
           <td className="py-2 text-[11px]">{p.next_clean?thaiDate(p.next_clean):'—'}</td>
           <td className="py-2 text-right tabular-nums text-bcp-green font-semibold">{p.net_saving_thb_yr!=null?(p.net_saving_thb_yr/1e6).toFixed(1)+'M':'—'}</td>
           <td className="py-2 text-right tabular-nums text-[11px]">{livePayback(p)!=null?'~'+livePayback(p)+'d':'—'}</td>
-          <td className="py-2 text-[10.5px] text-bcp-dgray max-w-[220px]">{p.reason}</td></tr>);})}
+          <td className="py-2 text-[10.5px] text-bcp-dgray max-w-[220px]">{p.reason}</td>
+          </tr>
+          {formulaHX===p.HX&&<tr className="bg-bcp-turq/[.03]">
+            <td colSpan={8} className="py-2.5 px-2">
+              <div className="text-[10px] font-semibold text-bcp-black mb-1.5">สมการต้นทุนต่อวิธีล้าง — {p.HX} (optimizer เลือกวิธีที่ถูกที่สุดให้อัตโนมัติ)</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {(costOv[p.HX]?.methods||[]).map((m,idx)=>{
+                  const mcost=(+m.base_cost||0)+((+m.variable_cost_per_day||0)+(+m.downtime_cost_per_day||0))*(+m.duration_days||0);
+                  const isWinner=meta&&meta.chosen===m.label;
+                  return (<div key={idx} className={`rounded-lg border p-2 ${isWinner?'border-bcp-turq bg-white':'border-black/10 bg-white/60'}`}>
+                    <input value={m.label} onChange={e=>setMethodLabel(p.HX,idx,e.target.value)}
+                      className="w-full text-[10.5px] font-semibold border-b border-black/10 mb-1.5 focus:outline-none focus:border-bcp-turq bg-transparent"/>
+                    <div className="grid grid-cols-2 gap-1.5 text-[9.5px] text-bcp-dgray">
+                      <label className="flex flex-col gap-0.5">base_cost (฿)
+                        <input type="number" step="10000" value={m.base_cost} onChange={e=>setMethodField(p.HX,idx,'base_cost',e.target.value)} className="border border-black/10 rounded px-1 py-0.5 text-right tabular-nums text-bcp-black"/></label>
+                      <label className="flex flex-col gap-0.5">ระยะเวลา (วัน)
+                        <input type="number" step="1" value={m.duration_days} onChange={e=>setMethodField(p.HX,idx,'duration_days',e.target.value)} className="border border-black/10 rounded px-1 py-0.5 text-right tabular-nums text-bcp-black"/></label>
+                      <label className="flex flex-col gap-0.5">variable_cost/วัน (฿)
+                        <input type="number" step="1000" value={m.variable_cost_per_day} onChange={e=>setMethodField(p.HX,idx,'variable_cost_per_day',e.target.value)} className="border border-black/10 rounded px-1 py-0.5 text-right tabular-nums text-bcp-black"/></label>
+                      <label className="flex flex-col gap-0.5">downtime_cost/วัน (฿)
+                        <input type="number" step="1000" value={m.downtime_cost_per_day} onChange={e=>setMethodField(p.HX,idx,'downtime_cost_per_day',e.target.value)} className="border border-black/10 rounded px-1 py-0.5 text-right tabular-nums text-bcp-black"/></label>
+                    </div>
+                    <div className={`text-[10px] mt-1.5 font-semibold ${isWinner?'text-bcp-turq':'text-bcp-dgray'}`}>
+                      รวม = base + (variable+downtime)×ระยะเวลา = <b>{mcost.toLocaleString()} ฿</b>{isWinner&&' ✓ ถูกที่สุด'}
+                    </div>
+                  </div>);
+                })}
+              </div>
+              <div className="text-[9px] text-bcp-dgray mt-1.5">กด "คำนวณใหม่" ด้านบนเพื่อรัน optimizer จริงด้วยค่าล้างที่ถูกที่สุดต่อวิธีของ HX นี้ (และทุก HX ที่แก้ไว้)</div>
+            </td>
+          </tr>}
+          </React.Fragment>);})}
       </tbody></table></div>
     <div className="text-[11px] font-bold text-bcp-black mb-1">ล้างได้เฉพาะ TAM ({tamOnly.length}) — ไม่มี bypass ในลิสต์โรงงาน</div>
     <div className="overflow-x-auto"><table className="w-full text-[12px]"><thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
@@ -800,9 +881,11 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
           <td className="py-2 text-[10.5px] text-bcp-dgray">{p.reason}</td></tr>))}
       </tbody></table></div>
     <Basis title="ที่มาแผน (ตรวจได้ใน notebook 16)">
-      <div>• แผนมาจาก <code>notebooks/8_cleaning_plan_optimization.ipynb</code> → <code>cleaning_plan.json</code>: constrained network optimizer (Dekebo, Oh &amp; Lee 2023) + จัดลำดับ net-saving × ความเสี่ยง (W_safety={plan.weights?.W_SAFETY}, W_pos={plan.weights?.W_POSITION}, W_worse={plan.weights?.W_WORSENING}).</div>
+      <div>• แผนมาจาก <code>notebooks/16_cleaning_plan_optimization.ipynb</code> → <code>cleaning_plan.json</code>: constrained network optimizer (Dekebo, Oh &amp; Lee 2023) + จัดลำดับ net-saving × ความเสี่ยง (W_safety={plan.weights?.W_SAFETY}, W_pos={plan.weights?.W_POSITION}, W_worse={plan.weights?.W_WORSENING}).</div>
       <div>• T* อ้างอิงต่อ HX = √(2C/(k·r)) · k={Number(plan.k_baht_per_C_day).toLocaleString()} ฿/วัน/°C ที่ feed {fmt(plan.feed_kbd,1)} KBD.</div>
       <div>• แก้ค่าล้างต่อ HX แล้วกด "คำนวณใหม่" → backend รัน notebook 16 จริงด้วยค่าที่แก้ (ไม่ใช่แค่ประมาณในเบราว์เซอร์) ได้ตาราง/ลำดับ/worth_it ที่ถูกต้องตามค่าใหม่ 100%. ค่าล้าง/ทีมล้าง/TAM เป็นค่าสมมติรอวิศวกร.</div>
+      <div>• กด 🧮 ข้างค่าล้างเพื่อใส่ <b>สมการต้นทุนแยกตามวิธีล้าง</b> (base_cost + (variable_cost+downtime_cost)×ระยะเวลา) แทนตัวเลขเดียว —
+        optimizer จะเลือกวิธีที่ถูกที่สุดให้อัตโนมัติต่อ HX (ดู <code>export_economics.resolve_cost_override</code>).</div>
     </Basis>
    </div>);
 }

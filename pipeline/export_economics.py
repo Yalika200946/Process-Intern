@@ -70,6 +70,44 @@ CLEANING_COST_BY_HX = {
 DEFAULT_CLEANING_COST = 300000
 COSTS_ASSUMED = True
 
+
+def resolve_cost_override(override, default_cost):
+    """Resolve one HX's entry in cost_overrides.json (written by the dashboard's
+    "คำนวณใหม่" form) to a single THB cost, choosing the cheapest cleaning METHOD
+    when a formula is given rather than a single number.
+
+    Two supported shapes, kept backward compatible with the original scalar form:
+      - number (legacy): a flat THB override, used as-is.
+      - {"methods": [{"label": str, "base_cost": THB,
+                       "variable_cost_per_day": THB/day, "downtime_cost_per_day": THB/day,
+                       "duration_days": days}, ...]}:
+        each method's total cost = base_cost + (variable_cost_per_day +
+        downtime_cost_per_day) * duration_days; the optimizer effectively picks
+        the cleaning method by using min(total) across methods -- letting a
+        cheaper-but-slower or pricier-but-faster method win on total cost instead
+        of the dashboard operator having to pre-decide which method to cost out.
+
+    Returns (cost_thb, meta) where meta is None for a plain-number override/no
+    override, or a dict describing which method was chosen and why for formula
+    overrides (surfaced in cleaning_plan.json so the choice isn't silent)."""
+    if override is None:
+        return default_cost, None
+    if isinstance(override, (int, float)):
+        return float(override), None
+    if isinstance(override, dict) and override.get('methods'):
+        priced = []
+        for m in override['methods']:
+            total = (float(m.get('base_cost', 0))
+                     + (float(m.get('variable_cost_per_day', 0)) + float(m.get('downtime_cost_per_day', 0)))
+                     * float(m.get('duration_days', 0)))
+            priced.append((total, m))
+        priced.sort(key=lambda t: t[0])
+        best_cost, best_method = priced[0]
+        return best_cost, dict(
+            chosen_method=best_method.get('label', '?'), chosen_cost_thb=round(best_cost),
+            all_methods=[dict(label=m.get('label', '?'), cost_thb=round(c)) for c, m in priced])
+    return default_cost, None
+
 BASIS = ('สูตรโรงงาน: Saving[฿/ปี] = ΔCIT × 0.74 MMBTU/D/KBD/°C × Feed[KBD] × NG[฿/MMBTU] × 360 × 0.5(decay) ; '
          'Feed[KBD] = charge[m³/h]×24/158.987 ; ΔCIT ใช้ค่าวัดจริง (median จาก audit history) ก่อน, '
          'fallback ค่าโมเดล คูณด้วย calibration factor จาก event-study (measured/model ratio จริงทุก clean event '

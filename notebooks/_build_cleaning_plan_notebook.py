@@ -56,6 +56,7 @@ DASH = REPO / 'dashboard' / 'data'
 sys.path.append(str(REPO / 'notebooks'))
 sys.path.append(str(REPO / 'pipeline'))
 import nb_audit as A
+import export_economics as EC
 
 def load(name, default=None):
     p = DASH / name
@@ -123,11 +124,21 @@ logi_by = {r['HX']: r for r in logi.get('hx', [])}
 econ_by_raw = {r['HX']: r for r in econ.get('per_hx', [])}
 # apply per-HX cost overrides (from the dashboard's "คำนวณใหม่" button) here, in-memory,
 # so every downstream calc (T*, priority, the actual optimizer schedule in §5) uses them.
+# an override can be a flat THB number (legacy) OR a {"methods":[...]} formula -- see
+# export_economics.resolve_cost_override -- in which case the CHEAPEST method's total
+# cost (base + (variable+downtime)/day x duration) is used, i.e. the optimizer effectively
+# picks the cleaning method by cost rather than the operator pre-deciding one.
 econ_by = {}
+cost_override_meta = {}
 for hx, e in econ_by_raw.items():
     e = dict(e)
     if hx in COST_OVERRIDES:
-        e['cleaning_cost'] = COST_OVERRIDES[hx]
+        cost, meta = EC.resolve_cost_override(COST_OVERRIDES[hx], e.get('cleaning_cost'))
+        e['cleaning_cost'] = cost
+        if meta:
+            cost_override_meta[hx] = meta
+            print(f"  {hx}: formula override -> chose '{meta['chosen_method']}' "
+                  f"({meta['chosen_cost_thb']:,} THB) over {[m['label'] for m in meta['all_methods'][1:]]}")
     econ_by[hx] = e
 
 rows = []
@@ -369,6 +380,7 @@ for _, r in dec.iterrows():
         next_clean=r['next_clean'], scheduled_dates=list(r['scheduled_dates'] or []),
         cleaning_cost=(None if pd.isna(r['cleaning_cost']) else int(r['cleaning_cost'])),
         cleaning_cost_overridden=bool(r['cleaning_cost_overridden']),
+        cleaning_cost_method=cost_override_meta.get(r['HX']),
         fuel_value_per_clean_thb=(None if pd.isna(r['fuel_value_per_clean_thb']) else int(r['fuel_value_per_clean_thb'])),
         worth_it=(None if pd.isna(r['worth_it']) else bool(r['worth_it'])),
         net_saving_thb_yr=(None if pd.isna(r['net_saving_thb_yr']) else int(r['net_saving_thb_yr'])),

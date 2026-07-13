@@ -146,7 +146,10 @@ class Handler(BaseHTTPRequestHandler):
                 body = {}
             overrides = body.get('overrides') or {}
             if not isinstance(overrides, dict):
-                return self._send(422, {'error': 'overrides ต้องเป็น object {HX: cost}'})
+                # value per HX is either a flat THB number or a {"methods":[...]} formula --
+                # see export_economics.resolve_cost_override, this endpoint is a pure
+                # passthrough (writes whatever shape it's given) so no schema change needed here.
+                return self._send(422, {'error': 'overrides ต้องเป็น object {HX: cost | {"methods":[...]}}'})
 
             overrides_path = DASH / 'data' / 'cost_overrides.json'
             overrides_path.write_text(json.dumps(overrides, ensure_ascii=False, indent=1), encoding='utf-8')
