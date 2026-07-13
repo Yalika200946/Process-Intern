@@ -16,6 +16,16 @@ Method — `nb_audit.robust_fouling_rate` per HX per run (see METHODOLOGY §3.5)
 
 Physical invariant enforced & asserted: no `reliable` run has slope ≥ 0.
 
+BEFORE the rate regression, this also fixes the same in-service blind spot in the
+baseline itself: notebook 02's `U_clean_run` (P90 of the first CLEAN_WINDOW_DAYS of a
+run) only applies the physical operating mask (ΔT/flow), because `Operating_State.csv`
+doesn't exist yet at that point in the pipeline. If a shell spends part of its "clean
+window" as SUBSTITUTE_ACTIVE/PARALLEL (sharing duty with another shell, not on its own),
+that baseline — and every `Rf_run`/`U_relative` value derived from it for the whole run
+— is biased. `_recompute_clean_baseline` redoes P90 using only in-service points and
+overwrites `{hx}_U_clean_run`/`_U_relative`/`_Rf_run` in Feature_calculated.csv in place,
+so both the exported features and the rate regression below use the corrected baseline.
+
 Run: python pipeline/compute_fouling_rate.py
 """
 import os, sys
@@ -27,19 +37,68 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = DATA / 'Fouling_Rate_By_Run.csv'
+FEAT = DATA / 'Feature_calculated.csv'
 sys.path.append(str(NB))
 import nb_audit as A
 from cpht_config import HX_CONFIG
 
+CLEAN_WINDOW_DAYS = 30   # must match notebook 02 §3.4 (first N days of a run = clean baseline)
+U_CLEAN_PCT       = 90   # P90, not max — robust to restart-transient spikes
+
+
+def _recompute_clean_baseline(feat, ost, hx_config):
+    """Redo U_clean_run/U_relative/Rf_run per run using the in-service state mask.
+
+    Same P90-of-clean-window logic as notebook 02 §3.4, but restricted to timestamps
+    where the shell is actually NORMAL/SUBSTITUTE_ACTIVE/PARALLEL (not OFF/BYPASS and
+    not mid-clean) — Operating_State.csv wasn't available when notebook 02 first
+    computed these columns. Falls back to in-service points across the whole run when
+    the clean window itself has too few in-service points (<5), matching notebook 02's
+    own fallback tier. Mutates `feat` in place; returns the list of HX actually redone.
+    """
+    redone = []
+    for hx in hx_config:
+        u_col, rid_col, dod_col = f'{hx}_U', f'{hx}_run_id', f'{hx}_days_on_duty'
+        ucr_col, urel_col, rf_col = f'{hx}_U_clean_run', f'{hx}_U_relative', f'{hx}_Rf_run'
+        if u_col not in feat or rid_col not in feat or dod_col not in feat:
+            continue
+
+        u, rid, dod = feat[u_col], feat[rid_col], feat[dod_col]
+        in_service = (ost[hx].isin(A.INSERVICE_STATES) if hx in ost.columns
+                      else pd.Series(True, index=feat.index))
+
+        u_clean_run = pd.Series(np.nan, index=feat.index)
+        for run in sorted(rid[rid > 0].unique()):
+            m = (rid == run).values
+            clean_win = m & (dod <= CLEAN_WINDOW_DAYS).values & in_service.values
+            u_clean_pts = u[clean_win].dropna()
+            if len(u_clean_pts) >= 5:
+                val = float(np.percentile(u_clean_pts, U_CLEAN_PCT))
+            else:
+                u_run_pts = u[m & in_service.values].dropna()
+                val = float(np.percentile(u_run_pts, U_CLEAN_PCT)) if len(u_run_pts) >= 5 else np.nan
+            u_clean_run[m] = val
+
+        feat[ucr_col] = u_clean_run
+        feat[urel_col] = (u / u_clean_run).clip(lower=0.0, upper=2.0)
+        feat[rf_col] = (1.0 / u) - (1.0 / u_clean_run)
+        redone.append(hx)
+    return redone
+
 
 def main():
-    feat = pd.read_csv(DATA / 'Feature_calculated.csv', parse_dates=['Timestamp']).set_index('Timestamp')
+    feat = pd.read_csv(FEAT, parse_dates=['Timestamp']).set_index('Timestamp')
     ost_path = DATA / 'Operating_State.csv'
     ost = (pd.read_csv(ost_path, parse_dates=['Timestamp']).set_index('Timestamp')
            if ost_path.exists() else None)
     if ost is None:
         print('WARNING: Operating_State.csv missing — falling back to no state mask '
-              '(rates will be less reliable; run 2a first).')
+              '(rates and baseline will be less reliable; run 2a first).')
+    else:
+        redone = _recompute_clean_baseline(feat, ost, HX_CONFIG)
+        feat.to_csv(FEAT)
+        print(f'Recomputed in-service-masked U_clean_run/U_relative/Rf_run for '
+              f'{len(redone)}/{len(HX_CONFIG)} HX -> overwrote {FEAT.name}')
 
     rows = []
     for hx in HX_CONFIG:
