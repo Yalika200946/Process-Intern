@@ -1117,7 +1117,8 @@ function EndOfRunChart({hx,eor,series}){
       </ComposedChart></ResponsiveContainer></div>
     <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px]">
       {past?<span className="text-bcp-red font-semibold">⚠ เลยเกณฑ์ล้างแล้ว — ควรวางแผนล้าง</span>
-        :days!=null?<span className="text-bcp-black">เหลือถึงเกณฑ์: <b className="text-bcp-orange">~{Math.round(days)} วัน</b>{pdate&&<span className="text-bcp-dgray"> ({thaiDate(pdate)})</span>}</span>
+        :days!=null?<span className="text-bcp-black">เหลือถึงเกณฑ์: <b className="text-bcp-orange">~{Math.round(days)} วัน</b>{pdate&&<span className="text-bcp-dgray"> ({thaiDate(pdate)})</span>}
+          {isU&&blk.curve_projection&&<span className="text-bcp-dgray text-[10px]"> · ตามเส้นโค้ง asymptotic</span>}</span>
         :<span className="text-bcp-green">แนวโน้มยังไม่ถึงเกณฑ์ (ไม่แย่ลง)</span>}
       {c.q_loss_now_kW!=null&&<span className="text-bcp-dgray">Duty หาย <b className="text-bcp-black">{fmt(c.q_loss_now_kW,0)} kW</b>{c.q_loss_pct!=null&&` (${fmt(c.q_loss_pct,0)}%)`}</span>}
       {c.cit_loss_now_C!=null&&<span className="text-bcp-dgray">คืน CIT ได้ <b className="text-bcp-green">+{fmt(c.cit_loss_now_C,1)}°C</b></span>}
@@ -1125,7 +1126,7 @@ function EndOfRunChart({hx,eor,series}){
     <Basis title="ที่มา End-of-Run + เกณฑ์ล้าง">
       <div>• <b>Fouling view (trigger):</b> U_relative = U/U_clean (1.0 = สะอาด, ไม่ขึ้นกับ throughput). เกณฑ์ล้าง = 1 − {fmt((eor.trigger_drop_frac||0)*100,1)}% = <b>{fmt(eor.trigger_urel,3)}</b> (notebook 09 / METHODOLOGY §4).</div>
       <div>• <b>Duty view (consequence):</b> Q duty จริง [kW] เทียบ Q สภาพสะอาด (โมเดล); เกณฑ์ = clean_Q − threshold_shortfall (จาก 3b).</div>
-      <div>• เวลาที่เหลือ = extrapolate เชิงเส้นของรอบปัจจุบัน (วิธีเดียวกับ Time_To_Clean_Prediction). Q↔CIT ใช้ sensitivity จาก 2c → คืน CIT {c.cit_sensitivity_degC_per_Qnorm!=null?`(${fmt(c.cit_sensitivity_degC_per_Qnorm,2)} °C ต่อ Q_norm)`:''}.</div>
+      <div>• เวลาที่เหลือ (Fouling view) = ถ้ารอบปัจจุบัน fit ได้เป็นเส้นโค้ง asymptotic (Kern-Seaton) และมีข้อมูลพอเชื่อถือ tau ได้ → extrapolate ตามเส้นโค้งจริงถึงเกณฑ์ (ไม่ใช่เส้นตรงจาก tail slope ซึ่งจะประเมิน "วันที่ต้องล้าง" เร็วเกินไปสำหรับรอบที่กำลังชะลอตัว); ถ้าไม่เข้าเงื่อนไข fallback เป็น extrapolate เชิงเส้น. เวลาที่เหลือ (Duty view) = extrapolate เชิงเส้นเสมอ (วิธีเดียวกับ Time_To_Clean_Prediction). Q↔CIT ใช้ sensitivity จาก 2c → คืน CIT {c.cit_sensitivity_degC_per_Qnorm!=null?`(${fmt(c.cit_sensitivity_degC_per_Qnorm,2)} °C ต่อ Q_norm)`:''}.</div>
     </Basis>
    </div>);
 }
@@ -1285,7 +1286,7 @@ function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
     {/* fouling rate per run */}
     {d.runs&&d.runs.length>0&&<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
       <h3 className="text-[14px] font-bold text-bcp-black mb-1">อัตราการเกิดตะกรันต่อรอบเดินเครื่อง (fouling rate per run)</h3>
-      <p className="text-[11px] text-bcp-dgray mb-3">dU_relative/เดือน (ยิ่งลบ = สกปรกเร็ว) · R² = ความชัดของแนวโน้ม · ธง = ผ่าน quality gate (R²≥0.3, ≥10 จุด)</p>
+      <p className="text-[11px] text-bcp-dgray mb-3">dU_relative/เดือน = อัตราปัจจุบัน (tail slope ของเส้นโค้งที่ fit ได้ดีที่สุด — เส้นตรงหรือ asymptotic) · คอลัมน์ R² คือของเส้นตรง Theil-Sen ไว้เทียบเท่านั้น ส่วนธง "เชื่อได้" ตัดสินจาก R² ของโมเดลที่เลือกจริง ≥0.3 และไม่ oscillate (ดูเกณฑ์เต็มที่แท็บ "หลักฐาน & ความเชื่อมั่น") — บางรอบจึงอาจโชว์ R² เส้นตรงต่ำแต่ยัง "เชื่อได้" ถ้าโค้ง asymptotic fit เข้ากับข้อมูลดีกว่า</p>
       <table className="w-full text-[12px]">
         <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
           <th className="py-2">Run</th><th className="py-2 text-right">ระยะ (วัน)</th><th className="py-2 text-right">dUrel/เดือน</th><th className="py-2 text-right">R²</th><th className="py-2 text-center">คุณภาพ</th></tr></thead>

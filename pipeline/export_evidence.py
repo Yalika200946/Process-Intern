@@ -102,7 +102,10 @@ def main():
             note='ข้ามไป HX ใหม่ทำนายไม่ได้ (Q scale ต่างกันมาก) — สัญญาณที่ deploy ใช้ได้เพราะ refit บน baseline ของ HX นั้นเอง ไม่ใช่ zero-shot'),
         fouling_quality_gate=dict(
             n_runs=n_runs, n_reliable=n_reliable, n_flagged=n_flagged, flag_breakdown=flag_counts,
-            method='robust: Theil-Sen + in-service mask + winsorize + physics gate (slope<0)',
+            method=('robust: in-service mask + winsorize + AIC race (linear vs asymptotic-decay '
+                    'vs power) on U_relative -> current/tail-slope rate + physics gate (slope<0, '
+                    'CI) + R2 floor (>=0.30) + oscillation gate (sign-change-rate, catches '
+                    'shell-switch sawtooth noise)'),
             note=(f'{n_reliable}/{n_runs} รอบผ่านเกณฑ์ฟิสิกส์ (reliable, slope<0) — ที่เหลือติดธง '
                   + ' · '.join(f'{k}={v}' for k, v in flag_counts.items()) if flag_counts
                   else (f'{n_reliable}/{n_runs} รอบเชื่อถือได้' if n_runs else None))),
