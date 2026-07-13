@@ -9,9 +9,10 @@
     },
     {
       "name": "backend",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["backend/server.py", "8899"],
-      "port": 8899
+      "runtimeExecutable": "C:\\Users\\saard\\anaconda3\\python.exe",
+      "runtimeArgs": ["backend/server.py"],
+      "port": 8899,
+      "autoPort": true
     }
   ]
 }

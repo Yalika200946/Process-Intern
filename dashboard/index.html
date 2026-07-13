@@ -799,10 +799,10 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
           <td className="py-2 text-[11px] text-bcp-dgray">{thaiDate(plan.next_tam)}</td>
           <td className="py-2 text-[10.5px] text-bcp-dgray">{p.reason}</td></tr>))}
       </tbody></table></div>
-    <Basis title="ที่มาแผน (ตรวจได้ใน notebook 8)">
+    <Basis title="ที่มาแผน (ตรวจได้ใน notebook 16)">
       <div>• แผนมาจาก <code>notebooks/8_cleaning_plan_optimization.ipynb</code> → <code>cleaning_plan.json</code>: constrained network optimizer (Dekebo, Oh &amp; Lee 2023) + จัดลำดับ net-saving × ความเสี่ยง (W_safety={plan.weights?.W_SAFETY}, W_pos={plan.weights?.W_POSITION}, W_worse={plan.weights?.W_WORSENING}).</div>
       <div>• T* อ้างอิงต่อ HX = √(2C/(k·r)) · k={Number(plan.k_baht_per_C_day).toLocaleString()} ฿/วัน/°C ที่ feed {fmt(plan.feed_kbd,1)} KBD.</div>
-      <div>• แก้ค่าล้างต่อ HX แล้วกด "คำนวณใหม่" → backend รัน notebook 8 จริงด้วยค่าที่แก้ (ไม่ใช่แค่ประมาณในเบราว์เซอร์) ได้ตาราง/ลำดับ/worth_it ที่ถูกต้องตามค่าใหม่ 100%. ค่าล้าง/ทีมล้าง/TAM เป็นค่าสมมติรอวิศวกร.</div>
+      <div>• แก้ค่าล้างต่อ HX แล้วกด "คำนวณใหม่" → backend รัน notebook 16 จริงด้วยค่าที่แก้ (ไม่ใช่แค่ประมาณในเบราว์เซอร์) ได้ตาราง/ลำดับ/worth_it ที่ถูกต้องตามค่าใหม่ 100%. ค่าล้าง/ทีมล้าง/TAM เป็นค่าสมมติรอวิศวกร.</div>
     </Basis>
    </div>);
 }
@@ -1040,7 +1040,7 @@ function EndOfRunChart({hx,eor,series}){
       {c.cit_loss_now_C!=null&&<span className="text-bcp-dgray">คืน CIT ได้ <b className="text-bcp-green">+{fmt(c.cit_loss_now_C,1)}°C</b></span>}
     </div>
     <Basis title="ที่มา End-of-Run + เกณฑ์ล้าง">
-      <div>• <b>Fouling view (trigger):</b> U_relative = U/U_clean (1.0 = สะอาด, ไม่ขึ้นกับ throughput). เกณฑ์ล้าง = 1 − {fmt((eor.trigger_drop_frac||0)*100,1)}% = <b>{fmt(eor.trigger_urel,3)}</b> (notebook 5 / METHODOLOGY §4).</div>
+      <div>• <b>Fouling view (trigger):</b> U_relative = U/U_clean (1.0 = สะอาด, ไม่ขึ้นกับ throughput). เกณฑ์ล้าง = 1 − {fmt((eor.trigger_drop_frac||0)*100,1)}% = <b>{fmt(eor.trigger_urel,3)}</b> (notebook 09 / METHODOLOGY §4).</div>
       <div>• <b>Duty view (consequence):</b> Q duty จริง [kW] เทียบ Q สภาพสะอาด (โมเดล); เกณฑ์ = clean_Q − threshold_shortfall (จาก 3b).</div>
       <div>• เวลาที่เหลือ = extrapolate เชิงเส้นของรอบปัจจุบัน (วิธีเดียวกับ Time_To_Clean_Prediction). Q↔CIT ใช้ sensitivity จาก 2c → คืน CIT {c.cit_sensitivity_degC_per_Qnorm!=null?`(${fmt(c.cit_sensitivity_degC_per_Qnorm,2)} °C ต่อ Q_norm)`:''}.</div>
     </Basis>
@@ -1124,7 +1124,7 @@ function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
     {/* HX selector */}
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-4">
       <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-        <h2 className="text-[15px] font-bold text-bcp-black">รายละเอียดต่อ HX · เลือกเครื่องเพื่อดูกราฟ (เหมือน notebook 2)</h2>
+        <h2 className="text-[15px] font-bold text-bcp-black">รายละเอียดต่อ HX · เลือกเครื่องเพื่อดูกราฟ (เหมือน notebook 02)</h2>
         <span className="text-[11px] text-bcp-dgray">คลิกเลือก HX ด้านล่าง</span>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -1649,7 +1649,7 @@ function App(){
       </>}
       {tab==='evidence'&&<EvidencePanel ev={ev}/>}
       <footer className="pt-2 pb-8 text-center text-[11px] text-bcp-dgray">
-        Bangchak CPHT Predictive Maintenance · ข้อมูลจาก <code className="text-bcp-black/60">dashboard/data/*.json</code> (notebooks 2d/3a/6a-6c) · P&ID ตาม cpht_config topology
+        Bangchak CPHT Predictive Maintenance · ข้อมูลจาก <code className="text-bcp-black/60">dashboard/data/*.json</code> (notebooks 08/06/10-13) · P&ID ตาม cpht_config topology
       </footer>
     </main>
    </div>);

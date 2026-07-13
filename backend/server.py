@@ -35,7 +35,7 @@ UPLOADS   = DATA / 'uploads'
 UPLOADS.mkdir(parents=True, exist_ok=True)
 TOPO_OUT  = DASH / 'data' / 'pfd_topology.json'
 PARAMS_OUT= DASH / 'data' / 'opt_params.json'
-PORT      = int(sys.argv[1]) if len(sys.argv) > 1 else 8899
+PORT      = int(os.environ.get('PORT') or (sys.argv[1] if len(sys.argv) > 1 else 8899))
 
 sys.path.append(str(NB))
 from cpht_config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
