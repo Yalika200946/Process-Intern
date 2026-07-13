@@ -255,7 +255,14 @@ chist = load('cleaning_history.json', {'hx': {}})
 sched_v1 = load('cleaning_schedule.json')
 # rebuild an economics dict carrying the (possibly overridden) per-HX costs from §1-2
 econ_live = dict(econ); econ_live['per_hx'] = list(econ_by.values())
-schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1)
+# scope THE plan's per-HX numbers (n_cleans_to_tam, scheduled_dates) to the FIRST TAM cycle --
+# the feasibility asserts and Gantt below were built around a single-TAM horizon, so keep that
+# meaning unchanged. compute_schedule() now defaults to a multi-cycle horizon (2028 + 2032,
+# see cleaning_scheduler_network.TAM_DATES) when tam_dates isn't given -- fetched separately
+# below (schedV2_full) purely for cross-cycle visibility, without touching the per-HX numbers
+# everything else in this notebook depends on.
+schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1, tam_dates=[NS.NEXT_TAM])
+schedV2_full = NS.compute_schedule(econ_live, chist, logi, sched_v1)   # full multi-TAM horizon
 print('optimizer window (months):', schedV2.get('optimal_window_months'),
       '· constraints: crew<=%d/mo, <=%d/yr/HX' % (schedV2.get('max_online_cleans_per_period', 2),
                                                    schedV2.get('max_cleans_per_year_per_hx', 4)))
@@ -375,7 +382,10 @@ for _, r in dec.iterrows():
     ))
 
 out = dict(
-    as_of=str(as_of.date()), next_tam=str(tam.date()), next_tam_assumed=True,
+    as_of=str(as_of.date()), next_tam=str(tam.date()), next_tam_assumed=False,
+    tam_dates=schedV2_full.get('tam_dates'), tam_dates_confirmed=schedV2_full.get('tam_dates_confirmed'),
+    per_cycle_summary=schedV2_full.get('per_cycle_summary'),
+    v2_full_horizon=schedV2_full.get('v2_full_horizon'),
     cost_overrides_applied=COST_OVERRIDES,
     method=('แผนเดียว: constrained network moving-window optimizer (Dekebo, Oh & Lee 2023) '
             'เคารพ bypass/ทีมล้าง/เพดาน 4-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '
