@@ -139,8 +139,14 @@ def build_bypass_config():
 
 try:
     BYPASS_CONFIG = build_bypass_config()
-except Exception:            # file missing on another machine — degrade gracefully
+except FileNotFoundError:    # xlsx missing on another machine (e.g. anonymized demo) — degrade gracefully
     BYPASS_CONFIG = {}
+# NOTE: anything other than FileNotFoundError (bad sheet layout, locked/corrupt xlsx, a
+# parsing regression) is intentionally NOT swallowed here -- it used to be caught by a bare
+# `except Exception`, which silently produced an empty BYPASS_CONFIG on a transient failure
+# and made every HX look like "no bypass / TAM-only" everywhere downstream (cleaning_logistics.json,
+# the dashboard's bypass table, the online-clean optimizer) with no error surfaced anywhere.
+# Let it raise loudly instead so a real failure is never mistaken for "not a real bypass".
 
 
 if __name__ == '__main__':
