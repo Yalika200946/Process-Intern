@@ -205,6 +205,27 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
 
     d1, u1 = d[keep], u[keep]
     rf1 = np.asarray(rf_run, float)[keep] if rf_run is not None else None
+
+    # isolated single-day spike guard: a raw U_relative value far above BOTH its temporal
+    # neighbors (not a sustained step -- that's the recovery-jump guard below) is a sensor
+    # glitch, not a physical value -- a fouling film doesn't dissolve and reform within a
+    # day. Reject it outright rather than winsorize-clip it to winsor_ceil: clipping still
+    # injects a point AT winsor_ceil into the regression, which for a spike deep into an
+    # already-fouled run drags the fit far off the surrounding data (confirmed: E113A Run6
+    # 2021-10-24, raw U_relative=1.93 mid-run while the local trend was ~0.25, inflated that
+    # run's fit RMSE ~4x even though R2_model looked fine overall).
+    if len(u1) >= 8:
+        order0 = np.argsort(d1)
+        roll_med = pd.Series(u1[order0]).rolling(7, min_periods=3, center=True).median().to_numpy()
+        dev = u1[order0] - roll_med
+        spike_sorted = np.isfinite(dev) & (dev > 0.3) & (u1[order0] > winsor_ceil)
+        spike = np.zeros(len(u1), dtype=bool)
+        spike[order0[spike_sorted]] = True
+        if spike.any():
+            d1, u1 = d1[~spike], u1[~spike]
+            if rf1 is not None:
+                rf1 = rf1[~spike]
+
     n_wins = int((u1 > winsor_ceil).sum()) if len(u1) else 0
     u1 = np.clip(u1, None, winsor_ceil)
 
