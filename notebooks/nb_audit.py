@@ -251,14 +251,21 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
     ss_tot = float(np.sum((u1 - u1.mean()) ** 2))
     r2 = 1 - float(np.sum((u1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
 
-    # AIC race: linear vs falling-asymptote vs power, on the same sorted (d1s, u1s) window
-    # the Theil-Sen fit used. `curve_models.fit_model` returns None (excluded from the race)
-    # on a non-converging fit rather than raising, so a run where the curve fit fails simply
-    # falls back to the linear/Theil-Sen result below.
+    # AIC race: linear vs falling-asymptote (Kern-Seaton), on the same sorted (d1s, u1s)
+    # window the Theil-Sen fit used. Deliberately NOT racing the 3rd 'power' shape here
+    # (unlike phm_analysis.py's deviation-signal race): power has no established physical
+    # basis for fouling resistance (linear and asymptotic are the two textbook models), and
+    # there is no downstream support for extrapolating/plotting a power-law winner (no
+    # amplitude/tau-equivalent parameters) -- a run where power fits best would otherwise
+    # silently fall back to 'linear' below, which is wrong (confirmed: E101AB Run2's power
+    # fit has AIC -7684 vs asymptotic -7217 vs linear -6733; letting power win the race but
+    # then discarding it kept selecting 'linear' even though asymptotic clearly fits far
+    # better than linear too). `curve_models.fit_model` returns None (excluded from the
+    # race) on a non-converging fit rather than raising, so a run where the curve fit fails
+    # simply falls back to the linear/Theil-Sen result below.
     fit_lin = cm.fit_model('linear', d1s, u1s, models=cm.MODELS_FALLING)
     fit_asy = cm.fit_model('asymptotic', d1s, u1s, models=cm.MODELS_FALLING)
-    fit_pow = cm.fit_model('power', d1s, u1s, models=cm.MODELS_FALLING)
-    fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
+    fits = [f for f in (fit_lin, fit_asy) if f]
     best = min(fits, key=lambda f: f['aic']) if fits else None
 
     if best is not None and best['name'] == 'asymptotic':
