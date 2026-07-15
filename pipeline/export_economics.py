@@ -15,15 +15,22 @@ method (engineer's slide, 3E-113 example):
 Slide check: ΔCIT=2°C, Feed=80 KBD, NG=390 → 8,311,680 THB/yr ✓ (reproduced in test).
 
 ΔCIT per HX: prefer the MEASURED median recovery from cleaning_history.json (the
-actual sawtooth jump audited against past cleans). For the 8/16 HX with no
-measured clean of their own, fall back to the model value (expected_CIT_gain_C)
-CORRECTED by an event-study calibration factor (event_study_calibration()) —
-the model is known to over-estimate, and that "~3x" figure used to come from a
-single TAM event; it's now the median measured/model ratio across every real
-clean event with both values (32 events, 8 HX, as of 2026-07), split by
+actual sawtooth jump audited against past cleans) -- but ONLY from type=='SWITCH'
+events (an actual shell swap/online clean of just that HX). type=='TAM' events are
+EXCLUDED from both measured_cit_gain() and event_study_calibration(): a turnaround
+cleans the whole preheat train at once, so its CIT recovery can't be credited to any
+one HX. Fixed 2026-07-15 after the plant engineer flagged that E105AB has never
+actually been part of an online cleaning plan, yet its old "measured" ΔCIT was the
+median of one TAM event (+7.3degC, whole-plant-confounded) and one genuine SWITCH
+event (+0.3degC) -- the TAM number, not real online-clean history, was driving its
+rank. For HX with no qualifying SWITCH event, fall back to the model value
+(expected_CIT_gain_C) CORRECTED by an event-study calibration factor
+(event_study_calibration()) — the model is known to over-estimate, and that "~3x"
+figure used to come from a single TAM event; it's now the median measured/model
+ratio across every real SWITCH-only clean event with both values, split by
 terminal-vs-non-terminal train position since that split shows a real
-difference (~0.23 vs ~0.39 in this data) that a single pooled factor would
-wash out. See METHODOLOGY.md and cit_gain_model_calibration in the export.
+difference in this data that a single pooled factor would wash out. See
+METHODOLOGY.md and cit_gain_model_calibration in the export.
 The legacy first-principles formula (charge·ρ·Cp/LHV/η) is kept as a
 cross-check field.
 
@@ -115,9 +122,11 @@ def resolve_cost_override(override, default_cost):
     return default_cost, None
 
 BASIS = ('สูตรโรงงาน: Saving[฿/ปี] = ΔCIT × 0.74 MMBTU/D/KBD/°C × Feed[KBD] × NG[฿/MMBTU] × 360 × 0.5(decay) ; '
-         'Feed[KBD] = charge[m³/h]×24/158.987 ; ΔCIT ใช้ค่าวัดจริง (median จาก audit history) ก่อน, '
+         'Feed[KBD] = charge[m³/h]×24/158.987 ; ΔCIT ใช้ค่าวัดจริงก่อน (median จาก audit history — '
+         'เฉพาะเหตุการณ์สลับเชลล์/ล้าง online ของ HX นั้นเอง ไม่รวม TAM เพราะ TAM ล้างทั้งเทรนพร้อมกัน '
+         'ล้อผลไม่ได้ว่าเป็นของ HX ไหน), '
          'fallback ค่าโมเดล คูณด้วย calibration factor จาก event-study (measured/model ratio จริงทุก clean event '
-         'แยกกลุ่ม terminal/non-terminal — ดู cit_gain_model_calibration) ; '
+         'ที่ไม่ใช่ TAM แยกกลุ่ม terminal/non-terminal — ดู cit_gain_model_calibration) ; '
          'ค่าล้างต่อ HX เป็นค่าสมมติ ~100k-500k บาท (ตามช่วงจริงหน้างาน) รอราคาจริง')
 
 
@@ -127,12 +136,26 @@ def _load(name, default=None):
 
 
 def measured_cit_gain(chist, hx):
-    """Median measured CIT recovery [°C] over audited cleans (only estimable, >0)."""
+    """Median measured CIT recovery [°C] over audited cleans (only estimable, >0).
+
+    EXCLUDES type=='TAM' events: a turnaround cleans the ENTIRE preheat train at once, so
+    whatever CIT recovery is observed around a TAM cannot be attributed to this one HX --
+    doing so let a whole-plant TAM recovery masquerade as "this HX's own online-clean
+    value." Confirmed against real plant knowledge (2026-07-15): the engineer flagged that
+    E105AB has never actually been part of an online cleaning plan, yet its 'measured'
+    ΔCIT here was the median of one TAM event (+7.34degC) and one genuine online SWITCH
+    event (+0.33degC) -- the TAM number was doing all the work. Checked project-wide: 4 of
+    the 6 non-terminal HX with a 'measured' economics.json entry had ZERO or only one
+    genuine (non-TAM) positive event backing that number (see git history for the audit).
+    Only SWITCH-type events (an actual shell swap/online clean of just this HX) are trusted
+    here; HX with no qualifying SWITCH event fall back to the calibrated model estimate
+    (calibrated_model_gain), same as before."""
     h = (chist or {}).get('hx', {}).get(hx)
     if not h:
         return None
     vals = [c['cit_measured_C'] for c in h.get('cleans', [])
-            if c.get('gain_estimable') and c.get('cit_measured_C') is not None and c['cit_measured_C'] > 0]
+            if c.get('type') != 'TAM' and c.get('gain_estimable')
+            and c.get('cit_measured_C') is not None and c['cit_measured_C'] > 0]
     return round(float(np.median(vals)), 2) if vals else None
 
 
@@ -152,13 +175,22 @@ def event_study_calibration(chist):
     single pooled factor would misrepresent both groups -- the same generalize-
     across-dissimilar-HX pitfall the 3a leave-HX-out CV already ran into (R^2~0.10).
     Falls back to the global ratio, then to no correction (1.0), if a group has too
-    few events to trust its own median."""
+    few events to trust its own median.
+
+    EXCLUDES type=='TAM' events for the same reason measured_cit_gain() does: a TAM's CIT
+    recovery reflects the WHOLE preheat train being cleaned at once, not this one HX, so
+    letting those events into the measured/model ratio would bias the calibration factor
+    applied to every model-fallback HX. Confirmed real-world (2026-07-15): 12 of the 32
+    events previously used here were TAM events -- over a third of the calibration sample
+    was whole-plant-confounded."""
     MIN_GROUP_N = 5
     by_group = {True: [], False: []}
     all_ratios = []
     for h, v in (chist or {}).get('hx', {}).items():
         term = bool((v.get('sensitivity') or {}).get('is_terminal_CIT'))
         for c in v.get('cleans', []):
+            if c.get('type') == 'TAM':
+                continue
             m, mdl = c.get('cit_measured_C'), c.get('cit_model_C')
             if c.get('gain_estimable') and m is not None and mdl and mdl > 0:
                 ratio = m / mdl
@@ -200,7 +232,10 @@ def fg_flow_cross_check(chist, feed_kbd, window_days=7):
     non-terminal HX the FG-flow response to one HX's clean is confounded by every other HX in
     the train changing CIT at the same time -- terminal HX are the cleanest single-cause window
     available in this data (same reasoning export_economics already uses for the terminal/
-    non-terminal calibration split, see event_study_calibration).
+    non-terminal calibration split, see event_study_calibration). Also excludes type=='TAM'
+    events for the identical reason: a turnaround cleans the whole train at once, so the
+    FG-flow response can't be credited to the terminal HX's clean specifically either
+    (same fix as measured_cit_gain()/event_study_calibration(), 2026-07-15).
 
     Returns None (not an empty dict) if the raw process CSV isn't available (e.g. a stripped
     demo dataset with no dashboard/data raw tags) -- callers must not read a missing check as
@@ -224,6 +259,8 @@ def fg_flow_cross_check(chist, feed_kbd, window_days=7):
         if not (h.get('sensitivity') or {}).get('is_terminal_CIT'):
             continue
         for c in h.get('cleans', []):
+            if c.get('type') == 'TAM':
+                continue
             dC = c.get('cit_measured_C')
             if not c.get('gain_estimable') or dC is None or dC <= 0:
                 continue
