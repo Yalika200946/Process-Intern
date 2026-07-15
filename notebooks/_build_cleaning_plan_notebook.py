@@ -398,6 +398,13 @@ out = dict(
     tam_dates=schedV2_full.get('tam_dates'), tam_dates_confirmed=schedV2_full.get('tam_dates_confirmed'),
     per_cycle_summary=schedV2_full.get('per_cycle_summary'),
     v2_full_horizon=schedV2_full.get('v2_full_horizon'),
+    # multi-TAM-cycle Gantt data: schedV2_full already computes real per-HX clean dates spanning
+    # every TAM cycle (not just the first) -- previously only its cost summary was kept and these
+    # were discarded. Additive only: the primary `per_hx` above (cost/reason/cit_gain, single-cycle)
+    # stays the source of truth for the ranked table; this is purely for extending the Gantt visual
+    # past the first TAM so the dashboard can show the full planning horizon.
+    per_hx_full_horizon=schedV2_full.get('per_hx'),
+    timeline_full_horizon=schedV2_full.get('timeline'),
     cost_overrides_applied=COST_OVERRIDES,
     method=('แผนเดียว: constrained network moving-window optimizer (Dekebo, Oh & Lee 2023) '
             'เคารพ bypass/ทีมล้าง/เพดาน 4-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '
