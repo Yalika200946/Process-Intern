@@ -133,10 +133,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 
     def _recompute_plan(self):
-        """Apply per-HX cleaning-cost overrides from the dashboard's "คำนวณใหม่" button
-        and actually re-run notebook 16's optimizer (not a client-side approximation) so
-        the returned schedule/priority genuinely reflects the new costs. Blocking —
-        takes ~10-20s; the dashboard shows a loading state while this runs."""
+        """Apply per-HX cleaning-cost overrides AND an optional CIT-floor constraint from the
+        dashboard's "คำนวณใหม่" button, then actually re-run notebook 16's optimizer (not a
+        client-side approximation) so the returned schedule/priority genuinely reflects the new
+        inputs. Blocking — takes ~10-30s (longer with a tight CIT floor, since that adds SLSQP
+        constraints); the dashboard shows a loading state while this runs."""
         try:
             n = int(self.headers.get('Content-Length', 0))
             raw = self.rfile.read(n) if n else b'{}'
@@ -154,23 +155,35 @@ class Handler(BaseHTTPRequestHandler):
             overrides_path = DASH / 'data' / 'cost_overrides.json'
             overrides_path.write_text(json.dumps(overrides, ensure_ascii=False, indent=1), encoding='utf-8')
 
+            cit_floor_path = DASH / 'data' / 'cit_floor_override.json'
+            cit_floor_C = body.get('cit_floor_C')
+            if cit_floor_C is not None:
+                try:
+                    cit_floor_C = float(cit_floor_C)
+                except (TypeError, ValueError):
+                    return self._send(422, {'error': 'cit_floor_C ต้องเป็นตัวเลข'})
+                cit_floor_path.write_text(json.dumps({'max_deficit_C': cit_floor_C}, indent=1), encoding='utf-8')
+            elif cit_floor_path.exists():
+                cit_floor_path.unlink()   # no override in this request -> fall back to notebook 16's default
+
             env = {**os.environ, 'PYTHONUTF8': '1'}
             r = subprocess.run(
                 [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute', '--inplace',
-                 '--ExecutePreprocessor.timeout=300',
+                 '--ExecutePreprocessor.timeout=420',
                  str(NB / '16_cleaning_plan_optimization.ipynb')],
-                capture_output=True, text=True, env=env, timeout=320)
+                capture_output=True, text=True, env=env, timeout=440)
             if r.returncode != 0:
                 return self._send(500, {'error': 'notebook 16 recompute failed', 'detail': (r.stderr or '')[-1500:]})
 
             plan = json.loads((DASH / 'data' / 'cleaning_plan.json').read_text(encoding='utf-8'))
+            floor_msg = f' · CIT floor {cit_floor_C}°C' if cit_floor_C is not None else ''
             self._send(200, {
                 'ok': True,
-                'message': f'คำนวณใหม่แล้วด้วยค่าล้าง {len(overrides)} HX ที่แก้',
+                'message': f'คำนวณใหม่แล้วด้วยค่าล้าง {len(overrides)} HX ที่แก้{floor_msg}',
                 'plan': plan,
             })
         except subprocess.TimeoutExpired:
-            self._send(504, {'error': 'คำนวณใหม่ใช้เวลานานเกินไป (>320s)'})
+            self._send(504, {'error': 'คำนวณใหม่ใช้เวลานานเกินไป (>440s)'})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 

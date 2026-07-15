@@ -37,10 +37,13 @@ Run: python pipeline/export_economics.py
 import os, sys, json
 from pathlib import Path
 import numpy as np
+import pandas as pd
 
 REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / 'dashboard' / 'data'
 OUT  = DATA / 'economics.json'
+RAW_DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
+MMBTU_TO_KJ = 1_055_055.85
 
 M3_PER_BBL = 0.1589873
 
@@ -66,6 +69,9 @@ CLEANING_COST_BY_HX = {
     'E105AB': 300000, 'E108AB': 300000, 'E110ABC': 300000,
     'E111': 300000, 'E112AB': 300000, 'E101EF': 300000, 'E101CD': 300000,
     'E103AB': 400000, 'E106AB': 400000, 'E107AB': 400000, 'E109AB': 400000,  # TAM-only
+    'E101G': 400000,                                        # TAM-only (was missing -> silently
+                                                             # fell back to the 300k online-bundle
+                                                             # default despite having no bypass)
 }
 DEFAULT_CLEANING_COST = 300000
 COSTS_ASSUMED = True
@@ -183,6 +189,75 @@ def calibrated_model_gain(model_C, is_terminal, calib):
     return model_C * factor, round(factor, 3)
 
 
+def fg_flow_cross_check(chist, feed_kbd, window_days=7):
+    """Cross-check the two ΔCIT->fuel-gas formulas (plant STD_ENERGY vs legacy LHV/eta) against
+    the ACTUAL measured 1FI028.pv (FG flow) response around real audited cleaning events, using
+    Process_information_cleaned.csv (daily). Does NOT change either formula -- this is an
+    honesty check surfaced for the engineer, same spirit as the Evidence tab's validation
+    scorecard: report the real ratio, don't assume either formula is exactly right.
+
+    Restricted to TERMINAL HX events (E113A/E112C, whose cold_out IS the CIT tag) because for
+    non-terminal HX the FG-flow response to one HX's clean is confounded by every other HX in
+    the train changing CIT at the same time -- terminal HX are the cleanest single-cause window
+    available in this data (same reasoning export_economics already uses for the terminal/
+    non-terminal calibration split, see event_study_calibration).
+
+    Returns None (not an empty dict) if the raw process CSV isn't available (e.g. a stripped
+    demo dataset with no dashboard/data raw tags) -- callers must not read a missing check as
+    "formulas agree", only as "not checked"."""
+    csv_path = RAW_DATA / 'Process_information_cleaned.csv'
+    if not csv_path.exists():
+        return None
+    try:
+        proc = pd.read_csv(csv_path, usecols=['Timestamp', '1FI028.pv'], parse_dates=['Timestamp']).set_index('Timestamp').sort_index()
+    except (ValueError, OSError):
+        return None
+    fg = proc['1FI028.pv']
+
+    def _window_mean(center, before):
+        lo, hi = (center - pd.Timedelta(days=window_days), center) if before else (center, center + pd.Timedelta(days=window_days))
+        vals = fg.loc[lo:hi]
+        return float(vals.mean()) if len(vals) else None
+
+    rows = []
+    for hx, h in (chist or {}).get('hx', {}).items():
+        if not (h.get('sensitivity') or {}).get('is_terminal_CIT'):
+            continue
+        for c in h.get('cleans', []):
+            dC = c.get('cit_measured_C')
+            if not c.get('gain_estimable') or dC is None or dC <= 0:
+                continue
+            d = pd.Timestamp(c['date'])
+            before, after = _window_mean(d, True), _window_mean(d, False)
+            if before is None or after is None:
+                continue
+            measured_drop_tph = before - after   # FG should DROP after a clean recovers CIT
+            plant_mmbtu_day = dC * PLANT['STD_ENERGY'] * feed_kbd
+            plant_drop_tph = plant_mmbtu_day * MMBTU_TO_KJ / LEGACY['LHV_FG'] / 24 / 1000
+            charge = (feed_kbd * 1000) * 0.1589873 / 24   # KBD -> m3/h, inverse of main()'s feed_kbd calc
+            legacy_drop_tph = charge * LEGACY['RHO_CRUDE'] * LEGACY['CP_CRUDE'] * dC / (LEGACY['LHV_FG'] * LEGACY['FURNACE_EFF']) / 1000
+            rows.append(dict(HX=hx, date=c['date'], cit_measured_C=dC,
+                             fg_measured_drop_tph=round(measured_drop_tph, 3),
+                             fg_plant_formula_drop_tph=round(plant_drop_tph, 3),
+                             fg_legacy_formula_drop_tph=round(legacy_drop_tph, 3),
+                             ratio_measured_vs_plant=(round(measured_drop_tph / plant_drop_tph, 2) if plant_drop_tph else None),
+                             ratio_measured_vs_legacy=(round(measured_drop_tph / legacy_drop_tph, 2) if legacy_drop_tph else None)))
+
+    if not rows:
+        return dict(available=True, n_events=0, rows=[],
+                    note='ไม่มีเหตุการณ์ล้าง terminal HX ที่มีทั้ง cit_measured_C และข้อมูล FG flow รอบวันนั้นให้เทียบ')
+    ratios_plant = [r['ratio_measured_vs_plant'] for r in rows if r['ratio_measured_vs_plant'] is not None]
+    ratios_legacy = [r['ratio_measured_vs_legacy'] for r in rows if r['ratio_measured_vs_legacy'] is not None]
+    return dict(
+        available=True, n_events=len(rows), window_days=window_days, rows=rows,
+        median_ratio_measured_vs_plant=(round(float(np.median(ratios_plant)), 2) if ratios_plant else None),
+        median_ratio_measured_vs_legacy=(round(float(np.median(ratios_legacy)), 2) if ratios_legacy else None),
+        note=('ratio ~1.0 = สูตรทำนาย FG-flow ที่ลดลงจริงได้ตรง · ratio<1 = สูตรทำนายสูงเกินจริง · ratio>1 = ทำนายต่ำไป · '
+              'ค่าจริงมี noise สูง (FG flow ขึ้นกับปัจจัยอื่นด้วย เช่น O2/charge rate/crude grade ไม่ใช่แค่ CIT — '
+              'n เล็ก อย่าตีความเป็นการ validate สูตรที่แม่นยำ เป็นเพียง sanity-check ทิศทาง)')
+    )
+
+
 def main():
     ranking = _load('hx_ranking.json', [])
     topo = _load('pfd_topology.json', {})
@@ -254,11 +329,14 @@ def main():
     # slide reproduction check (E113A: ΔCIT=2, Feed=80, NG=390 -> 8,311,680)
     check = 2 * PLANT['STD_ENERGY'] * 80 * PLANT['NG_PRICE'] * 360 * 0.5
 
+    fg_check = fg_flow_cross_check(chist, feed_kbd)
+
     out = dict(formula='plant', plant_constants=PLANT, legacy_constants=LEGACY,
                charge_m3h=round(float(charge), 1), feed_kbd=round(feed_kbd, 1),
                slide_check_thb_yr=round(check),
                cleaning_costs_assumed=COSTS_ASSUMED, basis=BASIS,
                cit_gain_model_calibration=calib,
+               fg_flow_cross_check=fg_check,
                per_hx=per_hx, totals=totals)
     OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
     n_calibrated = sum(1 for p in per_hx if p['cit_gain_source'] == 'model_calibrated')

@@ -188,7 +188,7 @@ function PID({topo,units,selected,onSelect}){
            {/* outlet tag */}
            {n&&n.cold_out_val!=null&&(
              <text x={pos.x} y={pos.y+R+13} textAnchor="middle" fontSize="8" fill="#ffffff" opacity=".55">{n.cold_out_tag?.replace('.pv','')} · {fmt(n.cold_out_val,0)}°</text>)}
-           {rank&&rank<=5&&(<g><circle cx={pos.x+R-4} cy={pos.y-R+4} r="9" fill="#fff"/><text x={pos.x+R-4} y={pos.y-R+7.3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill={NODE_GRAD[st][1]}>{rank}</text></g>)}
+           {rank&&rank<=5&&(<g><title>อันดับความเสี่ยง #{rank} (Probability×Consequence/Effort) — คนละอันดับกับแท็บ "แผนล้าง HX"</title><circle cx={pos.x+R-4} cy={pos.y-R+4} r="9" fill="#fff"/><text x={pos.x+R-4} y={pos.y-R+7.3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill={NODE_GRAD[st][1]}>{rank}</text></g>)}
          </g>);
       })}
      </svg>
@@ -211,7 +211,7 @@ function PID({topo,units,selected,onSelect}){
              <Row k={`${n.hot_stream} ออก`} v={n.hot_out_val!=null?`${fmt(n.hot_out_val,1)}°C`:'—'}/>
              {u&&u.priority_rank!=null&&<>
                <div className="border-t border-white/10 my-1"/>
-               <Row k="อันดับล้าง" v={`#${u.priority_rank}`}/>
+               <Row k="อันดับความเสี่ยง" v={`#${u.priority_rank}`}/>
                <Row k="Fouling rate" v={fmt(u.Q_fouling_rate_abs,2)+'/100d'}/>
                <Row k="วิธีล้าง" v={effortTH[u.online_mode||u.effort_tier]||'—'}/>
              </>}
@@ -278,6 +278,12 @@ function FurnaceSVG({F,passes,cit,params}){
 }
 
 function FurnacePanel({topo,params,setParams,ranking,economics}){
+  // per-constraint limit overrides -- persisted locally (localStorage) since edits here are a
+  // reference/export value only: no live band-status calc or backend optimizer consumes `limit`
+  // yet, so without this they used to silently vanish on every re-render/reload with no signal
+  // to the user that nothing was saved.
+  const [limitOv,setLimitOv]=useState(()=>{try{return JSON.parse(localStorage.getItem('cpht_constraint_limit_overrides')||'{}');}catch(e){return {};}});
+  const setLimit=(k,v)=>{const n={...limitOv};if(v==null||Number.isNaN(v))delete n[k];else n[k]=v;localStorage.setItem('cpht_constraint_limit_overrides',JSON.stringify(n));setLimitOv(n);};
   if(!topo) return null;
   const F=topo.furnace, passes=topo.passes;
   const cit=F.find(x=>x.key==='CIT')?.value;
@@ -358,7 +364,8 @@ function FurnacePanel({topo,params,setParams,ranking,economics}){
     {/* full constraint table (grouped, editable optimize-limit) */}
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
       <h3 className="text-[14px] font-bold text-bcp-black mb-1">Constraint ทั้งหมด · ค่าที่ตั้งไว้ (สำหรับตั้ง Optimization)</h3>
-      <p className="text-[11px] text-bcp-dgray mb-3">ค่าปัจจุบัน (สด) · setpoint/target ที่ตั้ง · limit ที่ optimizer ต้องไม่ละเมิด · แก้ limit ได้ในช่อง</p>
+      <p className="text-[11px] text-bcp-dgray mb-1">ค่าปัจจุบัน (สด) · setpoint/target ที่ตั้ง · limit ที่ optimizer ต้องไม่ละเมิด · แก้ limit ได้ในช่อง (บันทึกไว้ในเบราว์เซอร์นี้เท่านั้น)</p>
+      <p className="text-[10.5px] text-bcp-orange bg-bcp-orange/[.06] border border-bcp-orange/20 rounded-lg px-3 py-1.5 mb-3">⚠ ยังไม่มี optimizer หลังบ้านที่อ่านค่า limit นี้ไปใช้จริง — ตอนนี้เป็นค่าอ้างอิงที่บันทึกไว้เฉยๆ ไม่กระทบสถานะ 🔴🟡🟢 หรือคำแนะนำด้านล่าง</p>
       {Object.entries(grouped).map(([grp,items])=>(
         <div key={grp} className="mb-3">
           <div className="text-[11px] font-bold text-bcp-turq uppercase tracking-wide mb-1">{grp}</div>
@@ -370,8 +377,8 @@ function FurnacePanel({topo,params,setParams,ranking,economics}){
                 <td className="py-1.5 text-right w-[13%]"><span className="font-bold tabular-nums" style={{color:s==='alarm'?BCP.red:s==='warn'?'#D9A400':BCP.black}}>{fmt(f.value,f.unit==='%'?2:1)}</span> <span className="text-[9px] text-bcp-dgray">{f.unit}</span></td>
                 <td className="py-1.5 text-right w-[11%] text-[11px] text-bcp-dgray">SP {fmt(f.target,1)}</td>
                 <td className="py-1.5 text-right w-[12%]"><span className="text-[10px] text-bcp-dgray mr-1">limit</span>
-                  <input type="number" step="any" defaultValue={f.limit}
-                    onChange={e=>{f.limit=parseFloat(e.target.value);}}
+                  <input type="number" step="any" value={limitOv[f.key]??f.limit??''}
+                    onChange={e=>setLimit(f.key,e.target.value===''?null:parseFloat(e.target.value))}
                     className="w-16 text-[11px] text-right rounded border border-black/10 px-1 py-0.5 focus:border-bcp-green outline-none"/></td>
                 <td className="py-1.5 text-center w-[8%]"><span className="h-2.5 w-2.5 rounded-full inline-block" style={{background:BAND_C[s]}}/></td>
               </tr>);})}
@@ -414,10 +421,11 @@ function FurnacePanel({topo,params,setParams,ranking,economics}){
     {/* what-if optimization */}
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h3 className="text-[14px] font-bold text-bcp-black">What-if Optimization · ล้างตามลำดับแล้วได้อะไร</h3>
+        <h3 className="text-[14px] font-bold text-bcp-black">What-if: ล้างเรียงลำดับ (ประมาณคร่าว ๆ ไม่ใช่แผนจริง)</h3>
         <span className="text-[10px] text-bcp-green bg-bcp-green/10 px-2 py-0.5 rounded-full">สูตรโรงงานจริง (Energy Saving Benefit) · ΔCIT จากค่าวัดจริงเมื่อมี</span>
       </div>
       <p className="text-[11px] text-bcp-dgray mb-3">ล้าง HX ตามลำดับ priority → คืน CIT → Saving = ΔCIT × {params.STD_ENERGY} MMBTU/D/KBD/°C × {fmt(feedKBD,1)} KBD × NG × 360 × {params.CIT_DECAY} (decay) · ค่าล้างต่อ HX ยังเป็นค่าสมมติ</p>
+      <p className="text-[11px] text-bcp-orange bg-bcp-orange/[.06] border border-bcp-orange/20 rounded-lg px-3 py-1.5 mb-3">⚠ ตารางนี้ <b>ไม่คิดข้อจำกัดจริง</b> (กำลังคนล้าง/เดือน, ล้างได้เฉพาะที่มี bypass, ล้างได้ ≤ ครั้ง/ปี/HX) — เป็นเพียงประมาณการถ้าล้างได้ทุกตัวตามลำดับ ดูแผนที่ผ่านข้อจำกัดจริงและคำนวณต้นทุนละเอียดกว่าได้ในแท็บ "แผนล้าง HX"</p>
       <div className="flex flex-wrap gap-3 mb-4">
         {econ.map(([k,label])=>(
           <label key={k} className="text-[11px]"><span className="text-bcp-dgray">{label}</span>
@@ -515,7 +523,7 @@ function DetailPanel({hx,unit,onSim,simActive,fc,node}){
   return(
    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 h-full">
     <div className="flex items-center gap-3 mb-4">
-      <div className="h-11 w-11 rounded-xl grid place-items-center text-white font-bold" style={{background:meta.c}}>{hasRank?`#${unit.priority_rank}`:'—'}</div>
+      <div className="h-11 w-11 rounded-xl grid place-items-center text-white font-bold text-[13px] leading-tight text-center" style={{background:meta.c}} title="อันดับความเสี่ยง (Probability×Consequence/Effort) — คนละมุมกับอันดับในแท็บ &quot;แผนล้าง HX&quot; ซึ่งเรียงตามความคุ้มค่า×ข้อจำกัด">{hasRank?<>เสี่ยง<br/>#{unit.priority_rank}</>:'—'}</div>
       <div><div className="text-[18px] font-bold text-bcp-black">{hx}</div>
         <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:meta.c}}>{meta.th} · {meta.label}</span></div>
     </div>
@@ -715,8 +723,13 @@ function SlideChart({tamA}){
 /* ═════════ INTEGRATED CLEANING PLAN (แผนเดียว) — cleaning_plan.json ═════════
    Single practical plan: network-constrained schedule + per-HX economics + criticality,
    priority-ranked (net-saving × risk). Replaces the separate v1/v2 tables. */
-const CLEANING_METHOD_DEFAULTS=()=>({methods:[
-  {label:'ล้าง online (chemical)',base_cost:150000,variable_cost_per_day:5000,downtime_cost_per_day:20000,duration_days:2},
+// tier-aware defaults -- SWAP_CAPABLE HX (E113A/E112C) are cleaned by physically swapping in the
+// spare shell and pulling the fouled one, not by dosing chemical online -- the "ล้าง online
+// (chemical)" option doesn't apply to them (TAM_ONLY HX never reach this editor at all: they're
+// online=false, so they never appear in the table this formula editor lives in). online_mode
+// comes from per_hx (real bypass data, see notebooks/bypass_config.py), not a guess.
+const CLEANING_METHOD_DEFAULTS=(onlineMode)=>({methods:[
+  ...(onlineMode==='SWAP_CAPABLE'?[]:[{label:'ล้าง online (chemical)',base_cost:150000,variable_cost_per_day:5000,downtime_cost_per_day:20000,duration_days:2}]),
   {label:'สลับเชลล์ / bundle pull',base_cost:300000,variable_cost_per_day:0,downtime_cost_per_day:0,duration_days:0},
 ]});
 // mirrors pipeline/export_economics.resolve_cost_override -- same shape, same "cheapest method wins" rule,
@@ -733,7 +746,7 @@ const resolveCostOverride=(override,fallback)=>{
   return {cost:fallback,meta:null};
 };
 
-function CleaningPlanPanel({plan,onPlanUpdated}){
+function CleaningPlanPanel({plan,onPlanUpdated,riskTop1}){
   const [costOv,setCostOv]=useState(()=>{try{return JSON.parse(localStorage.getItem('cpht_cleaning_cost_overrides')||'{}');}catch(e){return {};}});
   const [recompute,setRecompute]=useState({busy:false,msg:null,err:false});
   const [formulaHX,setFormulaHX]=useState(null);   // HX whose formula editor is open, or null
@@ -745,6 +758,10 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
   // dates spanning all of them. When present, plot the whole horizon instead of stopping at the
   // first TAM.
   const tamDateStrs=(Array.isArray(plan.tam_dates)&&plan.tam_dates.length?plan.tam_dates:[plan.next_tam]);
+  // tam_dates_confirmed[i] is false for TAM cycles the plant hasn't locked in yet (currently
+  // only the first/next TAM is confirmed) -- render those distinctly so the plan doesn't look
+  // more certain than it is that far out.
+  const tamConfirmed=i=>!Array.isArray(plan.tam_dates_confirmed)||plan.tam_dates_confirmed[i]!==false;
   const hasFullHorizon=Array.isArray(plan.per_hx_full_horizon)&&plan.per_hx_full_horizon.length>0;
   const horizonEnd=hasFullHorizon?parseISO(tamDateStrs[tamDateStrs.length-1]):tam;
   const span=horizonEnd-asOf;
@@ -756,32 +773,42 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
   const rows=[...plan.per_hx].sort((a,b)=>(a.priority_rank||99)-(b.priority_rank||99));
   const online=rows.filter(p=>p.online), tamOnly=rows.filter(p=>!p.online);
   const t=plan.totals||{}, c=plan.constraints||{};
+  const onlineModeByHX=Object.fromEntries(rows.map(r=>[r.HX,r.online_mode]));
   const saveOv=n=>{localStorage.setItem('cpht_cleaning_cost_overrides',JSON.stringify(n));setCostOv(n);};
   const setCost=(hx,v)=>{const n={...costOv};if(v==null||Number.isNaN(v))delete n[hx];else n[hx]=v;saveOv(n);};
   const setMethodField=(hx,idx,field,val)=>{
     const n={...costOv};
-    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS();
+    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS(onlineModeByHX[hx]);
     const methods=cur.methods.map((m,i)=>i===idx?{...m,[field]:val===''?0:+val}:m);
     n[hx]={methods};
     saveOv(n);
   };
   const setMethodLabel=(hx,idx,label)=>{
     const n={...costOv};
-    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS();
+    const cur=(n[hx]&&n[hx].methods)?n[hx]:CLEANING_METHOD_DEFAULTS(onlineModeByHX[hx]);
     n[hx]={methods:cur.methods.map((m,i)=>i===idx?{...m,label}:m)};
     saveOv(n);
   };
   const toggleFormula=hx=>{
     if(formulaHX===hx){setFormulaHX(null);return;}
-    if(!(costOv[hx]&&costOv[hx].methods)) setCost(hx,CLEANING_METHOD_DEFAULTS());
+    if(!(costOv[hx]&&costOv[hx].methods)) setCost(hx,CLEANING_METHOD_DEFAULTS(onlineModeByHX[hx]));
     setFormulaHX(hx);
   };
   const liveCost=p=>resolveCostOverride(costOv[p.HX],p.cleaning_cost).cost;
   const livePayback=p=>{const cost=liveCost(p),base=p.cleaning_cost,pb=p.payback_days;return (cost&&base&&pb)?Math.round(pb*cost/base*10)/10:pb;};
+  // live "คุ้มมั้ย?" check: reacts instantly to the cost input above without waiting for the
+  // backend recompute, by comparing against fuel_value_per_clean_thb (already computed by
+  // notebook 16 -- how much fuel-gas cost is avoided per clean). Falls back to the notebook's
+  // own worth_it when there's no live cost override and no fuel value to compare against.
+  const liveWorthIt=p=>{
+    if(p.fuel_value_per_clean_thb==null) return p.worth_it;
+    return liveCost(p) < p.fuel_value_per_clean_thb;
+  };
+  const [citFloor,setCitFloor]=useState(()=>plan?.max_cit_deficit_C_applied??8.05);
   const doRecompute=async()=>{
     setRecompute({busy:true,msg:null,err:false});
     try{
-      const r=await fetch('/api/recompute-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({overrides:costOv})});
+      const r=await fetch('/api/recompute-plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({overrides:costOv,cit_floor_C:citFloor})});
       const j=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
       onPlanUpdated&&onPlanUpdated(j.plan);
@@ -794,17 +821,36 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up">
     <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
       <h3 className="text-[15px] font-bold text-bcp-black">แผนล้าง HX ที่แนะนำ · ถึง TAM {tam.getFullYear()+543}</h3>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <label className="text-[10px] text-bcp-dgray flex items-center gap-1">CIT ต้องไม่ต่ำกว่าเป้าเกิน
+          <input type="number" step="0.1" value={citFloor} onChange={e=>setCitFloor(e.target.value===''?0:+e.target.value)}
+            className="w-16 text-right tabular-nums border border-black/10 rounded px-1 py-0.5 text-[11px] focus:outline-none focus:border-bcp-turq"/>°C
+        </label>
         <button onClick={doRecompute} disabled={recompute.busy}
           className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-bcp-turq text-white hover:bg-bcp-turq/90 disabled:opacity-50 flex items-center gap-1.5">
           {recompute.busy&&<span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin"/>}
-          {recompute.busy?'กำลังคำนวณ… (~10-20 วิ)':'🔄 คำนวณใหม่ด้วยค่าล้างนี้'}
+          {recompute.busy?'กำลังคำนวณ… (~10-30 วิ)':'🔄 คำนวณใหม่ด้วยค่าล้างนี้'}
         </button>
         <span className="text-[10px] text-bcp-turq bg-bcp-turq/10 px-2 py-0.5 rounded-full">แผนเดียว · รวมความคุ้มค่า + ประสิทธิภาพ + ความเป็นไปได้ + ความวิกฤต</span>
       </div>
     </div>
     {recompute.msg&&<div className={`mb-2 text-[11px] px-3 py-1.5 rounded-lg ${recompute.err?'bg-bcp-red/10 text-bcp-red':'bg-bcp-green/10 text-bcp-green'}`}>{recompute.msg}</div>}
-    <p className="text-[11px] text-bcp-dgray mb-3">จัดตารางทั้งเครือข่ายภายใต้ข้อจำกัดจริง (ล้าง online เฉพาะที่มี bypass เต็ม/บางส่วน · ทีมล้าง ≤{c.crew_per_month}/เดือน · ≤{c.max_freq_per_year} ครั้ง/ปี/HX · ที่เหลือรอ TAM) แล้วจัดลำดับด้วย net-saving ถ่วงความเสี่ยง (safety, ตำแหน่งเทรน, worsening) · แก้ค่าล้างด้านล่างแล้วกด "คำนวณใหม่" เพื่อรัน optimizer จริง{hasFullHorizon&&<> · เส้นทึบ = แผนคิดต้นทุนละเอียดถึง TAM แรก, เส้นประ = คาดการณ์ระยะยาวถึง TAM รอบถัดไป (ยังไม่คิดต้นทุนละเอียดเท่ารอบแรก)</>}</p>
+    {plan.constraint_satisfied===false&&
+      <div className="mb-2 text-[11px] px-3 py-1.5 rounded-lg bg-bcp-red/10 text-bcp-red">
+        ⚠️ แผนนี้ CIT จะต่ำกว่าเป้าสูงสุด {fmt(plan.max_realized_deficit_C,1)}°C (เป้าที่ตั้งไว้ {fmt(plan.max_cit_deficit_C_applied,1)}°C) —
+        ทีมล้าง/ความถี่ที่จำกัดไว้ ({c.crew_per_month}/เดือน, ≤{c.max_freq_per_year}/ปี/HX) ไม่พอจะรักษาระดับนี้ได้จริงด้วยอัตรา fouling ปัจจุบัน
+        ต้องเพิ่มกำลังคนล้าง หรือผ่อนเป้า CIT ลง</div>}
+    {plan.constraint_satisfied===true&&plan.max_cit_deficit_C_applied!=null&&
+      <div className="mb-2 text-[11px] px-3 py-1.5 rounded-lg bg-bcp-green/10 text-bcp-green">
+        ✅ แผนนี้รักษา CIT ไม่ต่ำกว่าเป้าตลอดช่วงที่วางแผน (deficit สูงสุดจริง {fmt(plan.max_realized_deficit_C,1)}°C ≤ เป้า {fmt(plan.max_cit_deficit_C_applied,1)}°C)</div>}
+    {plan.binding_constraint==='furnace_fg'&&
+      <div className="mb-2 text-[11px] px-3 py-1.5 rounded-lg bg-bcp-orange/10 text-bcp-orange">
+        🔥 ตอนนี้ตัวที่จำกัดแผนคือ <b>limit เชื้อเพลิงเตา (FG_FLOW ≤ {fmt(plan.furnace_fg_info?.fg_limit_tph,1)} t/h)</b> ไม่ใช่เป้า CIT
+        — เทียบเท่า CIT deficit ต้องไม่เกิน {fmt(plan.furnace_fg_ceiling_C,1)}°C (เข้มกว่าเป้า CIT ที่ตั้งไว้ {fmt(plan.max_cit_deficit_C_applied,1)}°C)
+        · เกี่ยวข้องตรงกับคำถาม "ยืด TAM เป็น 4 ปีได้ไหม": ถ้าปล่อย deficit นานเกินไป เตาจะเผาเชื้อเพลิงชน limit เอง ก่อนถึง TAM</div>}
+    {plan.tube_skin_risk_advisory&&
+      <div className="mb-2 text-[11px] px-3 py-1.5 rounded-lg bg-bcp-red/10 text-bcp-red">⚠ {plan.tube_skin_risk_note}</div>}
+    <p className="text-[11px] text-bcp-dgray mb-3">จัดตารางทั้งเครือข่ายภายใต้ข้อจำกัดจริง (ล้าง online เฉพาะที่มี bypass เต็ม/บางส่วน · ทีมล้าง ≤{c.crew_per_month}/เดือน · ≤{c.max_freq_per_year} ครั้ง/ปี/HX · ที่เหลือรอ TAM · CIT deficit รวมต้องไม่เกิน {fmt(plan.effective_max_deficit_C??plan.max_cit_deficit_C_applied,2)}°C{plan.binding_constraint==='furnace_fg'?' — จำกัดด้วย limit เชื้อเพลิงเตา':''}) แล้วจัดลำดับด้วย net-saving ถ่วงความเสี่ยง (safety, ตำแหน่งเทรน, worsening) · แก้ค่าล้าง/เป้า CIT ด้านล่างแล้วกด "คำนวณใหม่" เพื่อรัน optimizer จริง{hasFullHorizon&&<> · เส้นทึบ = แผนคิดต้นทุนละเอียดถึง TAM แรก, เส้นประ = คาดการณ์ระยะยาวถึง TAM รอบถัดไป (ยังไม่คิดต้นทุนละเอียดเท่ารอบแรก)</>}</p>
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
       <div className="rounded-xl border border-black/[.06] bg-bcp-green/[.04] px-3.5 py-2.5"><div className="text-[9.5px] uppercase font-semibold text-bcp-dgray">Net saving รวม</div><div className="text-[18px] font-bold text-bcp-green">{(t.total_net_saving_thb_yr/1e6).toFixed(0)}M ฿/ปี</div></div>
       <div className="rounded-xl border border-black/[.06] bg-white px-3.5 py-2.5"><div className="text-[9.5px] uppercase font-semibold text-bcp-dgray">ล้าง online</div><div className="text-[18px] font-bold text-bcp-black">{t.total_cleans_to_tam} <span className="text-[11px] font-normal text-bcp-dgray">ครั้งถึง TAM</span></div></div>
@@ -814,7 +860,13 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
     <div className="mb-4">
       <div className="flex justify-between text-[9.5px] text-bcp-dgray mb-1">
         <span>{thaiDate(plan.as_of)}</span>
-        <span className="text-bcp-red font-bold">{tamDateStrs.map(s=>'TAM '+thaiDate(s)).join(' · ')}</span>
+        <span className="text-bcp-red font-bold">{tamDateStrs.map((s,i)=>'TAM '+thaiDate(s)+(tamConfirmed(i)?'':' (ยังไม่ยืนยัน)')).join(' · ')}</span>
+      </div>
+      <div className="flex items-center gap-3 text-[9px] text-bcp-dgray mb-1.5">
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-1.5 rounded-sm" style={{background:BCP.turq}}/>กำหนดล้าง (คิดต้นทุนละเอียด)</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-1.5 rounded-sm border-[1.5px] border-dashed bg-white" style={{borderColor:BCP.turq}}/>คาดการณ์ระยะยาว (ยังไม่คิดต้นทุนละเอียด)</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-[3px] rounded bg-bcp-red"/>TAM (ยืนยันแล้ว)</span>
+        <span className="flex items-center gap-1"><span className="inline-block h-2 w-[3px] rounded border-[1.5px] border-dashed border-bcp-red"/>TAM (ยังไม่ยืนยัน)</span>
       </div>
       {online.map(p=>{
         const full=fullByHX[p.HX];
@@ -829,7 +881,7 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
             {yearMarks.map((d,i)=><div key={'y'+i} className="absolute top-0 h-4 w-px bg-black/10" style={{left:((d-asOf)/span*100)+'%'}}/>)}
             {(p.scheduled_dates||[]).map((d,i)=><div key={i} title={thaiDate(d)} className="absolute top-0.5 h-3 w-1.5 rounded-sm" style={{left:xPos(d)+'%',background:BCP.turq}}/>)}
             {extraDates.map((d,i)=><div key={'x'+i} title={thaiDate(d)+' (คาดการณ์ระยะยาว)'} className="absolute top-0.5 h-3 w-1.5 rounded-sm border-[1.5px] border-dashed bg-white" style={{left:xPos(d)+'%',borderColor:BCP.turq}}/>)}
-            {tamDateStrs.map((s,i)=><div key={'t'+i} title={'TAM '+thaiDate(s)} className="absolute top-0 h-4 w-[3px] bg-bcp-red rounded" style={{left:xPos(s)+'%',transform:'translateX(-100%)'}}/>)}
+            {tamDateStrs.map((s,i)=><div key={'t'+i} title={'TAM '+thaiDate(s)+(tamConfirmed(i)?'':' (ยังไม่ยืนยัน)')} className={`absolute top-0 h-4 w-[3px] rounded ${tamConfirmed(i)?'bg-bcp-red':'border-[1.5px] border-dashed border-bcp-red bg-bcp-red/20'}`} style={{left:xPos(s)+'%',transform:'translateX(-100%)'}}/>)}
           </div>
           <div className="w-16 text-[10px] text-bcp-dgray text-right">{p.n_cleans_to_tam} ครั้ง</div>
         </div>);})}
@@ -840,9 +892,9 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
     <div className="text-[11px] font-bold text-bcp-black mb-1">ล้างได้ online ({online.length}) — เรียงตามความสำคัญ</div>
     <div className="overflow-x-auto mb-4"><table className="w-full text-[12px]">
       <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
-        <th className="py-2">#</th><th className="py-2">HX</th><th className="py-2 text-right">ค่าล้าง (฿)</th>
+        <th className="py-2" title='อันดับแผน (net-saving×ความเสี่ยง ภายใต้ข้อจำกัดจริง) — คนละอันดับกับ "อันดับความเสี่ยง" ในแท็บภาพรวม/P&amp;ID'>แผน #</th><th className="py-2">HX</th><th className="py-2 text-right">ค่าล้าง (฿)</th>
         <th className="py-2 text-right">ล้าง (ครั้ง)</th><th className="py-2">ครั้งถัดไป</th>
-        <th className="py-2 text-right">Net ฿/ปี</th><th className="py-2 text-right">CIT คืน</th><th className="py-2 text-right">payback</th><th className="py-2">เหตุผล</th></tr></thead>
+        <th className="py-2 text-right">Net ฿/ปี</th><th className="py-2 text-right">CIT คืน / คุ้มมั้ย</th><th className="py-2 text-right">payback</th><th className="py-2">เหตุผล</th></tr></thead>
       <tbody className="divide-y divide-black/[.03]">
         {online.map(p=>{
           const ov=costOv[p.HX]!=null;
@@ -852,7 +904,7 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
           return (<React.Fragment key={p.HX}>
           <tr>
           <td className="py-2 text-bcp-dgray">{p.priority_rank}</td>
-          <td className="py-2 font-bold text-bcp-black">{p.HX}{p.safety&&<span className="ml-1 text-[9px] text-bcp-red">⚠</span>}{p.online_mode==='ONLINE_PARTIAL'&&<span className="ml-1 text-[9px] font-semibold text-bcp-orange bg-bcp-orange/10 px-1 py-0.5 rounded-full">บางส่วน {Math.round(p.duty_fraction*100)}%</span>}</td>
+          <td className="py-2 font-bold text-bcp-black">{p.HX}{p.safety&&<span className="ml-1 text-[9px] text-bcp-red">⚠</span>}{p.online_mode==='ONLINE_PARTIAL'&&<span className="ml-1 text-[9px] font-semibold text-bcp-orange bg-bcp-orange/10 px-1 py-0.5 rounded-full">บางส่วน {Math.round(p.duty_fraction*100)}%</span>}{p.priority_rank===1&&riskTop1&&(p.HX===riskTop1?<span className="ml-1 text-[9px] font-semibold text-bcp-green bg-bcp-green/10 px-1 py-0.5 rounded-full" title="อันดับ 1 ตรงกันทั้งสองมุมมอง (ความเสี่ยง + ความคุ้มค่า)">✓ ตรงกับอันดับความเสี่ยง</span>:<span className="ml-1 text-[9px] font-semibold text-bcp-dgray bg-black/[.04] px-1 py-0.5 rounded-full" title={`แท็บภาพรวมจัดให้ ${riskTop1} เป็นอันดับความเสี่ยง #1 แทน — คนละมุมมองกับแผนนี้ (ความคุ้มค่า×ข้อจำกัด)`}>≠ อันดับความเสี่ยง ({riskTop1})</span>)}</td>
           <td className="py-2 text-right">
             {!isFormula&&<input type="number" step="10000" value={liveCost(p)} onChange={e=>setCost(p.HX,e.target.value===''?null:+e.target.value)} className="w-20 text-right tabular-nums border border-black/10 rounded px-1 py-0.5 text-[11px] focus:outline-none focus:border-bcp-turq"/>}
             {isFormula&&<span className="tabular-nums text-[11px] font-semibold text-bcp-turq">{liveCost(p).toLocaleString()}</span>}
@@ -864,7 +916,15 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
           <td className="py-2 text-right tabular-nums font-semibold">{p.n_cleans_to_tam}</td>
           <td className="py-2 text-[11px]">{p.next_clean?thaiDate(p.next_clean):'—'}</td>
           <td className="py-2 text-right tabular-nums text-bcp-green font-semibold">{p.net_saving_thb_yr!=null?(p.net_saving_thb_yr/1e6).toFixed(1)+'M':'—'}</td>
-          <td className="py-2 text-right tabular-nums text-[11px]" title="ประมาณจาก economics.json — ค่าเดียวต่อรอบล้าง ไม่ใช่ต่อครั้งสะสม">{citGain>0?'+'+citGain.toFixed(1)+'°C':'—'}</td>
+          <td className="py-2 text-right text-[11px]">
+            <div className="tabular-nums" title="ประมาณจาก economics.json — ค่าเดียวต่อรอบล้าง ไม่ใช่ต่อครั้งสะสม">{citGain>0?'+'+citGain.toFixed(1)+'°C':'—'}</div>
+            {p.fuel_value_per_clean_thb!=null&&
+              <div className="text-[9px] text-bcp-dgray tabular-nums">มูลค่าเชื้อเพลิง {(p.fuel_value_per_clean_thb/1000).toFixed(0)}k฿/ครั้ง</div>}
+            {liveWorthIt(p)!=null?
+              <span className={`inline-block mt-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${liveWorthIt(p)?'bg-bcp-green/10 text-bcp-green':'bg-bcp-red/10 text-bcp-red'}`}>
+                {liveWorthIt(p)?'✓ คุ้ม':'✗ ไม่คุ้มที่ราคานี้'}</span>
+              :<span className="inline-block mt-0.5 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-black/[.05] text-bcp-dgray" title="ยังไม่มีข้อมูล ΔCIT/ต้นทุนพอจะประเมิน — ต่างจาก 'ไม่คุ้ม' ซึ่งประเมินแล้วจริง">ยังไม่มีข้อมูลประเมิน</span>}
+          </td>
           <td className="py-2 text-right tabular-nums text-[11px]">{livePayback(p)!=null?'~'+livePayback(p)+'d':'—'}</td>
           <td className="py-2 text-[10.5px] text-bcp-dgray max-w-[220px]">{p.reason}</td>
           </tr>
@@ -911,6 +971,8 @@ function CleaningPlanPanel({plan,onPlanUpdated}){
       </tbody></table></div>
     <Basis title="ที่มาแผน (ตรวจได้ใน notebook 16)">
       <div>• แผนมาจาก <code>notebooks/16_cleaning_plan_optimization.ipynb</code> → <code>cleaning_plan.json</code>: constrained network optimizer (Dekebo, Oh &amp; Lee 2023) + จัดลำดับ net-saving × ความเสี่ยง (W_safety={plan.weights?.W_SAFETY}, W_pos={plan.weights?.W_POSITION}, W_worse={plan.weights?.W_WORSENING}).</div>
+      <div>• ลำดับ (#) ในตารางนี้เป็น <b>อันดับความคุ้มค่า×ข้อจำกัด</b> (cost/constraint optimizer) — คนละอันดับกับ "อันดับ 1" ในแท็บภาพรวม ซึ่งเป็นอันดับความเสี่ยง (Prob×Consequence/Effort จาก notebook 08) ทั้งสองมีจุดประสงค์ต่างกันโดยตั้งใจ จึงอาจไม่ตรงกัน.</div>
+      <div>• จำนวนครั้งล้าง (n_cleans_to_tam) มาจาก network optimizer ที่แก้ตารางล้าง <b>ทั้งเครือข่ายพร้อมกัน</b> ตาม fouling rate × ต้นทุนต่อ HX เพื่อลดต้นทุนรวมทั้งหมด — ไม่ได้อ่านลำดับ # ด้านบนเลย ดังนั้น HX ที่อันดับต่ำกว่าอาจได้จำนวนครั้งล้างมากกว่า HX อันดับสูงกว่าได้ (ถ้า fouling rate ของมันเร็วกว่าจนคุ้มต้นทุนล้างถี่กว่า) — เป็นพฤติกรรมที่ถูกต้องของการ optimize ต้นทุนรวม ไม่ใช่ข้อผิดพลาด.</div>
       <div>• T* อ้างอิงต่อ HX = √(2C/(k·r)) · k={Number(plan.k_baht_per_C_day).toLocaleString()} ฿/วัน/°C ที่ feed {fmt(plan.feed_kbd,1)} KBD.</div>
       <div>• แก้ค่าล้างต่อ HX แล้วกด "คำนวณใหม่" → backend รัน notebook 16 จริงด้วยค่าที่แก้ (ไม่ใช่แค่ประมาณในเบราว์เซอร์) ได้ตาราง/ลำดับ/worth_it ที่ถูกต้องตามค่าใหม่ 100%. ค่าล้าง/ทีมล้าง/TAM เป็นค่าสมมติรอวิศวกร.</div>
       <div>• กด 🧮 ข้างค่าล้างเพื่อใส่ <b>สมการต้นทุนแยกตามวิธีล้าง</b> (base_cost + (variable_cost+downtime_cost)×ระยะเวลา) แทนตัวเลขเดียว —
@@ -1517,10 +1579,11 @@ function EvStat({label,value,sub}){
     <div className="mt-1 text-[20px] leading-none font-bold text-bcp-black tabular-nums">{value}</div>
     {sub&&<div className="mt-1 text-[10px] text-bcp-dgray">{sub}</div>}</div>;
 }
-function EvidencePanel({ev}){
+function EvidencePanel({ev,econ}){
   if(!ev) return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
     ยังไม่มี <code>evidence.json</code> — รัน <code>python pipeline/export_evidence.py</code> (หรือ run_all.py) เพื่อสร้าง</div>;
   const d=ev.data||{}, val=ev.validation||{}, cit=val.cit||{}, gate=val.fouling_quality_gate||{};
+  const fgck=econ?.fg_flow_cross_check;
   const verdictColor=v=>v===false?BCP.red:v===true?BCP.green:BCP.dgray;
   return(
    <div className="space-y-5 fade-up">
@@ -1578,6 +1641,10 @@ function EvidencePanel({ev}){
           <div className="text-[10px] uppercase font-semibold text-bcp-dgray">Degradation drivers</div>
           <div className="mt-1 text-[15px] font-bold text-bcp-black">CV R² = {val.degradation_drivers.value?.toFixed?.(1)??val.degradation_drivers.value}</div>
           <div className="text-[10.5px] text-bcp-dgray mt-1">{val.degradation_drivers.note}</div></div>}
+        {fgck&&fgck.available&&fgck.n_events>0&&<div className="rounded-xl border border-black/[.06] bg-black/[.015] px-3.5 py-3">
+          <div className="text-[10px] uppercase font-semibold text-bcp-dgray">สูตร ΔCIT→FG cross-check</div>
+          <div className="mt-1 text-[15px] font-bold text-bcp-black">ratio {fgck.median_ratio_measured_vs_plant}× (โรงงาน) / {fgck.median_ratio_measured_vs_legacy}× (legacy)</div>
+          <div className="text-[10.5px] text-bcp-dgray mt-1">measured/predicted FG-flow drop, median จาก {fgck.n_events} เหตุการณ์ล้าง terminal HX จริง (1FI028.pv ก่อน/หลังล้าง ±{fgck.window_days} วัน) — {fgck.note}</div></div>}
       </div>
     </div>
 
@@ -1649,7 +1716,8 @@ function App(){
   const [chist,setChist]=useState(null);  // cleaning_history.json (audit ประวัติการล้าง)
   const [tamA,setTamA]=useState(null);    // tam_analysis.json (SOR/EOR 2021-2026)
   const [ev,setEv]=useState(null);        // evidence.json (หลักฐาน & ความเชื่อมั่น)
-  const [plan,setPlan]=useState(null);    // cleaning_plan.json (แผนล้างเดียวที่รวมทุกด้าน)
+  const [plan,setPlan]=useState(null);    // cleaning_plan.json (แผนล้าง — notebook 16 cost/constraint optimizer)
+  const [engPriority,setEngPriority]=useState([]);  // engineering_priority.json (notebook 08 risk-based ranking)
 
   const load=useCallback(()=>{
     setLoading(true);
@@ -1657,9 +1725,9 @@ function App(){
     Promise.all([loadJSON('hx_ranking.json'),loadJSON('cleaning_recommendations.json'),loadJSON('model_metrics.json'),loadJSON('forecast_6mo.json'),loadJSON('pfd_topology.json'),
       opt('rul.json'),opt('reliability.json'),opt('propagation_models.json'),opt('drivers.json'),opt('hx_timeseries.json'),
       opt('end_of_run.json'),opt('economics.json'),opt('cleaning_logistics.json'),opt('cleaning_history.json'),
-      opt('tam_analysis.json'),opt('evidence.json'),opt('cleaning_plan.json')])
-      .then(([rk,rc,md,fc,tp,rul,rel,prop,drv,ts,eo,ec,lg,ch,ta,evd,pl])=>{setRanking(rk);setRecs(rc);setModels(md);setForecast(fc);setTopo(tp);
-        setPhm({rul,rel,prop,drv});setHxts(ts);setEor(eo);setEcon(ec);setLogi(lg);setChist(ch);setTamA(ta);setEv(evd);setPlan(pl);setLoading(false);})
+      opt('tam_analysis.json'),opt('evidence.json'),opt('cleaning_plan.json'),opt('engineering_priority.json')])
+      .then(([rk,rc,md,fc,tp,rul,rel,prop,drv,ts,eo,ec,lg,ch,ta,evd,pl,ep])=>{setRanking(rk);setRecs(rc);setModels(md);setForecast(fc);setTopo(tp);
+        setPhm({rul,rel,prop,drv});setHxts(ts);setEor(eo);setEcon(ec);setLogi(lg);setChist(ch);setTamA(ta);setEv(evd);setPlan(pl);setEngPriority(ep||[]);setLoading(false);})
       .catch(e=>{setErr(e.message);setLoading(false);});
   },[]);
   useEffect(load,[load]);
@@ -1668,14 +1736,17 @@ function App(){
     const m={};(topo?.order||[]).forEach(hx=>m[hx]={HX:hx});
     ranking.forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
     recs.forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
-    // cleaning_plan.json (notebook 16's constrained scheduling optimizer) is the ranking
-    // authority for the dashboard -- merged last so its priority_rank/online/online_mode/
-    // next_clean/reason win over the SHAP-based hx_ranking.json/cleaning_recommendations.json
-    // fields above, so the Overview tab (P&ID badges, detail panel, table, "อันดับ 1" tile)
-    // agrees with the Plan tab instead of showing a third, independent ranking.
-    (plan?.per_hx||[]).forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
+    // engineering_priority.json (notebook 08's risk-based Probability x Consequence / Effort
+    // ranking) is the ranking authority for the Overview & P&ID tab -- merged last so its
+    // priority_rank/effort_tier/expected_CIT_gain_C/safety_flag/worsening win over the
+    // SHAP-based hx_ranking.json/cleaning_recommendations.json fields above. Deliberately NOT
+    // merging plan.per_hx (notebook 16's cost-aware scheduling optimizer) here -- that ranking
+    // stays scoped to the Plan tab only (CleaningPlanPanel reads `plan` directly), since the two
+    // rankings answer different questions (risk triage vs. constrained cost optimization) and
+    // are not meant to agree.
+    engPriority.forEach(r=>m[r.HX]={...(m[r.HX]||{HX:r.HX}),...r});
     return m;
-  },[ranking,recs,plan,topo]);
+  },[ranking,recs,engPriority,topo]);
 
   const onSelect=useCallback(hx=>{setSelected(hx);setSimHX(s=>s&&s!==hx?null:s);},[]);
   const onSim=useCallback(()=>setSimHX(p=>p===selected?null:selected),[selected]);
@@ -1715,9 +1786,9 @@ function App(){
   const atRisk=recs.filter(r=>r.at_risk_within_6mo).length;
   const cit=topo?.furnace?.find(x=>x.key==='CIT')?.value;
   const tamDays=daysBetween(new Date(),params.NEXT_TAM);
-  const top1=(plan?.per_hx||[]).slice().sort((a,b)=>(a.priority_rank||99)-(b.priority_rank||99))[0];
+  const top1=engPriority.slice().sort((a,b)=>(b.engineering_priority_score||0)-(a.engineering_priority_score||0))[0];
 
-  const TABS=[['overview','ภาพรวม & P&ID'],['hxdetail','HX รายตัว'],['furnace','เตา & Optimization'],['phm','พยากรณ์ & ความเสี่ยง'],['plan','แผนล้าง HX'],['model','โมเดล & Optimization'],['evidence','หลักฐาน & ความเชื่อมั่น']];
+  const TABS=[['overview','ภาพรวม & P&ID'],['plan','แผนล้าง HX'],['phm','พยากรณ์ & ความเสี่ยง'],['furnace','เตา & โมเดล Optimization'],['evidence','หลักฐาน & ความเชื่อมั่น']];
 
   return(
    <div className="min-h-screen font-sans text-bcp-black">
@@ -1744,7 +1815,7 @@ function App(){
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Kpi icon="🌡" tone={cit<params.CIT_MIN?'orange':'green'} label="CIT ปัจจุบัน" value={`${fmt(cit,1)}°C`} sub={cit<params.CIT_MIN?`ต่ำกว่าเกณฑ์ ${params.CIT_MIN}°C`:`เป้า ${params.CIT_TARGET}°C`} foot={`ขาด ${fmt(Math.max(0,params.CIT_TARGET-cit),1)}°C จากเป้า`}/>
           <Kpi icon="🧽" tone={urgent>3?'orange':'green'} label="ต้องล้างด่วน" value={`${urgent} HX`} sub={`จาก ${recs.length} ที่ติดตาม`} foot={`เสี่ยงใน 6 เดือน: ${atRisk}`}/>
-          <Kpi icon="🏆" tone="orange" label="อันดับ 1" value={top1?.HX||'—'} sub={top1?`Priority ${fmt(top1.priority_score,2)}`:''} foot={top1?(effortTH[top1.online_mode]||'—'):''}/>
+          <Kpi icon="🏆" tone="orange" label="อันดับ 1 (ความเสี่ยง)" value={top1?.HX||'—'} sub={top1?`Priority ${fmt(top1.engineering_priority_score,2)}`:''} foot={`${top1?(effortTH[top1.effort_tier]||'—'):''} · อันดับความเสี่ยง (Prob×Consequence/Effort) — อาจต่างจากลำดับในแท็บ "แผนล้าง HX" ซึ่งเรียงตามความคุ้มค่า×ข้อจำกัด`}/>
           <Kpi icon="🛠" tone="blue" label="TAM ถัดไป" value={`${tamDays} วัน`} sub={thaiDate(params.NEXT_TAM)} foot="Turnaround Maintenance"/>
         </section>
         <PID topo={topo} units={units} selected={selected} onSelect={onSelect}/>
@@ -1752,21 +1823,21 @@ function App(){
           <div className="lg:col-span-4"><DetailPanel hx={selected} unit={curUnit} onSim={onSim} simActive={simActive} fc={curFc} node={topo?.nodes?.[selected]}/></div>
           <div className="lg:col-span-8"><ForecastChart hx={selected} fc={curFc} simActive={simActive} unit={curUnit}/></div>
         </section>
+        <HXDetailPanel hxts={hxts} units={units} selected={selected} onSelect={onSelect} eor={eor} params={params} chist={chist}/>
       </>}
-      {tab==='hxdetail'&&<HXDetailPanel hxts={hxts} units={units} selected={selected} onSelect={onSelect} eor={eor} params={params} chist={chist}/>}
-      {tab==='furnace'&&<FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ}/>}
       {tab==='phm'&&<PrognosticsPanel phm={phm} units={units} selected={selected} onSelect={onSelect}/>}
       {tab==='plan'&&<>
-        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan}/>
+        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan} riskTop1={top1?.HX}/>
         <CitLimitWhatIf tamA={tamA} topo={topo} params={params} econ={econ}/>
         <SlideChart tamA={tamA}/>
         <LogisticsTable logi={logi}/>
       </>}
-      {tab==='model'&&<>
+      {tab==='furnace'&&<>
+        <FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ}/>
         <ModelPanel models={models} ranking={ranking}/>
         <OptimizePanel params={params} setParams={setParams} onRerun={onRerun} onRunFull={onRunFull} status={rerun}/>
       </>}
-      {tab==='evidence'&&<EvidencePanel ev={ev}/>}
+      {tab==='evidence'&&<EvidencePanel ev={ev} econ={econ}/>}
       <footer className="pt-2 pb-8 text-center text-[11px] text-bcp-dgray">
         Bangchak CPHT Predictive Maintenance · ข้อมูลจาก <code className="text-bcp-black/60">dashboard/data/*.json</code> (notebooks 08/06/10-13) · P&ID ตาม cpht_config topology
       </footer>

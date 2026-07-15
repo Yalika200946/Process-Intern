@@ -53,6 +53,7 @@ CHAIN = [
 # post-processors that MUST run after 13 (CIT forecast export) to keep honest artifacts
 POST = [
     ('honest model_metrics.json', [sys.executable, str(REPO / 'pipeline' / 'gen_honest_metrics.py')]),
+    ('engineering priority ranking (nb 08)', [sys.executable, str(REPO / 'pipeline' / 'export_engineering_priority.py')]),
     ('forecast prediction bands', [sys.executable, str(NB / 'add_forecast_intervals.py')]),
     ('P&ID topology + furnace',   [sys.executable, str(NB / 'build_dashboard_topology.py')]),
     ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),

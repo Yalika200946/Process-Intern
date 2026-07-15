@@ -71,6 +71,18 @@ print('REPO :', REPO); print('DATA :', DATA)
 COST_OVERRIDES = load('cost_overrides.json', {}) or {}
 if COST_OVERRIDES:
     print(f'cost overrides active for {len(COST_OVERRIDES)} HX:', COST_OVERRIDES)
+
+# hard CIT-floor constraint (degC of total network deficit the schedule must never exceed)
+# -- same override pattern as COST_OVERRIDES: backend/server.py writes cit_floor_override.json
+# before re-running this notebook if the dashboard's "คำนวณใหม่" button was given a CIT floor.
+# Default 8.05 degC = dashboard's own DEFAULT_PARAMS.CIT_TARGET(258.05) - CIT_MIN(250)
+# (index.html) -- i.e. by default the plan must keep CIT from falling below the plant's stated
+# operating minimum, matching the same numbers the Overview tab already shows the engineer.
+DEFAULT_CIT_DEFICIT_C = 8.05
+_cit_floor = load('cit_floor_override.json', {}) or {}
+MAX_CIT_DEFICIT_C = _cit_floor.get('max_deficit_C', DEFAULT_CIT_DEFICIT_C)
+print(f'CIT floor constraint: network deficit must stay <= {MAX_CIT_DEFICIT_C} degC'
+      + (' (override)' if 'max_deficit_C' in _cit_floor else ' (default)'))
 """.strip("\n")))
 
 cells.append(md_cell(r"""
@@ -213,7 +225,13 @@ dec['freq_ref_per_yr'] = (365 / dec['T_star_ref_days']).round(2)
 
 # --- explicit "คุ้มไหม" verdict: fuel value recovered per clean vs cleaning cost ---
 dec['fuel_value_per_clean_thb'] = (dec['cit_gain_C_online'] * k_day * dec['T_star_ref_days'] / 2).round(0)
-dec['worth_it'] = dec['online'] & (dec['fuel_value_per_clean_thb'] > dec['cleaning_cost'])
+# has_economics distinguishes "genuinely evaluated, not worth it" from "no data to evaluate at
+# all" -- without this, NaN > cost silently evaluates to False in pandas/numpy, so an HX with no
+# fouling-rate/ΔCIT data at all looked identical to one that was actually costed out and failed.
+dec['has_economics'] = dec['fuel_value_per_clean_thb'].notna() & dec['cleaning_cost'].notna()
+dec['worth_it'] = np.where(dec['has_economics'],
+                            dec['online'] & (dec['fuel_value_per_clean_thb'] > dec['cleaning_cost']),
+                            np.nan)
 dec[['HX','online','cit_gain_C_full','cit_gain_C_online','r_cit_per_day','cleaning_cost',
      'fuel_value_per_clean_thb','worth_it','T_star_ref_days','freq_ref_per_yr','net_saving_thb_yr','payback_days']]
 """.strip("\n")))
@@ -245,7 +263,14 @@ dec['risk_mult'] = (1 + W_SAFETY * dec.safety.astype(int)
                       + W_POSITION * dec.position_risk
                       + W_WORSENING * dec.worsening.astype(int)).round(3)
 dec['priority_score'] = (dec['net_saving_norm'] * dec['risk_mult']).round(3)
-dec = dec.sort_values('priority_score', ascending=False).reset_index(drop=True)
+# priority_score is net_saving_norm x risk_mult -- multiplicative, so it collapses to exactly 0
+# for every HX with no usable economics data (net_saving_norm=0), regardless of risk_mult. That
+# used to leave those HX tied and ordered only by DataFrame insertion order, silently discarding
+# the safety/position/worsening signal for exactly the HX where it matters most (no clean-economics
+# to fall back on). has_savings as the primary sort key keeps ranks 1-10 (real economics) exactly
+# as before, and breaks the zero-score tie by risk_mult instead of insertion order.
+dec['has_savings'] = (dec['net_saving_norm'] > 0).astype(int)
+dec = dec.sort_values(['has_savings', 'priority_score', 'risk_mult'], ascending=False).reset_index(drop=True)
 dec['priority_rank'] = dec.index + 1
 dec[['priority_rank','HX','online','net_saving_norm','safety','position_risk','worsening','risk_mult','priority_score']].head(16)
 """.strip("\n")))
@@ -264,6 +289,7 @@ cells.append(code_cell(r"""
 import cleaning_scheduler_network as NS
 chist = load('cleaning_history.json', {'hx': {}})
 sched_v1 = load('cleaning_schedule.json')
+topo = load('pfd_topology.json', {})
 # rebuild an economics dict carrying the (possibly overridden) per-HX costs from §1-2
 econ_live = dict(econ); econ_live['per_hx'] = list(econ_by.values())
 # scope THE plan's per-HX numbers (n_cleans_to_tam, scheduled_dates) to the FIRST TAM cycle --
@@ -271,12 +297,22 @@ econ_live = dict(econ); econ_live['per_hx'] = list(econ_by.values())
 # meaning unchanged. compute_schedule() now defaults to a multi-cycle horizon (2028 + 2032,
 # see cleaning_scheduler_network.TAM_DATES) when tam_dates isn't given -- fetched separately
 # below (schedV2_full) purely for cross-cycle visibility, without touching the per-HX numbers
-# everything else in this notebook depends on.
-schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1, tam_dates=[NS.NEXT_TAM])
-schedV2_full = NS.compute_schedule(econ_live, chist, logi, sched_v1)   # full multi-TAM horizon
+# everything else in this notebook depends on. `topo` (pfd_topology.json) lets compute_schedule
+# also enforce the furnace's own FG_FLOW limit as a second hard ceiling alongside MAX_CIT_DEFICIT_C
+# -- see furnace_fg_ceiling_C/binding_constraint in its output.
+schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1, tam_dates=[NS.NEXT_TAM],
+                              max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo)
+schedV2_full = NS.compute_schedule(econ_live, chist, logi, sched_v1,
+                                   max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo)   # full multi-TAM horizon
+print(f"CIT floor: satisfied={schedV2['constraint_satisfied']} "
+      f"max realized deficit={schedV2['max_realized_deficit_C']} degC "
+      f"(effective ceiling {schedV2.get('effective_max_deficit_C')} degC, "
+      f"binding={schedV2.get('binding_constraint')})")
 print('optimizer window (months):', schedV2.get('optimal_window_months'),
       '· constraints: crew<=%d/mo, <=%d/yr/HX' % (schedV2.get('max_online_cleans_per_period', 2),
                                                    schedV2.get('max_cleans_per_year_per_hx', 4)))
+if schedV2.get('tube_skin_risk_advisory'):
+    print('⚠', schedV2.get('tube_skin_risk_note'))
 if COST_OVERRIDES:
     print('(recomputed live with cost overrides — NOT the static cleaning_schedule_v2.json)')
 plan_by = {p['HX']: p for p in schedV2.get('per_hx', [])}
@@ -357,7 +393,8 @@ cells.append(md_cell(r"""
 cells.append(code_cell(r"""
 def reason(r):
     bits = []
-    if r['worth_it'] is False and r['online']: bits.append('⚠ มูลค่าเชื้อเพลิงไม่คุ้มค่าล้างที่ราคานี้')
+    if r['online'] and not r['has_economics']: bits.append('ยังไม่มีข้อมูลประเมิน ΔCIT — บอกความคุ้มค่าไม่ได้')
+    elif r['online'] and r['has_economics'] and not r['worth_it']: bits.append('⚠ มูลค่าเชื้อเพลิงไม่คุ้มค่าล้างที่ราคานี้')
     if r['payback_days'] and r['payback_days'] < 120: bits.append('คืนทุนเร็ว')
     if r['safety']: bits.append('safety')
     if r['position_risk'] >= 0.8: bits.append('ปลายเทรน (ร้อน/เสี่ยง coking)')
@@ -382,6 +419,7 @@ for _, r in dec.iterrows():
         cleaning_cost_overridden=bool(r['cleaning_cost_overridden']),
         cleaning_cost_method=cost_override_meta.get(r['HX']),
         fuel_value_per_clean_thb=(None if pd.isna(r['fuel_value_per_clean_thb']) else int(r['fuel_value_per_clean_thb'])),
+        has_economics=bool(r['has_economics']),
         worth_it=(None if pd.isna(r['worth_it']) else bool(r['worth_it'])),
         net_saving_thb_yr=(None if pd.isna(r['net_saving_thb_yr']) else int(r['net_saving_thb_yr'])),
         payback_days=(None if pd.isna(r['payback_days']) else round(float(r['payback_days']), 1)),
@@ -405,6 +443,25 @@ out = dict(
     # past the first TAM so the dashboard can show the full planning horizon.
     per_hx_full_horizon=schedV2_full.get('per_hx'),
     timeline_full_horizon=schedV2_full.get('timeline'),
+    # hard CIT-floor constraint result (from the FIRST-cycle solve, schedV2, which drives the
+    # per-HX table above) -- constraint_satisfied=False is a real, honest result (not an error):
+    # it means the plant's crew-capacity limits (max_freq_per_year/crew_per_month below) cannot
+    # sustain this CIT floor given the current measured fouling rates, not a solver failure.
+    max_cit_deficit_C_applied=schedV2.get('max_cit_deficit_C_applied'),
+    max_realized_deficit_C=schedV2.get('max_realized_deficit_C'),
+    constraint_satisfied=schedV2.get('constraint_satisfied'),
+    # furnace's own FG_FLOW limit, converted to an equivalent CIT-deficit ceiling and combined
+    # (min) with the CIT floor above -- see cleaning_scheduler_network.furnace_fg_deficit_ceiling_C.
+    # binding_constraint tells the dashboard WHICH of the two hard limits is actually driving the
+    # schedule right now (relevant to the TAM 3->4yr question: if binding_constraint ever becomes
+    # 'furnace_fg', the furnace's fuel limit -- not just the CIT target -- is what's capping how
+    # long cleaning can be deferred).
+    furnace_fg_ceiling_C=schedV2.get('furnace_fg_ceiling_C'),
+    furnace_fg_info=schedV2.get('furnace_fg_info'),
+    effective_max_deficit_C=schedV2.get('effective_max_deficit_C'),
+    binding_constraint=schedV2.get('binding_constraint'),
+    tube_skin_risk_advisory=schedV2.get('tube_skin_risk_advisory'),
+    tube_skin_risk_note=schedV2.get('tube_skin_risk_note'),
     cost_overrides_applied=COST_OVERRIDES,
     method=('แผนเดียว: constrained network moving-window optimizer (Dekebo, Oh & Lee 2023) '
             'เคารพ bypass/ทีมล้าง/เพดาน 4-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '

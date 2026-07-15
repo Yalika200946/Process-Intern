@@ -71,7 +71,7 @@ REPO = Path(__file__).resolve().parent.parent
 DATA = REPO / 'dashboard' / 'data'
 OUT = DATA / 'cleaning_schedule_v2.json'
 sys.path.append(str(REPO / 'pipeline'))
-from export_economics import CLEANING_COST_BY_HX, DEFAULT_CLEANING_COST
+from export_economics import CLEANING_COST_BY_HX, DEFAULT_CLEANING_COST, LEGACY
 
 def _parse_tam_dates():
     """TAM dates, confirmed by the plant: the near TAM is 2028-06-01; the plant's TAM
@@ -135,7 +135,59 @@ def build_hx_state(econ, chist, logi):
     return out
 
 
+def furnace_fg_deficit_ceiling_C(econ, topo):
+    """Convert the furnace's FG_FLOW operating limit (dashboard/data/pfd_topology.json,
+    key='FG_FLOW' -- currently limit=9.0 t/h vs a target/baseline ~6.7 t/h) into an
+    equivalent CIT-deficit ceiling [degC], using the SAME legacy first-principles formula
+    the dashboard's FurnacePanel banner already uses client-side (dashboard/index.html's
+    dFG: charge*RHO_CRUDE*CP_CRUDE*dC/(LHV_FG*FURNACE_EFF)) -- reusing
+    export_economics.LEGACY rather than re-deriving new constants, so this ceiling and the
+    dashboard's own "เตาเผา FG เพิ่ม ~X t/h" banner agree by construction.
+
+    This lets the furnace's own fuel-flow limit act as a SECOND hard ceiling on the
+    network's CIT deficit, alongside (not instead of) the CIT-floor input
+    (`max_cit_deficit_C`) the dashboard already exposes -- previously the optimizer only
+    ever checked the CIT floor and had no way to know a deep deficit would also push firing
+    past the furnace's own FG limit.
+
+    Returns (ceiling_C, info). ceiling_C is None if the topology/limit isn't available
+    (e.g. a stripped demo dataset without pfd_topology.json) -- callers must treat None as
+    "no additional constraint", never as zero."""
+    furnace = (topo or {}).get('furnace') or []
+    fg = next((f for f in furnace if f.get('key') == 'FG_FLOW'), None)
+    charge = (econ or {}).get('charge_m3h')
+    if not fg or fg.get('limit') is None or not charge:
+        return None, dict(available=False)
+    fg_limit_tph = float(fg['limit'])
+    fg_baseline_tph = float(fg['target'] if fg.get('target') is not None else fg.get('value', fg_limit_tph))
+    headroom_tph = max(0.0, fg_limit_tph - fg_baseline_tph)
+    # t/h of FG implied per degC of CIT deficit, at the current charge rate -- same formula
+    # as the dashboard's live banner, just solved for tph-per-degC instead of tph-for-a-given-dC
+    tph_per_degC = charge * LEGACY['RHO_CRUDE'] * LEGACY['CP_CRUDE'] / (LEGACY['LHV_FG'] * LEGACY['FURNACE_EFF']) / 1000.0
+    if tph_per_degC <= 0:
+        return None, dict(available=False)
+    ceiling_C = headroom_tph / tph_per_degC
+    return ceiling_C, dict(available=True, fg_limit_tph=fg_limit_tph, fg_baseline_tph=fg_baseline_tph,
+                           headroom_tph=round(headroom_tph, 3), tph_per_degC=round(tph_per_degC, 4),
+                           charge_m3h=charge,
+                           source=('pfd_topology.json FG_FLOW.limit (ค่าสมมติ รอวิศวกรเตายืนยัน) + '
+                                   'export_economics.LEGACY formula (สูตรเดียวกับ banner หน้าเตาบน dashboard)'))
+
+
 OBJ_SCALE = 1e-6   # THB -> million-THB, purely for the SLSQP solve (see window_objective docstring)
+
+
+def _deviation_trajectory(y_flat, dev0, r, n_hx, n_t):
+    """Replay the deviation recurrence dev[t+1] = (dev[t] + r*PERIOD_DAYS)*(1-y[t]) for a
+    flat SLSQP decision vector. Shared by window_objective (the cost) and the CIT-floor
+    constraint functions in solve_window (the deficit ceiling) so both agree on exactly the
+    same trajectory -- factored out rather than duplicated."""
+    y = y_flat.reshape(n_hx, n_t)
+    dev = np.zeros((n_hx, n_t + 1))
+    dev[:, 0] = dev0
+    for t in range(n_t):
+        dev[:, t + 1] = (dev[:, t] + r * PERIOD_DAYS) * (1 - y[:, t])
+    return dev
 
 
 def window_objective(y_flat, dev0, r, cost, k_per_day, n_hx, n_t):
@@ -147,18 +199,22 @@ def window_objective(y_flat, dev0, r, cost, k_per_day, n_hx, n_t):
     detecting the (very real, ~10x) improvement available by cleaning. Rescaling the
     objective to O(1-100) magnitude fixes the finite-difference gradient without
     changing where the optimum is; realized_cost() below still reports true THB."""
+    dev = _deviation_trajectory(y_flat, dev0, r, n_hx, n_t)
     y = y_flat.reshape(n_hx, n_t)
-    dev = np.zeros((n_hx, n_t + 1))
-    dev[:, 0] = dev0
-    for t in range(n_t):
-        dev[:, t + 1] = (dev[:, t] + r * PERIOD_DAYS) * (1 - y[:, t])
     cit_deficit_total = dev[:, 1:].sum(axis=0)                 # per period, after that period's action
     fuel = float(np.sum(k_per_day * PERIOD_DAYS * cit_deficit_total))
     clean = float(np.sum(cost[:, None] * y))
     return (fuel + clean) * OBJ_SCALE
 
 
-def solve_window(dev0, r, cost, k_per_day, n_t):
+def solve_window(dev0, r, cost, k_per_day, n_t, max_deficit=None):
+    """`max_deficit`, when set, is a HARD constraint: the network's total CIT deficit
+    (sum over HX of deviation_hx(t), the same quantity the objective already prices as
+    fuel cost) may never exceed it in any period of the window -- i.e. CIT must not fall
+    more than `max_deficit` degC below its fully-clean value. Without this the optimizer
+    only trades deficit off against cleaning cost and will happily let CIT sag if fuel is
+    "cheap enough"; this makes "must hit the operating CIT floor" non-negotiable rather
+    than just economically discouraged."""
     n_hx = len(dev0)
     if n_hx == 0 or n_t == 0:
         return np.zeros((n_hx, max(n_t, 0)))
@@ -175,13 +231,31 @@ def solve_window(dev0, r, cost, k_per_day, n_t):
             idx = np.arange(n_hx) * n_t + t
             cons.append({'type': 'ineq',
                         'fun': (lambda x, idx=idx: MAX_ONLINE_CLEANS_PER_PERIOD - x[idx].sum())})
+    if max_deficit is not None:
+        # cap - cit_deficit_total(t) >= 0, for every period t in the window. If the
+        # STARTING deviation for this window already exceeds max_deficit (e.g. a long
+        # TAM-only backlog with no online HX left to clean), this is infeasible for
+        # period 0 no matter what y is -- SLSQP returns its best (still-violating)
+        # effort rather than erroring, which is why compute_schedule() below re-checks
+        # the REALIZED trajectory afterward and reports constraint_satisfied honestly
+        # instead of trusting the solver status.
+        for t in range(n_t):
+            def _cap_minus_deficit(x, t=t):
+                dev = _deviation_trajectory(x, dev0, r, n_hx, n_t)
+                return max_deficit - float(dev[:, t + 1].sum())
+            cons.append({'type': 'ineq', 'fun': _cap_minus_deficit})
+    # a tight max_deficit adds one nonlinear inequality constraint per period on top of the
+    # crew-cap ones -- SLSQP needs a larger iteration budget for these to actually converge
+    # (starting from x0=0, which itself already violates a tight floor) rather than exit at a
+    # poor local point; 200 was tuned for the unconstrained/crew-cap-only problem.
+    maxiter = 600 if max_deficit is not None else 200
     res = minimize(window_objective, x0, args=(dev0, r, cost, k_per_day, n_hx, n_t),
                    method='SLSQP', bounds=bounds, constraints=cons,
-                   options=dict(maxiter=200, ftol=1e-6))
+                   options=dict(maxiter=maxiter, ftol=1e-6))
     return res.x.reshape(n_hx, n_t)
 
 
-def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=()):
+def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=(), max_deficit=None):
     """Full moving-window schedule: solve window, commit period 0, roll forward.
 
     `tam_reset_periods`: period indices at which a TAM turnaround happens (cleans
@@ -195,7 +269,7 @@ def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_
     y_committed = np.zeros((n_hx, n_periods))
     for p in range(n_periods):
         w = min(window, n_periods - p)
-        y_win = solve_window(dev, r, cost, k_per_day, w)
+        y_win = solve_window(dev, r, cost, k_per_day, w, max_deficit=max_deficit)
         frac = np.clip(y_win[:, 0], 0, 1)
         y0 = np.round(frac)                              # bang-bang rounding for the committed period
 
@@ -235,6 +309,23 @@ def realized_cost(dev0, r, cost, k_per_day, y_committed, tam_reset_periods=()):
     return fuel + clean, fuel, clean
 
 
+def realized_deficit_trajectory(dev0, r, y_committed, tam_reset_periods=()):
+    """Total network CIT deficit (sum over HX) per period, for the FINAL committed/rounded
+    schedule -- not the SLSQP continuous relaxation solve_window's constraint was checked
+    against. Rounding/crew-cap/annual-cap clamps in run_schedule can push the committed
+    schedule to violate a constraint the relaxed LP satisfied, so this is the honest
+    trajectory to report constraint_satisfied against, not the solver's internal one."""
+    n_hx, n_t = y_committed.shape
+    dev = np.array(dev0, dtype=float).copy()
+    traj = []
+    for t in range(n_t):
+        dev = (dev + r * PERIOD_DAYS) * (1 - y_committed[:, t])
+        if t in tam_reset_periods:
+            dev[:] = 0.0
+        traj.append(float(dev.sum()))
+    return traj
+
+
 def v1_schedule_matrix(hx_ids, r, cost, dev0, n_periods, sched_v1):
     """Rebuild v1's committed y[hx,t] (0/1) from cleaning_schedule.json's per-HX dates,
     so it can be scored under the EXACT same objective as v2 (honest apples-to-apples)."""
@@ -255,7 +346,7 @@ def v1_schedule_matrix(hx_ids, r, cost, dev0, n_periods, sched_v1):
     return y
 
 
-def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None):
+def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_deficit_C=None, topo=None):
     """Core computation, reusable in-memory (e.g. by notebook 16 with cost overrides
     applied to `econ` before calling) as well as by `main()` below which writes the
     static dashboard/data/cleaning_schedule_v2.json. Returns the `out` dict.
@@ -263,13 +354,47 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None):
     Horizon spans ALL of `tam_dates` (default TAM_DATES = [2028-06-01, 2032-06-01]),
     not just the first one — see `_parse_tam_dates` docstring for why. Every TAM date
     except the last is a mandatory reset (a turnaround cleans everything, online-
-    capable or not) baked into `run_schedule`/`realized_cost` via `tam_reset_periods`."""
+    capable or not) baked into `run_schedule`/`realized_cost` via `tam_reset_periods`.
+
+    `max_cit_deficit_C`: optional hard ceiling (degC) on the network's total CIT deficit
+    (sum over online-capable HX of their deviation) at every period -- i.e. CIT must not
+    fall more than this many degrees below its fully-clean value. None (default) keeps the
+    original unconstrained cost-only behavior (e.g. the static main()/cleaning_schedule_v2.json
+    path). Passed through to every window solve in the sweep AND used to report whether the
+    FINAL committed schedule actually honors it (see realized_deficit_trajectory).
+
+    `topo`: dashboard/data/pfd_topology.json contents (dict), defaults to loading it from
+    disk if not given. Used to derive a SECOND hard ceiling from the furnace's own FG_FLOW
+    operating limit (furnace_fg_deficit_ceiling_C) -- the effective ceiling passed to every
+    window solve is min(max_cit_deficit_C, furnace_fg_ceiling_C), i.e. whichever constraint
+    is tighter binds; neither one is allowed to relax the other."""
     tam_dates = sorted(tam_dates or TAM_DATES)
     last_tam = tam_dates[-1]
 
     pc = econ.get('plant_constants', {})
     feed_kbd = econ.get('feed_kbd') or 79.3
+    # NOTE: deliberately NOT multiplied by pc['CIT_DECAY_FACTOR'] (0.5). export_economics.py's
+    # annual saving_thb_yr applies that 0.5 as a flat approximation because it only ever prices
+    # a single ΔCIT_full number, not a time trajectory. This scheduler instead integrates the
+    # REAL sawtooth deviation trajectory dev(t) period-by-period (see window_objective /
+    # realized_cost below), which already reproduces the "average is about half the peak"
+    # effect from the actual ramp shape -- applying 0.5 again here would double-count it and
+    # under-price fuel cost. Same reasoning as dashboard/index.html's per-HX simulation panel
+    # (search "sim คิด decay จากเส้นจริง จึงไม่คูณ 0.5 ซ้ำ") -- keep this comment if "fixing" this
+    # inconsistency comes up again; it isn't one.
     k_per_day = pc.get('STD_ENERGY', 0.74) * feed_kbd * pc.get('NG_PRICE', 390)
+
+    if topo is None:
+        topo = _load('pfd_topology.json', {})
+    furnace_ceiling_C, furnace_info = furnace_fg_deficit_ceiling_C(econ, topo)
+    candidate_ceilings = [c for c in (max_cit_deficit_C, furnace_ceiling_C) if c is not None]
+    effective_max_deficit_C = min(candidate_ceilings) if candidate_ceilings else None
+    binding_constraint = None
+    if candidate_ceilings:
+        binding_constraint = ('furnace_fg' if (furnace_ceiling_C is not None
+                              and furnace_ceiling_C == effective_max_deficit_C
+                              and (max_cit_deficit_C is None or furnace_ceiling_C < max_cit_deficit_C))
+                              else 'cit_floor')
 
     as_of = pd.Timestamp((chist.get('as_of')) or pd.Timestamp.now().strftime('%Y-%m-%d'))
     days_to_horizon_end = max(1, (last_tam - as_of).days)
@@ -290,17 +415,53 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None):
     dev0 = np.array([state[hx]['deviation0'] for hx in online_ids])
 
     # --- window-size sweep (paper Fig. 3 / Table 2 methodology): pick SMW minimizing realized cost ---
+    # When effective_max_deficit_C is set (CIT floor and/or furnace FG-limit-derived ceiling,
+    # whichever is tighter), the per-window SLSQP solve is constrained, but bang-bang ROUNDING
+    # in run_schedule (plus the crew/annual-cap hard clamps) can still let a candidate window's
+    # FINAL committed schedule violate it even though the continuous relaxation didn't --
+    # and different window sizes round differently. Picking "best" by raw cost alone (as before)
+    # ignored this entirely, so a constrained run could end up choosing a window that violates the
+    # floor MORE than the unconstrained optimum would have (confirmed empirically while adding this
+    # constraint). Selection now prefers constraint-SATISFYING windows first (lowest cost among
+    # those), falling back to the least-violating window only if none satisfy it -- so the hard
+    # constraint's intent ("prefer meeting the floor") survives the sweep, not just the per-window
+    # solve.
     sweep = []
-    best = None
+    candidates = []
     for w in WINDOW_CANDIDATES:
-        y = run_schedule(online_ids, dev0, r, cost, k_per_day, n_periods, w, tam_reset_periods)
+        y = run_schedule(online_ids, dev0, r, cost, k_per_day, n_periods, w, tam_reset_periods,
+                          max_deficit=effective_max_deficit_C)
         total, fuel, clean = realized_cost(dev0, r, cost, k_per_day, y, tam_reset_periods)
         n_clean_actions = int(y.sum())
+        traj_w = realized_deficit_trajectory(dev0, r, y, tam_reset_periods)
+        max_deficit_w = max(traj_w) if traj_w else 0.0
         sweep.append(dict(window_months=w, objective_thb=round(total), fuel_thb=round(fuel),
                           cleaning_thb=round(clean), n_cleaning_actions=n_clean_actions))
-        if best is None or total < best[0]:
-            best = (total, w, y)
-    best_total, best_window, y_best = best
+        candidates.append((w, y, total, max_deficit_w))
+
+    if effective_max_deficit_C is None:
+        best = min(candidates, key=lambda c: c[2])
+    else:
+        feasible = [c for c in candidates if c[3] <= effective_max_deficit_C + 1e-6]
+        pool = feasible if feasible else candidates
+        # feasible: cheapest; infeasible fallback: least-violating, cost as tiebreaker
+        best = min(pool, key=(lambda c: c[2]) if feasible else (lambda c: (c[3], c[2])))
+    best_window, y_best, best_total, _ = best
+
+    # honest post-hoc check: does the FINAL committed/rounded schedule (not the continuous
+    # LP relaxation solve_window's constraint was checked against) actually respect the
+    # tighter of the CIT floor and the furnace FG-limit ceiling? Reported regardless of
+    # whether either was set, so the dashboard can show the real trajectory either way.
+    deficit_trajectory = realized_deficit_trajectory(dev0, r, y_best, tam_reset_periods)
+    max_realized_deficit_C = round(max(deficit_trajectory), 3) if deficit_trajectory else 0.0
+    constraint_satisfied = (effective_max_deficit_C is None) or (max_realized_deficit_C <= effective_max_deficit_C + 1e-6)
+    # advisory only (no validated tube-skin-vs-CIT model exists in this project -- see
+    # METHODOLOGY.md/Evidence tab): flag when the realized deficit is pushing FG flow close to
+    # its own limit, since sustained high firing is the documented mechanism linking fouling to
+    # tube-skin/coking risk (see the furnace panel's causal chain). This is a reasoned proximity
+    # flag, not a calculated tube-skin temperature -- do not present it as one.
+    tube_skin_risk_advisory = bool(furnace_ceiling_C is not None and furnace_ceiling_C > 0
+                                   and max_realized_deficit_C >= 0.8 * furnace_ceiling_C)
 
     # --- per-TAM-cycle breakdown (make the cross-cycle balance visible, not just implicit
     #     in the annual cap): count online-clean actions/cost per cycle boundary. ---
@@ -364,6 +525,20 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None):
         max_online_cleans_per_period=MAX_ONLINE_CLEANS_PER_PERIOD, max_online_cleans_assumed=True,
         max_cleans_per_year_per_hx=MAX_CLEANS_PER_YEAR,
         k_baht_per_C_day=round(k_per_day), feed_kbd=feed_kbd,
+        max_cit_deficit_C_applied=max_cit_deficit_C,
+        furnace_fg_ceiling_C=(round(furnace_ceiling_C, 3) if furnace_ceiling_C is not None else None),
+        furnace_fg_info=furnace_info,
+        effective_max_deficit_C=(round(effective_max_deficit_C, 3) if effective_max_deficit_C is not None else None),
+        binding_constraint=binding_constraint,
+        cit_deficit_trajectory_C=[round(v, 3) for v in deficit_trajectory],
+        max_realized_deficit_C=max_realized_deficit_C,
+        constraint_satisfied=constraint_satisfied,
+        tube_skin_risk_advisory=tube_skin_risk_advisory,
+        tube_skin_risk_note=(('FG flow ที่ implied จากระดับ CIT deficit นี้ใกล้/ชน limit เตา '
+                              f"({furnace_info.get('fg_limit_tph')} t/h) — มีความเสี่ยงทางอ้อมต่อ "
+                              'tube-skin/coking (ยังไม่มีโมเดลคำนวณ tube-skin ตรงจาก CIT ในโปรเจกต์นี้ '
+                              'เป็น advisory เชิงเหตุผลจากสายโซ่ fouling→firing→tube-skin เท่านั้น '
+                              'ไม่ใช่ค่าที่ validate แล้ว)') if tube_skin_risk_advisory else None),
         window_size_sweep=sweep, optimal_window_months=best_window,
         comparison_vs_v1=dict(
             scope=f'ถึง TAM แรก ({cycle_labels[0]}) เท่านั้น — v1 ไม่เคยถูกวางแผนเลยจุดนี้',
