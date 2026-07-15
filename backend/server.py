@@ -40,6 +40,10 @@ PORT      = int(os.environ.get('PORT') or (sys.argv[1] if len(sys.argv) > 1 else
 sys.path.append(str(NB))
 from cpht_config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
 
+sys.path.append(str(ROOT / 'pipeline'))
+import cleaning_scheduler_network as SCHED
+import export_economics as ECON
+
 # tags a cleaned-process file MUST contain for the topology/furnace to rebuild
 REQUIRED_TAGS = {CIT_TAG, TOTAL_CHARGE_TAG}
 for cfg in HX_CONFIG.values():
@@ -92,6 +96,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._run_full()
         if endpoint == '/api/recompute-plan':
             return self._recompute_plan()
+        if endpoint == '/api/recompute-tam-comparison':
+            return self._recompute_tam_comparison()
         if endpoint != '/api/run':
             return self._send(404, {'error': 'unknown endpoint'})
         try:
@@ -133,11 +139,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 
     def _recompute_plan(self):
-        """Apply per-HX cleaning-cost overrides AND an optional CIT-floor constraint from the
-        dashboard's "คำนวณใหม่" button, then actually re-run notebook 16's optimizer (not a
-        client-side approximation) so the returned schedule/priority genuinely reflects the new
-        inputs. Blocking — takes ~10-30s (longer with a tight CIT floor, since that adds SLSQP
-        constraints); the dashboard shows a loading state while this runs."""
+        """Apply per-HX cleaning-cost overrides, an optional CIT-floor constraint, AND an
+        optional furnace FG_FLOW limit override from the dashboard's "คำนวณใหม่" button, then
+        actually re-run notebook 16's optimizer (not a client-side approximation) so the
+        returned schedule/priority genuinely reflects the new inputs. Blocking — takes
+        ~10-30s (longer with a tight CIT floor/limit, since that adds SLSQP constraints);
+        the dashboard shows a loading state while this runs."""
         try:
             n = int(self.headers.get('Content-Length', 0))
             raw = self.rfile.read(n) if n else b'{}'
@@ -166,6 +173,15 @@ class Handler(BaseHTTPRequestHandler):
             elif cit_floor_path.exists():
                 cit_floor_path.unlink()   # no override in this request -> fall back to notebook 16's default
 
+            furnace_limit_path = DASH / 'data' / 'furnace_limit_overrides.json'
+            furnace_limits = body.get('furnace_limit_overrides')
+            if furnace_limits:
+                if not isinstance(furnace_limits, dict):
+                    return self._send(422, {'error': 'furnace_limit_overrides ต้องเป็น object {key: limit}'})
+                furnace_limit_path.write_text(json.dumps(furnace_limits, ensure_ascii=False, indent=1), encoding='utf-8')
+            elif furnace_limit_path.exists():
+                furnace_limit_path.unlink()   # no override in this request -> fall back to pfd_topology.json's static limit
+
             env = {**os.environ, 'PYTHONUTF8': '1'}
             r = subprocess.run(
                 [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute', '--inplace',
@@ -177,13 +193,68 @@ class Handler(BaseHTTPRequestHandler):
 
             plan = json.loads((DASH / 'data' / 'cleaning_plan.json').read_text(encoding='utf-8'))
             floor_msg = f' · CIT floor {cit_floor_C}°C' if cit_floor_C is not None else ''
+            fg_msg = f' · FG_FLOW limit {furnace_limits["FG_FLOW"]}t/h' if furnace_limits and furnace_limits.get('FG_FLOW') is not None else ''
             self._send(200, {
                 'ok': True,
-                'message': f'คำนวณใหม่แล้วด้วยค่าล้าง {len(overrides)} HX ที่แก้{floor_msg}',
+                'message': f'คำนวณใหม่แล้วด้วยค่าล้าง {len(overrides)} HX ที่แก้{floor_msg}{fg_msg}',
                 'plan': plan,
             })
         except subprocess.TimeoutExpired:
             self._send(504, {'error': 'คำนวณใหม่ใช้เวลานานเกินไป (>440s)'})
+        except Exception as e:
+            self._send(500, {'error': f'{type(e).__name__}: {e}'})
+
+    def _recompute_tam_comparison(self):
+        """Real TAM 3-year-vs-4-year scenario comparison (pipeline.cleaning_scheduler_network.
+        compare_tam_cycles). Runs IN-PROCESS -- unlike _recompute_plan, this does NOT go through
+        nbconvert/a fresh Jupyter kernel, avoiding that ~10-20s startup cost. That said, this is
+        still SLOW in absolute terms (measured ~6 minutes for both scenarios combined): each
+        scenario reruns the full 5-window SLSQP sweep over a multi-year horizon, and that cost
+        dominates over the kernel-startup saving. Don't undersell this as "fast" in UI copy --
+        the dashboard button explicitly warns it can take minutes. Applies
+        the same overrides/cit_floor_C/furnace_limit_overrides shape _recompute_plan accepts (NOT
+        persisted to disk -- this is a read-only "what if" comparison, doesn't affect
+        cleaning_plan.json) so the comparison reflects whatever the dashboard currently has
+        entered, without duplicating the override-resolution logic (reuses
+        export_economics.resolve_cost_override)."""
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+            raw = self.rfile.read(n) if n else b'{}'
+            try:
+                body = json.loads(raw.decode('utf-8') or '{}')
+            except Exception:
+                body = {}
+
+            def _load(name, default=None):
+                p = DASH / 'data' / name
+                return json.loads(p.read_text(encoding='utf-8')) if p.exists() else default
+
+            econ = _load('economics.json', {})
+            chist = _load('cleaning_history.json', {'hx': {}})
+            logi = _load('cleaning_logistics.json', {'hx': []})
+            sched_v1 = _load('cleaning_schedule.json')
+            topo = _load('pfd_topology.json', {})
+
+            overrides = body.get('overrides') or {}
+            econ_live = dict(econ)
+            econ_live['per_hx'] = [
+                {**r, 'cleaning_cost': ECON.resolve_cost_override(overrides.get(r['HX']), r.get('cleaning_cost'))[0]}
+                for r in econ.get('per_hx', [])
+            ]
+
+            cit_floor_C = body.get('cit_floor_C')
+            if cit_floor_C is not None:
+                cit_floor_C = float(cit_floor_C)
+            furnace_limits = body.get('furnace_limit_overrides') or {}
+            base_tam = body.get('base_tam') or str(SCHED.NEXT_TAM.date())
+            years_options = tuple(body.get('years_options') or (3, 4))
+
+            comparison = SCHED.compare_tam_cycles(
+                econ_live, chist, logi, sched_v1, base_tam=base_tam, years_options=years_options,
+                max_cit_deficit_C=cit_floor_C, topo=topo, limit_overrides=furnace_limits)
+            (DASH / 'data' / 'tam_comparison.json').write_text(
+                json.dumps(comparison, ensure_ascii=False, indent=1), encoding='utf-8')
+            self._send(200, {'ok': True, 'comparison': comparison})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 

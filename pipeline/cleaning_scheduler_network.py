@@ -135,7 +135,7 @@ def build_hx_state(econ, chist, logi):
     return out
 
 
-def furnace_fg_deficit_ceiling_C(econ, topo):
+def furnace_fg_deficit_ceiling_C(econ, topo, limit_overrides=None):
     """Convert the furnace's FG_FLOW operating limit (dashboard/data/pfd_topology.json,
     key='FG_FLOW' -- currently limit=9.0 t/h vs a target/baseline ~6.7 t/h) into an
     equivalent CIT-deficit ceiling [degC], using the SAME legacy first-principles formula
@@ -150,6 +150,12 @@ def furnace_fg_deficit_ceiling_C(econ, topo):
     ever checked the CIT floor and had no way to know a deep deficit would also push firing
     past the furnace's own FG limit.
 
+    `limit_overrides`: optional dict (from dashboard/data/furnace_limit_overrides.json,
+    written by the dashboard's furnace-tab limit input via backend/server.py) -- when it has
+    an 'FG_FLOW' entry, that value is used INSTEAD of the static pfd_topology.json limit, so
+    editing the limit on the dashboard and hitting "คำนวณใหม่" genuinely changes the schedule
+    (previously that input was write-only/localStorage-only, see the UI comment it replaces).
+
     Returns (ceiling_C, info). ceiling_C is None if the topology/limit isn't available
     (e.g. a stripped demo dataset without pfd_topology.json) -- callers must treat None as
     "no additional constraint", never as zero."""
@@ -158,7 +164,8 @@ def furnace_fg_deficit_ceiling_C(econ, topo):
     charge = (econ or {}).get('charge_m3h')
     if not fg or fg.get('limit') is None or not charge:
         return None, dict(available=False)
-    fg_limit_tph = float(fg['limit'])
+    override_tph = (limit_overrides or {}).get('FG_FLOW')
+    fg_limit_tph = float(override_tph) if override_tph is not None else float(fg['limit'])
     fg_baseline_tph = float(fg['target'] if fg.get('target') is not None else fg.get('value', fg_limit_tph))
     headroom_tph = max(0.0, fg_limit_tph - fg_baseline_tph)
     # t/h of FG implied per degC of CIT deficit, at the current charge rate -- same formula
@@ -168,10 +175,12 @@ def furnace_fg_deficit_ceiling_C(econ, topo):
         return None, dict(available=False)
     ceiling_C = headroom_tph / tph_per_degC
     return ceiling_C, dict(available=True, fg_limit_tph=fg_limit_tph, fg_baseline_tph=fg_baseline_tph,
+                           fg_limit_overridden=(override_tph is not None),
                            headroom_tph=round(headroom_tph, 3), tph_per_degC=round(tph_per_degC, 4),
                            charge_m3h=charge,
-                           source=('pfd_topology.json FG_FLOW.limit (ค่าสมมติ รอวิศวกรเตายืนยัน) + '
-                                   'export_economics.LEGACY formula (สูตรเดียวกับ banner หน้าเตาบน dashboard)'))
+                           source=(('ค่าที่แก้บนแดชบอร์ด (furnace_limit_overrides.json)' if override_tph is not None
+                                   else 'pfd_topology.json FG_FLOW.limit (ค่าสมมติ รอวิศวกรเตายืนยัน)')
+                                   + ' + export_economics.LEGACY formula (สูตรเดียวกับ banner หน้าเตาบน dashboard)'))
 
 
 OBJ_SCALE = 1e-6   # THB -> million-THB, purely for the SLSQP solve (see window_objective docstring)
@@ -346,7 +355,8 @@ def v1_schedule_matrix(hx_ids, r, cost, dev0, n_periods, sched_v1):
     return y
 
 
-def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_deficit_C=None, topo=None):
+def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_deficit_C=None, topo=None,
+                     limit_overrides=None):
     """Core computation, reusable in-memory (e.g. by notebook 16 with cost overrides
     applied to `econ` before calling) as well as by `main()` below which writes the
     static dashboard/data/cleaning_schedule_v2.json. Returns the `out` dict.
@@ -367,7 +377,12 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     disk if not given. Used to derive a SECOND hard ceiling from the furnace's own FG_FLOW
     operating limit (furnace_fg_deficit_ceiling_C) -- the effective ceiling passed to every
     window solve is min(max_cit_deficit_C, furnace_fg_ceiling_C), i.e. whichever constraint
-    is tighter binds; neither one is allowed to relax the other."""
+    is tighter binds; neither one is allowed to relax the other.
+
+    `limit_overrides`: optional dict (dashboard/data/furnace_limit_overrides.json contents),
+    defaults to loading it from disk if not given. Passed straight through to
+    furnace_fg_deficit_ceiling_C so an edited FG_FLOW limit on the dashboard actually changes
+    this schedule, not just the static topology value."""
     tam_dates = sorted(tam_dates or TAM_DATES)
     last_tam = tam_dates[-1]
 
@@ -386,7 +401,9 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
 
     if topo is None:
         topo = _load('pfd_topology.json', {})
-    furnace_ceiling_C, furnace_info = furnace_fg_deficit_ceiling_C(econ, topo)
+    if limit_overrides is None:
+        limit_overrides = _load('furnace_limit_overrides.json', {})
+    furnace_ceiling_C, furnace_info = furnace_fg_deficit_ceiling_C(econ, topo, limit_overrides)
     candidate_ceilings = [c for c in (max_cit_deficit_C, furnace_ceiling_C) if c is not None]
     effective_max_deficit_C = min(candidate_ceilings) if candidate_ceilings else None
     binding_constraint = None
@@ -556,6 +573,48 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
         per_hx=per_hx, timeline=sorted(timeline, key=lambda t: t['date']),
         totals=dict(online_hx=len(online_ids), tam_only=len(tam_only_ids)))
     return out
+
+
+def compare_tam_cycles(econ, chist, logi, sched_v1, base_tam, years_options=(3, 4),
+                       max_cit_deficit_C=None, topo=None, limit_overrides=None):
+    """Real TAM-cycle-length comparison: does the plan (net saving, cleans/yr, CIT-floor and
+    furnace FG-limit constraints) still hold if the plant extends the cycle from 3 years to 4?
+
+    Deliberately a THIN wrapper around compute_schedule() -- for each `years_options` value,
+    builds tam_dates=[base_tam, base_tam + N years] and reuses the exact same moving-window
+    optimizer, no new modeling. In particular this does NOT attempt to model tube-skin
+    temperature as a function of TAM length -- there is no validated CIT-to-tube-skin equation
+    anywhere in this project (see furnace_fg_deficit_ceiling_C's own tube-skin caveat), so
+    inventing one here to answer "is 4yr safe for the tubes" would violate the same
+    no-logic-without-data principle that governs the rest of this module. What this DOES
+    answer honestly: whether the network's OWN CIT-floor / furnace FG-limit constraints
+    (both already real, already enforced) stay satisfiable over a longer horizon, and how
+    much more it costs in fuel + cleaning to do so.
+
+    Returns {"scenarios": {"3yr": {...}, "4yr": {...}}, "base_tam": ..., "years_options": [...]}."""
+    base_tam = pd.Timestamp(base_tam)
+    scenarios = {}
+    for years in years_options:
+        tam_dates = [base_tam, base_tam + pd.DateOffset(years=years)]
+        out = compute_schedule(econ, chist, logi, sched_v1, tam_dates=tam_dates,
+                               max_cit_deficit_C=max_cit_deficit_C, topo=topo,
+                               limit_overrides=limit_overrides)
+        scenarios[f'{years}yr'] = dict(
+            tam_dates=out['tam_dates'],
+            net_saving_note='ดูจาก cleaning_plan.json (economics.json ต่างหาก) -- ที่นี่รายงานเฉพาะต้นทุนที่ scheduler ใช้ตัดสินใจ',
+            total_cost_thb=out['v2_full_horizon']['total_cost_thb'],
+            n_cleans_to_tam=sum(p.get('n_cleans_to_tam', 0) for p in out['per_hx']),
+            effective_max_deficit_C=out['effective_max_deficit_C'],
+            binding_constraint=out['binding_constraint'],
+            max_realized_deficit_C=out['max_realized_deficit_C'],
+            constraint_satisfied=out['constraint_satisfied'],
+            tube_skin_risk_advisory=out['tube_skin_risk_advisory'],
+            optimal_window_months=out['optimal_window_months'],
+        )
+    return dict(scenarios=scenarios, base_tam=str(base_tam.date()), years_options=list(years_options),
+               note=('เปรียบเทียบด้วย compute_schedule() ตัวเดียวกันทุกประการ ต่างกันแค่ tam_dates[1] '
+                     '(base_tam + 3 ปี vs +4 ปี) -- ไม่มีการสร้างโมเดล tube-skin-vs-TAM-length ใหม่ '
+                     'เพราะไม่มีข้อมูลรองรับสมการ CIT->tube-skin ในโปรเจกต์นี้'))
 
 
 def main():

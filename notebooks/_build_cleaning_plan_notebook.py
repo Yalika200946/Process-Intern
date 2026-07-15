@@ -83,6 +83,14 @@ _cit_floor = load('cit_floor_override.json', {}) or {}
 MAX_CIT_DEFICIT_C = _cit_floor.get('max_deficit_C', DEFAULT_CIT_DEFICIT_C)
 print(f'CIT floor constraint: network deficit must stay <= {MAX_CIT_DEFICIT_C} degC'
       + (' (override)' if 'max_deficit_C' in _cit_floor else ' (default)'))
+
+# furnace FG_FLOW limit override -- same override pattern again: backend/server.py writes
+# furnace_limit_overrides.json before re-running this notebook if the dashboard's furnace-tab
+# limit input was edited. Absent -> compute_schedule() falls back to pfd_topology.json's static
+# FG_FLOW limit (9.0 t/h, unconfirmed pending the furnace engineer).
+FURNACE_LIMIT_OVERRIDES = load('furnace_limit_overrides.json', {}) or {}
+if FURNACE_LIMIT_OVERRIDES:
+    print(f'furnace limit overrides active:', FURNACE_LIMIT_OVERRIDES)
 """.strip("\n")))
 
 cells.append(md_cell(r"""
@@ -301,9 +309,11 @@ econ_live = dict(econ); econ_live['per_hx'] = list(econ_by.values())
 # also enforce the furnace's own FG_FLOW limit as a second hard ceiling alongside MAX_CIT_DEFICIT_C
 # -- see furnace_fg_ceiling_C/binding_constraint in its output.
 schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1, tam_dates=[NS.NEXT_TAM],
-                              max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo)
+                              max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo,
+                              limit_overrides=FURNACE_LIMIT_OVERRIDES)
 schedV2_full = NS.compute_schedule(econ_live, chist, logi, sched_v1,
-                                   max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo)   # full multi-TAM horizon
+                                   max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo,
+                                   limit_overrides=FURNACE_LIMIT_OVERRIDES)   # full multi-TAM horizon
 print(f"CIT floor: satisfied={schedV2['constraint_satisfied']} "
       f"max realized deficit={schedV2['max_realized_deficit_C']} degC "
       f"(effective ceiling {schedV2.get('effective_max_deficit_C')} degC, "
