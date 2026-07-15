@@ -277,7 +277,7 @@ function FurnaceSVG({F,passes,cit,params}){
    </svg>);
 }
 
-function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,cleaningPlanByHX,fgLimitOv,setFgLimitOv}){
+function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,fgLimitOv,setFgLimitOv}){
   // per-constraint limit overrides -- persisted locally (localStorage) since edits here are a
   // reference/export value only for 12 of the 13 rows: no live band-status calc consumes `limit`.
   // FG_FLOW is the ONE exception (see fgLimitOv/setFgLimitOv, lifted to App level) -- it's the
@@ -436,7 +436,7 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,c
       </div>
       <p className="text-[11px] text-bcp-dgray mb-3">ล้าง HX ตามลำดับ priority → คืน CIT → Saving = ΔCIT × {params.STD_ENERGY} MMBTU/D/KBD/°C × {fmt(feedKBD,1)} KBD × NG × 360 × {params.CIT_DECAY} (decay) · ค่าล้างต่อ HX ยังเป็นค่าสมมติ</p>
       <p className="text-[11px] text-bcp-orange bg-bcp-orange/[.06] border border-bcp-orange/20 rounded-lg px-3 py-1.5 mb-1.5">⚠ ตารางนี้ <b>ไม่คิดข้อจำกัดจริง</b> (กำลังคนล้าง/เดือน, ล้างได้เฉพาะที่มี bypass, ล้างได้ ≤ ครั้ง/ปี/HX) — เป็นเพียงประมาณการถ้าล้างได้ทุกตัวตามลำดับ ดูแผนที่ผ่านข้อจำกัดจริงและคำนวณต้นทุนละเอียดกว่าได้ในแท็บ "แผนล้าง HX"</p>
-      <p className="text-[11px] text-bcp-dgray bg-black/[.02] border border-black/[.05] rounded-lg px-3 py-1.5 mb-3">ℹ ลำดับ "ล้างถึง" ในตารางนี้คือ<b>ฐานที่ 3</b> — เรียงตาม priority_score ของ <code style={{fontFamily:'var(--mono,monospace)'}}>hx_ranking.json</code> คนละอันจาก "อันดับความเสี่ยง" (แท็บภาพรวม) และ "อันดับแผนล้าง" (แท็บแผนล้าง HX) — ดู 2 คอลัมน์ท้ายตารางเทียบกัน</p>
+      <p className="text-[11px] text-bcp-dgray bg-black/[.02] border border-black/[.05] rounded-lg px-3 py-1.5 mb-3">ℹ ลำดับ "ล้างถึง" ในตารางนี้เรียงตาม priority_score ของ <code style={{fontFamily:'var(--mono,monospace)'}}>hx_ranking.json</code> (นี่คือ what-if คร่าว ๆ) — คนละอันจาก "อันดับความเสี่ยง" ที่ใช้ทั้งแท็บภาพรวมและแท็บแผนล้าง HX แล้ว (สองแท็บนั้นใช้ engineering_priority_score ของ notebook 08 ตัวเดียวกัน) — ดูคอลัมน์ท้ายตารางเทียบกัน</p>
       <div className="flex flex-wrap gap-3 mb-4">
         {econ.map(([k,label])=>(
           <label key={k} className="text-[11px]"><span className="text-bcp-dgray">{label}</span>
@@ -448,14 +448,11 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,c
           <th className="py-2">ล้างถึง</th><th className="py-2 text-right">ΔCIT</th><th className="py-2 text-center">ที่มา</th>
           <th className="py-2 text-right">฿/ปี</th><th className="py-2 text-right">฿/วัน</th><th className="py-2 text-right">ค่าล้าง</th>
           <th className="py-2 text-right">คืนทุน</th><th className="py-2 text-right">รวม CIT</th><th className="py-2 text-right">รวม ฿/ปี</th>
-          <th className="py-2 text-center" title="อันดับความเสี่ยง (engineering_priority.json, แท็บภาพรวม)">เสี่ยง #</th>
-          <th className="py-2 text-center" title="อันดับแผนล้าง (cleaning_plan.json, แท็บแผนล้าง HX)">แผน #</th></tr></thead>
+          <th className="py-2 text-center" title="อันดับความเสี่ยง (engineering_priority_score, notebook 08) — ใช้ตรงกันทั้งแท็บภาพรวมและแท็บแผนล้าง HX">อันดับ (ภาพรวม/แผน)</th></tr></thead>
         <tbody className="divide-y divide-black/[.03]">
           {wf.map((r,i)=>{
             const riskRank=engPriorityByHX?.[r.hx]?.priority_rank;
-            const planRow=cleaningPlanByHX?.[r.hx];
-            const planRank=planRow?.online?planRow.priority_rank:null;
-            const gapReason=rankMismatchReason(r.hx,engPriorityByHX);
+            const gapBig=riskRank!=null&&Math.abs(riskRank-(i+1))>=5;
             return (<tr key={r.hx}>
             <td className="py-2 font-semibold text-bcp-black">{i+1}. {r.hx}</td>
             <td className="py-2 text-right tabular-nums text-bcp-green">+{fmt(r.gain,1)}°{r.src==='model'&&<span className="text-bcp-orange" title="ค่าโมเดล (อาจสูงกว่าจริง)">*</span>}</td>
@@ -467,8 +464,7 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,c
             <td className="py-2 text-right tabular-nums font-semibold">+{fmt(r.cumCIT,1)}°</td>
             <td className="py-2 text-right tabular-nums font-semibold text-bcp-green">{(r.cumYr/1e6).toFixed(1)}M</td>
             <td className="py-2 text-center tabular-nums text-bcp-dgray">
-              {riskRank??'—'}{rankGapBig(riskRank,i+1)&&<span className="ml-0.5 text-bcp-orange cursor-help" title={`ล้างเรียงลำดับ #${i+1} vs อันดับความเสี่ยง #${riskRank}${gapReason?' — '+gapReason:''}`}>⚠</span>}</td>
-            <td className="py-2 text-center tabular-nums text-bcp-dgray">{planRank??(planRow?'รอ TAM':'—')}</td>
+              {riskRank??'—'}{gapBig&&<span className="ml-0.5 text-bcp-orange cursor-help" title={`what-if นี้เรียง #${i+1} (hx_ranking.json) vs อันดับความเสี่ยงจริง #${riskRank} (notebook 08 — ใช้ในแท็บภาพรวม/แผนล้าง)`}>⚠</span>}</td>
             </tr>);})}
         </tbody></table></div>
       {wf.length>0&&<div className="mt-3 rounded-lg bg-bcp-green/[.06] border border-bcp-green/15 px-3 py-2 text-[12px]">
@@ -768,28 +764,7 @@ const resolveCostOverride=(override,fallback)=>{
   return {cost:fallback,meta:null};
 };
 
-// Explain (not just flag) a rank mismatch between a cost-constrained rank (cleaning_plan.json /
-// the Furnace tab's own what-if order) and the Overview's risk-based rank (engineering_priority.json)
-// -- the two use genuinely different signals for "how much does this HX need cleaning": measured
-// historical CIT recovery per clean (cleaning_history.json audit) vs. the CURRENT duty-shortfall
-// trend (Q_shortfall/fouling_rate_abs, deliberately preferred over the CIT model because that model
-// doesn't beat a persistence baseline -- see notebook 08 section 4.1). A HX can legitimately look
-// "not urgent right now" (low current Q_shortfall) while still being "worth a lot when cleaned"
-// historically (high measured ΔCIT) -- that's not a bug in either number, so surface WHY instead of
-// just flagging a mismatch. Shared by CleaningPlanPanel and FurnacePanel's what-if table.
-const rankMismatchReason=(hx,engPriorityByHX)=>{
-  const ep=engPriorityByHX?.[hx]; if(!ep) return null;
-  const bits=[];
-  if((ep.fouling_rate_abs||0)<0.01) bits.push(`ข้อมูลตอนนี้ยังไม่เห็นตะกรัน ชัด (fouling ปัจจุบัน ≈0, Q shortfall ${fmt(ep.Q_shortfall,2)}${ep.n_campaigns===1?', มีแค่ 1 รอบเดินเครื่องให้ดู':''})`);
-  if((ep.probability_score||0)<0.3) bits.push(`probability_score ${fmt(ep.probability_score,2)} (คำนวณจากแนวโน้มปัจจุบัน ไม่ใช่ประวัติล้าง)`);
-  if(!bits.length) return null;
-  return `เหตุผลที่คนละอันดับ: ${bits.join(' · ')} — แต่แผนนี้เห็นว่าคุ้มเพราะ ΔCIT ที่ใช้เป็นค่าวัดจริงจากประวัติล้างที่ผ่านมา ไม่ใช่แนวโน้มตอนนี้`;
-};
-// true when two ranks (either may be null/undefined) differ by >= threshold positions -- used to
-// decide when a mismatch is worth calling out vs. noise from a near-tie.
-const rankGapBig=(rankA,rankB,threshold=5)=>rankA!=null&&rankB!=null&&Math.abs(rankA-rankB)>=threshold;
-
-function CleaningPlanPanel({plan,onPlanUpdated,riskTop1,engPriorityByHX,fgLimitOv}){
+function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
   const [costOv,setCostOv]=useState(()=>{try{return JSON.parse(localStorage.getItem('cpht_cleaning_cost_overrides')||'{}');}catch(e){return {};}});
   const [recompute,setRecompute]=useState({busy:false,msg:null,err:false});
   const [formulaHX,setFormulaHX]=useState(null);   // HX whose formula editor is open, or null
@@ -985,7 +960,7 @@ function CleaningPlanPanel({plan,onPlanUpdated,riskTop1,engPriorityByHX,fgLimitO
     <div className="text-[11px] font-bold text-bcp-black mb-1">ล้างได้ online ({online.length}) — เรียงตามความสำคัญ</div>
     <div className="overflow-x-auto mb-4"><table className="w-full text-[12px]">
       <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
-        <th className="py-2" title='อันดับแผน (net-saving×ความเสี่ยง ภายใต้ข้อจำกัดจริง) — คนละอันดับกับ "อันดับความเสี่ยง" ในแท็บภาพรวม/P&amp;ID'>แผน #</th><th className="py-2">HX</th><th className="py-2 text-right">ค่าล้าง (฿)</th>
+        <th className="py-2" title="อันดับความเสี่ยง (engineering_priority_score, notebook 08) — อันดับเดียวกับแท็บภาพรวม/P&amp;ID">อันดับ</th><th className="py-2">HX</th><th className="py-2 text-right">ค่าล้าง (฿)</th>
         <th className="py-2 text-right">ล้าง (ครั้ง)</th><th className="py-2">ครั้งถัดไป</th>
         <th className="py-2 text-right">Net ฿/ปี</th><th className="py-2 text-right">CIT คืน / คุ้มมั้ย</th><th className="py-2 text-right">payback</th><th className="py-2">เหตุผล</th></tr></thead>
       <tbody className="divide-y divide-black/[.03]">
@@ -994,15 +969,10 @@ function CleaningPlanPanel({plan,onPlanUpdated,riskTop1,engPriorityByHX,fgLimitO
           const isFormula=ov&&typeof costOv[p.HX]==='object';
           const {meta}=resolveCostOverride(costOv[p.HX],p.cleaning_cost);
           const citGain=p.cit_gain_C_online!=null?p.cit_gain_C_online:p.cit_gain_C_full;
-          const riskRank=engPriorityByHX?.[p.HX]?.priority_rank;
-          const rankGapIsBig=rankGapBig(riskRank,p.priority_rank);
-          const mismatchReason=rankMismatchReason(p.HX,engPriorityByHX);
           return (<React.Fragment key={p.HX}>
           <tr>
           <td className="py-2 text-bcp-dgray">{p.priority_rank}</td>
-          <td className="py-2 font-bold text-bcp-black">{p.HX}{p.safety&&<span className="ml-1 text-[9px] text-bcp-red">⚠</span>}{p.online_mode==='ONLINE_PARTIAL'&&<span className="ml-1 text-[9px] font-semibold text-bcp-orange bg-bcp-orange/10 px-1 py-0.5 rounded-full">บางส่วน {Math.round(p.duty_fraction*100)}%</span>}
-            {p.priority_rank===1&&riskTop1&&(p.HX===riskTop1?<span className="ml-1 text-[9px] font-semibold text-bcp-green bg-bcp-green/10 px-1 py-0.5 rounded-full" title="อันดับ 1 ตรงกันทั้งสองมุมมอง (ความเสี่ยง + ความคุ้มค่า)">✓ ตรงกับอันดับความเสี่ยง</span>:<span className="ml-1 text-[9px] font-semibold text-bcp-dgray bg-black/[.04] px-1 py-0.5 rounded-full" title={`แท็บภาพรวมจัดให้ ${riskTop1} เป็นอันดับความเสี่ยง #1 แทน — คนละมุมมองกับแผนนี้ (ความคุ้มค่า×ข้อจำกัด)`}>≠ อันดับความเสี่ยง ({riskTop1})</span>)}
-            {p.priority_rank!==1&&riskRank!=null&&rankGapIsBig&&<span className="ml-1 text-[9px] font-semibold text-bcp-dgray bg-black/[.04] px-1 py-0.5 rounded-full" title={`อันดับแผน #${p.priority_rank} vs อันดับความเสี่ยง #${riskRank}${mismatchReason?' — '+mismatchReason:''}`}>แผน #{p.priority_rank} · เสี่ยง #{riskRank}</span>}</td>
+          <td className="py-2 font-bold text-bcp-black">{p.HX}{p.safety&&<span className="ml-1 text-[9px] text-bcp-red">⚠</span>}{p.online_mode==='ONLINE_PARTIAL'&&<span className="ml-1 text-[9px] font-semibold text-bcp-orange bg-bcp-orange/10 px-1 py-0.5 rounded-full">บางส่วน {Math.round(p.duty_fraction*100)}%</span>}</td>
           <td className="py-2 text-right">
             {!isFormula&&<input type="number" step="10000" value={liveCost(p)} onChange={e=>setCost(p.HX,e.target.value===''?null:+e.target.value)} className="w-20 text-right tabular-nums border border-black/10 rounded px-1 py-0.5 text-[11px] focus:outline-none focus:border-bcp-turq"/>}
             {isFormula&&<span className="tabular-nums text-[11px] font-semibold text-bcp-turq">{liveCost(p).toLocaleString()}</span>}
@@ -1893,7 +1863,6 @@ function App(){
   const tamDays=daysBetween(new Date(),params.NEXT_TAM);
   const top1=engPriority.slice().sort((a,b)=>(b.engineering_priority_score||0)-(a.engineering_priority_score||0))[0];
   const engPriorityByHX=Object.fromEntries(engPriority.map(r=>[r.HX,r]));
-  const cleaningPlanByHX=plan?.per_hx?Object.fromEntries(plan.per_hx.map(r=>[r.HX,r])):{};
 
   const TABS=[['overview','ภาพรวม & P&ID'],['plan','แผนล้าง HX'],['phm','พยากรณ์ & ความเสี่ยง'],['furnace','เตา & โมเดล Optimization'],['evidence','หลักฐาน & ความเชื่อมั่น']];
 
@@ -1922,7 +1891,7 @@ function App(){
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Kpi icon="🌡" tone={cit<params.CIT_MIN?'orange':'green'} label="CIT ปัจจุบัน" value={`${fmt(cit,1)}°C`} sub={cit<params.CIT_MIN?`ต่ำกว่าเกณฑ์ ${params.CIT_MIN}°C`:`เป้า ${params.CIT_TARGET}°C`} foot={`ขาด ${fmt(Math.max(0,params.CIT_TARGET-cit),1)}°C จากเป้า`}/>
           <Kpi icon="🧽" tone={urgent>3?'orange':'green'} label="ต้องล้างด่วน" value={`${urgent} HX`} sub={`จาก ${recs.length} ที่ติดตาม`} foot={`เสี่ยงใน 6 เดือน: ${atRisk}`}/>
-          <Kpi icon="🏆" tone="orange" label="อันดับ 1 (ความเสี่ยง)" value={top1?.HX||'—'} sub={top1?`Priority ${fmt(top1.engineering_priority_score,2)}`:''} foot={`${top1?(effortTH[top1.effort_tier]||'—'):''} · อันดับความเสี่ยง (Prob×Consequence/Effort) — อาจต่างจากลำดับในแท็บ "แผนล้าง HX" ซึ่งเรียงตามความคุ้มค่า×ข้อจำกัด`}/>
+          <Kpi icon="🏆" tone="orange" label="อันดับ 1 (ความเสี่ยง)" value={top1?.HX||'—'} sub={top1?`Priority ${fmt(top1.engineering_priority_score,2)}`:''} foot={`${top1?(effortTH[top1.effort_tier]||'—'):''} · อันดับความเสี่ยง (Prob×Consequence/Effort) — ใช้เป็นลำดับหลักเดียวกับแท็บ "แผนล้าง HX" แล้ว (ความคุ้มค่า×ข้อจำกัดเป็นข้อมูลประกอบ ไม่ใช่ตัวจัดอันดับ)`}/>
           <Kpi icon="🛠" tone="blue" label="TAM ถัดไป" value={`${tamDays} วัน`} sub={thaiDate(params.NEXT_TAM)} foot="Turnaround Maintenance"/>
         </section>
         <PID topo={topo} units={units} selected={selected} onSelect={onSelect}/>
@@ -1934,13 +1903,13 @@ function App(){
       </>}
       {tab==='phm'&&<PrognosticsPanel phm={phm} units={units} selected={selected} onSelect={onSelect}/>}
       {tab==='plan'&&<>
-        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan} riskTop1={top1?.HX} engPriorityByHX={engPriorityByHX} fgLimitOv={fgLimitOv}/>
+        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan} fgLimitOv={fgLimitOv}/>
         <CitLimitWhatIf tamA={tamA} topo={topo} params={params} econ={econ}/>
         <SlideChart tamA={tamA}/>
         <LogisticsTable logi={logi}/>
       </>}
       {tab==='furnace'&&<>
-        <FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ} engPriorityByHX={engPriorityByHX} cleaningPlanByHX={cleaningPlanByHX} fgLimitOv={fgLimitOv} setFgLimitOv={setFgLimitOvPersist}/>
+        <FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ} engPriorityByHX={engPriorityByHX} fgLimitOv={fgLimitOv} setFgLimitOv={setFgLimitOvPersist}/>
         <ModelPanel models={models} ranking={ranking}/>
         <OptimizePanel params={params} setParams={setParams} onRerun={onRerun} onRunFull={onRunFull} status={rerun}/>
       </>}

@@ -100,6 +100,16 @@ WINDOW_CANDIDATES = [2, 3, 4, 5, 6]    # moving-window sizes to sweep (paper Fig
 MAX_ONLINE_CLEANS_PER_PERIOD = int(os.environ.get('CPHT_MAX_CLEANS_PER_PERIOD', 2))  # ASSUMED — รอวิศวกร (crew capacity)
 MAX_CLEANS_PER_YEAR = 4                # hard cap per HX — real-world logistics ceiling (4/yr only in an emergency)
 PERIODS_PER_YEAR = round(365 / PERIOD_DAYS)
+# ASSUMED, tunable — how strongly notebook 08's risk-based engineering_priority_score (a
+# Probability x Consequence / Effort score, rank-normalized 0-1] across all HX -- see
+# pipeline/export_engineering_priority.py) biases the optimizer's OWN crew-slot allocation
+# when MAX_ONLINE_CLEANS_PER_PERIOD binds, on top of the objective's real fuel/cleaning-cost
+# economics. Risk-based reasoning (fouling trajectory + safety/coking + train position) is
+# kept as the PRIMARY lens throughout this project (see build_risk_mult docstring) -- this is
+# not a cosmetic display reorder, it changes which HX actually gets scheduled when. At
+# RISK_WEIGHT=1.0 the highest-risk HX (score->1) has its priced CIT-deficit doubled inside the
+# optimizer's decision search only; realized_cost() below still reports true, unweighted THB.
+RISK_WEIGHT = float(os.environ.get('CPHT_RISK_WEIGHT', 1.0))
 
 
 def _load(name, default=None):
@@ -133,6 +143,22 @@ def build_hx_state(econ, chist, logi):
         out[hx] = dict(online=online, cost=cost, r=max(0.0, r),
                        deviation0=max(0.0, dC) if dC else 0.0)
     return out
+
+
+def build_risk_mult(hx_ids, eng_priority):
+    """Per-HX risk multiplier fed into window_objective, sourced from notebook 08's
+    engineering_priority_score (dashboard/data/engineering_priority.json) -- a rank-normalized
+    (0-1] Probability x Consequence / Effort score that is this project's PRIMARY risk lens
+    (tracks how an engineer actually triages: fouling trajectory + safety/coking + train
+    position), kept primary over notebook 16's own net-saving economics per explicit direction
+    to avoid two rankings disagreeing on "which to clean first".
+
+    risk_mult = 1 + RISK_WEIGHT * engineering_priority_score. HX absent from
+    engineering_priority.json (e.g. a stripped demo dataset, or a brand-new HX with no NB08
+    history yet) default to risk_mult=1.0 -- neutral, never 0/None, so a missing risk score
+    can't zero out or crash the optimizer, only fall back to pure economics for that HX."""
+    by_hx = {r.get('HX'): r.get('engineering_priority_score') for r in (eng_priority or [])}
+    return np.array([1.0 + RISK_WEIGHT * (by_hx.get(hx) or 0.0) for hx in hx_ids])
 
 
 def furnace_fg_deficit_ceiling_C(econ, topo, limit_overrides=None):
@@ -199,7 +225,7 @@ def _deviation_trajectory(y_flat, dev0, r, n_hx, n_t):
     return dev
 
 
-def window_objective(y_flat, dev0, r, cost, k_per_day, n_hx, n_t):
+def window_objective(y_flat, dev0, r, cost, k_per_day, n_hx, n_t, risk_mult=None):
     """Returns the objective in MILLION THB, not raw THB. SLSQP's default finite-
     difference gradient step is a small RELATIVE step (~1.5e-8 x scale of x, which
     is O(1) here since y in [0,1]) -- against a raw-THB objective of order 1e8 the
@@ -207,16 +233,23 @@ def window_objective(y_flat, dev0, r, cost, k_per_day, n_hx, n_t):
     silently reporting "converged" at the untouched y=0 starting point without ever
     detecting the (very real, ~10x) improvement available by cleaning. Rescaling the
     objective to O(1-100) magnitude fixes the finite-difference gradient without
-    changing where the optimum is; realized_cost() below still reports true THB."""
+    changing where the optimum is; realized_cost() below still reports true THB.
+
+    `risk_mult` (see build_risk_mult): each HX's priced CIT deficit is scaled by its NB08
+    risk multiplier BEFORE summing into the fuel-cost term -- this is what actually makes a
+    higher-risk HX win a scarce crew slot over a merely-cheaper-to-leave-dirty one, not just a
+    display reorder. Defaults to all-ones (no reweighting) when not given, so every existing
+    caller (solver_comparison.py's benchmark included) is unaffected unless it opts in."""
     dev = _deviation_trajectory(y_flat, dev0, r, n_hx, n_t)
     y = y_flat.reshape(n_hx, n_t)
-    cit_deficit_total = dev[:, 1:].sum(axis=0)                 # per period, after that period's action
+    rm = np.ones(n_hx) if risk_mult is None else risk_mult
+    cit_deficit_total = (dev[:, 1:] * rm[:, None]).sum(axis=0)  # per period, risk-weighted, after that period's action
     fuel = float(np.sum(k_per_day * PERIOD_DAYS * cit_deficit_total))
     clean = float(np.sum(cost[:, None] * y))
     return (fuel + clean) * OBJ_SCALE
 
 
-def solve_window(dev0, r, cost, k_per_day, n_t, max_deficit=None):
+def solve_window(dev0, r, cost, k_per_day, n_t, max_deficit=None, risk_mult=None):
     """`max_deficit`, when set, is a HARD constraint: the network's total CIT deficit
     (sum over HX of deviation_hx(t), the same quantity the objective already prices as
     fuel cost) may never exceed it in any period of the window -- i.e. CIT must not fall
@@ -258,13 +291,13 @@ def solve_window(dev0, r, cost, k_per_day, n_t, max_deficit=None):
     # (starting from x0=0, which itself already violates a tight floor) rather than exit at a
     # poor local point; 200 was tuned for the unconstrained/crew-cap-only problem.
     maxiter = 600 if max_deficit is not None else 200
-    res = minimize(window_objective, x0, args=(dev0, r, cost, k_per_day, n_hx, n_t),
+    res = minimize(window_objective, x0, args=(dev0, r, cost, k_per_day, n_hx, n_t, risk_mult),
                    method='SLSQP', bounds=bounds, constraints=cons,
                    options=dict(maxiter=maxiter, ftol=1e-6))
     return res.x.reshape(n_hx, n_t)
 
 
-def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=(), max_deficit=None):
+def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=(), max_deficit=None, risk_mult=None):
     """Full moving-window schedule: solve window, commit period 0, roll forward.
 
     `tam_reset_periods`: period indices at which a TAM turnaround happens (cleans
@@ -278,7 +311,7 @@ def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_
     y_committed = np.zeros((n_hx, n_periods))
     for p in range(n_periods):
         w = min(window, n_periods - p)
-        y_win = solve_window(dev, r, cost, k_per_day, w, max_deficit=max_deficit)
+        y_win = solve_window(dev, r, cost, k_per_day, w, max_deficit=max_deficit, risk_mult=risk_mult)
         frac = np.clip(y_win[:, 0], 0, 1)
         y0 = np.round(frac)                              # bang-bang rounding for the committed period
 
@@ -356,7 +389,7 @@ def v1_schedule_matrix(hx_ids, r, cost, dev0, n_periods, sched_v1):
 
 
 def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_deficit_C=None, topo=None,
-                     limit_overrides=None):
+                     limit_overrides=None, eng_priority=None):
     """Core computation, reusable in-memory (e.g. by notebook 16 with cost overrides
     applied to `econ` before calling) as well as by `main()` below which writes the
     static dashboard/data/cleaning_schedule_v2.json. Returns the `out` dict.
@@ -382,7 +415,13 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     `limit_overrides`: optional dict (dashboard/data/furnace_limit_overrides.json contents),
     defaults to loading it from disk if not given. Passed straight through to
     furnace_fg_deficit_ceiling_C so an edited FG_FLOW limit on the dashboard actually changes
-    this schedule, not just the static topology value."""
+    this schedule, not just the static topology value.
+
+    `eng_priority`: optional list (dashboard/data/engineering_priority.json contents, notebook
+    08's risk-based ranking), defaults to loading it from disk if not given. Turned into a
+    per-HX risk_mult (see build_risk_mult) that is baked into the SLSQP objective for every
+    window solve in the sweep below -- so the schedule this function returns is risk-aware by
+    construction, not just re-labeled after the fact."""
     tam_dates = sorted(tam_dates or TAM_DATES)
     last_tam = tam_dates[-1]
 
@@ -431,6 +470,10 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     cost = np.array([state[hx]['cost'] for hx in online_ids])
     dev0 = np.array([state[hx]['deviation0'] for hx in online_ids])
 
+    if eng_priority is None:
+        eng_priority = _load('engineering_priority.json', [])
+    risk_mult = build_risk_mult(online_ids, eng_priority)
+
     # --- window-size sweep (paper Fig. 3 / Table 2 methodology): pick SMW minimizing realized cost ---
     # When effective_max_deficit_C is set (CIT floor and/or furnace FG-limit-derived ceiling,
     # whichever is tighter), the per-window SLSQP solve is constrained, but bang-bang ROUNDING
@@ -447,7 +490,7 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     candidates = []
     for w in WINDOW_CANDIDATES:
         y = run_schedule(online_ids, dev0, r, cost, k_per_day, n_periods, w, tam_reset_periods,
-                          max_deficit=effective_max_deficit_C)
+                          max_deficit=effective_max_deficit_C, risk_mult=risk_mult)
         total, fuel, clean = realized_cost(dev0, r, cost, k_per_day, y, tam_reset_periods)
         n_clean_actions = int(y.sum())
         traj_w = realized_deficit_trajectory(dev0, r, y, tam_reset_periods)
@@ -519,7 +562,7 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
             timeline.append(dict(HX=hx, date=str(d.date()), kind='TAM'))
         per_hx.append(dict(HX=hx, online=True, r_C_per_day=round(float(r[i]), 5),
                            cleaning_cost=int(cost[i]), n_cleans_to_tam=len(dates),
-                           next_dates=dates))
+                           next_dates=dates, scheduler_risk_mult=round(float(risk_mult[i]), 3)))
     for hx in tam_only_ids:
         per_hx.append(dict(HX=hx, online=False, r_C_per_day=round(state[hx]['r'], 5),
                            cleaning_cost=state[hx]['cost'], n_cleans_to_tam=0,
@@ -538,9 +581,11 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
                 'Comput. Chem. Eng. 2018) — reduced-form network coupling: ผลรวม deviation '
                 'ที่วัดจริงต่อ HX (ไม่ใช่ full epsilon-NTU DAE เพราะ UA nameplate ไม่ผ่านการ validate '
                 'กับสภาพจริง) · แก้ปัญหาต่อหน้าต่างเลื่อนด้วย SLSQP แล้ว commit เฉพาะงวดแรก · '
-                f'เพดานความถี่ {MAX_CLEANS_PER_YEAR} ครั้ง/ปีต่อ HX (ข้อจำกัดหน้างานจริง)'),
+                f'เพดานความถี่ {MAX_CLEANS_PER_YEAR} ครั้ง/ปีต่อ HX (ข้อจำกัดหน้างานจริง) · '
+                f'จัดคิวเมื่อทีมล้างไม่พอด้วยคะแนนเสี่ยง NB08 (engineering_priority_score, RISK_WEIGHT={RISK_WEIGHT}) '
+                'ถ่วงเข้า objective ตรงๆ ไม่ใช่แค่จัดลำดับแสดงผล'),
         max_online_cleans_per_period=MAX_ONLINE_CLEANS_PER_PERIOD, max_online_cleans_assumed=True,
-        max_cleans_per_year_per_hx=MAX_CLEANS_PER_YEAR,
+        max_cleans_per_year_per_hx=MAX_CLEANS_PER_YEAR, risk_weight_applied=RISK_WEIGHT,
         k_baht_per_C_day=round(k_per_day), feed_kbd=feed_kbd,
         max_cit_deficit_C_applied=max_cit_deficit_C,
         furnace_fg_ceiling_C=(round(furnace_ceiling_C, 3) if furnace_ceiling_C is not None else None),
@@ -576,7 +621,7 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
 
 
 def compare_tam_cycles(econ, chist, logi, sched_v1, base_tam, years_options=(3, 4),
-                       max_cit_deficit_C=None, topo=None, limit_overrides=None):
+                       max_cit_deficit_C=None, topo=None, limit_overrides=None, eng_priority=None):
     """Real TAM-cycle-length comparison: does the plan (net saving, cleans/yr, CIT-floor and
     furnace FG-limit constraints) still hold if the plant extends the cycle from 3 years to 4?
 
@@ -598,7 +643,7 @@ def compare_tam_cycles(econ, chist, logi, sched_v1, base_tam, years_options=(3, 
         tam_dates = [base_tam, base_tam + pd.DateOffset(years=years)]
         out = compute_schedule(econ, chist, logi, sched_v1, tam_dates=tam_dates,
                                max_cit_deficit_C=max_cit_deficit_C, topo=topo,
-                               limit_overrides=limit_overrides)
+                               limit_overrides=limit_overrides, eng_priority=eng_priority)
         scenarios[f'{years}yr'] = dict(
             tam_dates=out['tam_dates'],
             net_saving_note='ดูจาก cleaning_plan.json (economics.json ต่างหาก) -- ที่นี่รายงานเฉพาะต้นทุนที่ scheduler ใช้ตัดสินใจ',

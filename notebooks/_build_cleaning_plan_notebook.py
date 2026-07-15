@@ -97,14 +97,16 @@ cells.append(md_cell(r"""
 ## 1 · โหลด & ตรวจข้อมูลนำเข้า (data sanity — จับจุดผิดตรงนี้ก่อน)
 
 โหลด 4 แหล่ง แล้วตรวจว่าข้อมูลพร้อมใช้: fouling rate ที่ **reliable** (ผ่านเกณฑ์ฟิสิกส์ slope<0),
-economics (ΔCIT วัดจริง/โมเดล), logistics (ล้าง online ได้ไหม), ranking (safety/ตำแหน่ง).
+economics (ΔCIT วัดจริง/โมเดล), logistics (ล้าง online ได้ไหม), ranking ความเสี่ยง (safety/worsening/
+engineering_priority_score จาก **notebook 08** — ยึดเป็นอันดับหลักของแผนนี้ด้วย ไม่ใช่แค่ของแท็บภาพรวม
+อีกต่อไป — ดู §4).
 """.strip("\n")))
 
 cells.append(code_cell(r"""
 fr    = pd.read_csv(DATA / 'Fouling_Rate_By_Run.csv')
 econ  = load('economics.json', {})
 logi  = load('cleaning_logistics.json', {'hx': []})
-rank  = {r['HX']: r for r in load('hx_ranking.json', [])}
+rank  = {r['HX']: r for r in load('engineering_priority.json', [])}   # notebook 08's risk ranking -- see §4
 eor   = load('end_of_run.json', {'hx': {}})
 
 # --- sanity checks (visible) ---
@@ -180,7 +182,8 @@ for hx in sorted(set(list(logi_by) + list(econ_by) + list(rank))):
         cleaning_cost=e.get('cleaning_cost'), cleaning_cost_overridden=(hx in COST_OVERRIDES),
         net_saving_thb_yr=e.get('saving_thb_yr'), payback_days=e.get('payback_days'),
         safety=bool(rk.get('safety_flag')), worsening=bool(rk.get('worsening')),
-        Q_drop_pct=rk.get('Q_drop_%'),
+        Q_drop_pct=rk.get('Q_drop_pct'),
+        engineering_priority_score=rk.get('engineering_priority_score'),
     ))
 dec = pd.DataFrame(rows)
 print('HX with a usable fouling rate:', int(dec.fouling_dUrel_per_month.notna().sum()), '/', len(dec))
@@ -245,21 +248,24 @@ dec[['HX','online','cit_gain_C_full','cit_gain_C_online','r_cit_per_day','cleani
 """.strip("\n")))
 
 cells.append(md_cell(r"""
-## 4 · คะแนนจัดลำดับ: คุ้มค่าก่อน + ถ่วงดุลความเสี่ยง (multi-criteria priority)
+## 4 · คะแนนจัดลำดับ: ความเสี่ยงแบบ notebook 08 เป็นหลัก + ความคุ้มค่าประกอบ (multi-criteria priority)
 
-เมื่อทีมล้าง/งบจำกัด ต้องเลือกก่อน-หลัง. คะแนน = **net saving (คุ้มค่า) × ตัวคูณความเสี่ยง**:
+**อันดับหลักของแผนนี้คือ `engineering_priority_score` จาก notebook 08** (Probability × Consequence /
+Effort — fouling trajectory + safety/coking + ตำแหน่งในเทรน) ไม่ใช่ net-saving อีกต่อไป — เพราะการให้
+เหตุผลแบบวิศวกร (ความเสี่ยงมาก่อน) ใกล้เคียงกับวิธีที่วิศวกรหน้างานตัดสินใจจริงมากกว่า และทำให้แท็บ
+"ภาพรวม" กับแท็บ "แผนล้าง HX" เห็นอันดับเดียวกัน ไม่สับสน (เดิมสองแท็บนี้ใช้คนละ ranking system).
+ค่า net saving/payback ยังคำนวณและแสดงครบ เป็น**คอลัมน์ประกอบ**บอกว่าคุ้มเงินแค่ไหน ไม่ใช่ตัวตัดอันดับ.
 
-`priority = net_saving_norm × (1 + w_safety·safety + w_pos·position + w_worse·worsening)`
-
-- `net_saving_norm` — normalize 0..1 (คุ้มค่าเป็นแกนหลัก)
-- ตำแหน่งในเทรน: HX ท้ายเทรน (ก่อนเตา) ร้อนสุด → ตะกรัน/coking เสี่ยงสุด → คะแนนเสี่ยงสูง
-- น้ำหนัก (`W_*`) ปรับได้ — โปร่งใส ไม่ใช่ black box
+คะแนนความเสี่ยงนี้ยังถูกส่งเข้า **optimizer จริงใน §5** (ไม่ใช่แค่จัดเรียงตารางแสดงผล) ผ่าน `risk_mult`
+ใน `cleaning_scheduler_network` — เวลาที่ทีมล้าง/งบจำกัดจนต้องแย่งคิว ตัวที่เสี่ยงสูงกว่าจะได้คิวก่อนจริง
+ไม่ใช่แค่ดูเหมือนสำคัญกว่าในตาราง.
 """.strip("\n")))
 
 cells.append(code_cell(r"""
-W_SAFETY, W_POSITION, W_WORSENING = 0.5, 0.4, 0.25     # tunable risk weights (documented)
+W_SAFETY, W_POSITION, W_WORSENING = 0.5, 0.4, 0.25     # tunable, used for the "เหตุผล" text + risk_mult export only (not the sort key anymore)
 
-# train position: order HX along the preheat train (terminal = hottest = riskiest).
+# train position: order HX along the preheat train (terminal = hottest = riskiest) -- kept for
+# the plain-language "เหตุผล" column and the exported risk_mult field below.
 TRAIN_ORDER = ['E101EF','E101CD','E101AB','E102','E106AB','E107AB','E103AB','E104',
                'E108AB','E110ABC','E111','E109AB','E112AB','E105AB','E112C','E113A']
 pos = {hx: i / (len(TRAIN_ORDER) - 1) for i, hx in enumerate(TRAIN_ORDER)}
@@ -270,17 +276,15 @@ dec['position_risk'] = dec.HX.map(pos).fillna(0.5).round(2)
 dec['risk_mult'] = (1 + W_SAFETY * dec.safety.astype(int)
                       + W_POSITION * dec.position_risk
                       + W_WORSENING * dec.worsening.astype(int)).round(3)
-dec['priority_score'] = (dec['net_saving_norm'] * dec['risk_mult']).round(3)
-# priority_score is net_saving_norm x risk_mult -- multiplicative, so it collapses to exactly 0
-# for every HX with no usable economics data (net_saving_norm=0), regardless of risk_mult. That
-# used to leave those HX tied and ordered only by DataFrame insertion order, silently discarding
-# the safety/position/worsening signal for exactly the HX where it matters most (no clean-economics
-# to fall back on). has_savings as the primary sort key keeps ranks 1-10 (real economics) exactly
-# as before, and breaks the zero-score tie by risk_mult instead of insertion order.
-dec['has_savings'] = (dec['net_saving_norm'] > 0).astype(int)
-dec = dec.sort_values(['has_savings', 'priority_score', 'risk_mult'], ascending=False).reset_index(drop=True)
+dec['priority_score'] = (dec['net_saving_norm'] * dec['risk_mult']).round(3)   # economics-weighted score -- SUPPORTING column only now, see §4 markdown
+
+# PRIMARY sort: notebook 08's engineering_priority_score (risk-first, matches engineer
+# reasoning). HX missing a score (shouldn't happen -- NB08 scores all 16) sort last, never
+# crash. priority_score (economics) is the tie-break only, not the primary key.
+dec = dec.sort_values(['engineering_priority_score', 'priority_score'],
+                       ascending=False, na_position='last').reset_index(drop=True)
 dec['priority_rank'] = dec.index + 1
-dec[['priority_rank','HX','online','net_saving_norm','safety','position_risk','worsening','risk_mult','priority_score']].head(16)
+dec[['priority_rank','HX','online','engineering_priority_score','safety','worsening','net_saving_thb_yr','payback_days','risk_mult','priority_score']].head(16)
 """.strip("\n")))
 
 cells.append(md_cell(r"""
@@ -308,12 +312,13 @@ econ_live = dict(econ); econ_live['per_hx'] = list(econ_by.values())
 # everything else in this notebook depends on. `topo` (pfd_topology.json) lets compute_schedule
 # also enforce the furnace's own FG_FLOW limit as a second hard ceiling alongside MAX_CIT_DEFICIT_C
 # -- see furnace_fg_ceiling_C/binding_constraint in its output.
+eng_priority_rows = list(rank.values())   # notebook 08's risk ranking, loaded in §1 -- feeds risk_mult inside the optimizer itself, not just this notebook's own sort (§4)
 schedV2 = NS.compute_schedule(econ_live, chist, logi, sched_v1, tam_dates=[NS.NEXT_TAM],
                               max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo,
-                              limit_overrides=FURNACE_LIMIT_OVERRIDES)
+                              limit_overrides=FURNACE_LIMIT_OVERRIDES, eng_priority=eng_priority_rows)
 schedV2_full = NS.compute_schedule(econ_live, chist, logi, sched_v1,
                                    max_cit_deficit_C=MAX_CIT_DEFICIT_C, topo=topo,
-                                   limit_overrides=FURNACE_LIMIT_OVERRIDES)   # full multi-TAM horizon
+                                   limit_overrides=FURNACE_LIMIT_OVERRIDES, eng_priority=eng_priority_rows)   # full multi-TAM horizon
 print(f"CIT floor: satisfied={schedV2['constraint_satisfied']} "
       f"max realized deficit={schedV2['max_realized_deficit_C']} degC "
       f"(effective ceiling {schedV2.get('effective_max_deficit_C')} degC, "
@@ -331,6 +336,10 @@ plan_by = {p['HX']: p for p in schedV2.get('per_hx', [])}
 dec['n_cleans_to_tam'] = dec.HX.map(lambda h: plan_by.get(h, {}).get('n_cleans_to_tam', 0))
 dec['next_clean'] = dec.HX.map(lambda h: (plan_by.get(h, {}).get('next_dates') or [None])[0])
 dec['scheduled_dates'] = dec.HX.map(lambda h: plan_by.get(h, {}).get('next_dates') or [])
+# risk multiplier the optimizer itself applied when solving §5 (see build_risk_mult) -- carried
+# through purely for auditability, so cleaning_plan.json shows WHY the schedule favored a HX
+# beyond the priority_rank/engineering_priority_score columns already exported.
+dec['scheduler_risk_mult'] = dec.HX.map(lambda h: plan_by.get(h, {}).get('scheduler_risk_mult'))
 print('total online cleans scheduled to TAM:', int(dec['n_cleans_to_tam'].sum()))
 dec[['priority_rank','HX','online','n_cleans_to_tam','next_clean','freq_ref_per_yr','net_saving_thb_yr','payback_days']].head(16)
 """.strip("\n")))
@@ -438,6 +447,8 @@ for _, r in dec.iterrows():
         cit_gain_source=r['cit_gain_source'],
         safety=bool(r['safety']), worsening=bool(r['worsening']),
         position_risk=float(r['position_risk']), risk_mult=float(r['risk_mult']),
+        engineering_priority_score=(None if pd.isna(r['engineering_priority_score']) else float(r['engineering_priority_score'])),
+        scheduler_risk_mult=(None if pd.isna(r['scheduler_risk_mult']) else float(r['scheduler_risk_mult'])),
         reason=reason(r),
     ))
 
@@ -475,7 +486,10 @@ out = dict(
     cost_overrides_applied=COST_OVERRIDES,
     method=('แผนเดียว: constrained network moving-window optimizer (Dekebo, Oh & Lee 2023) '
             'เคารพ bypass/ทีมล้าง/เพดาน 4-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '
-            '· จัดลำดับด้วย net-saving ถ่วงความเสี่ยง (safety, ตำแหน่งเทรน, worsening) · T* เป็นค่าอ้างอิงต่อ HX '
+            '· จัดลำดับด้วยความเสี่ยงแบบ notebook 08 เป็นหลัก (engineering_priority_score) เหมือนแท็บภาพรวม — '
+            f'ถ่วงเข้า objective ของ optimizer ตรงๆ ด้วย (RISK_WEIGHT={schedV2.get("risk_weight_applied")}) '
+            'ไม่ใช่แค่จัดเรียงตารางแสดงผล จึงเปลี่ยนได้จริงว่าตัวไหนได้คิวล้าง online ก่อนเมื่อทีมล้าง/งบจำกัด · '
+            'net-saving/payback ยังคำนวณครบเป็นคอลัมน์ประกอบ · T* เป็นค่าอ้างอิงต่อ HX '
             '· เทียบมูลค่าเชื้อเพลิงเตาที่ประหยัดได้ตรงกับค่าล้าง (worth_it)'),
     constraints=dict(max_freq_per_year=MAX_FREQ, min_interval_days=MIN_INTERVAL,
                      crew_per_month=schedV2.get('max_online_cleans_per_period', 2),
