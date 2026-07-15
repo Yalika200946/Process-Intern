@@ -1,0 +1,151 @@
+=== cell 26 ===
+fig, ax = plt.subplots(figsize=(10, 8))
+tier_colors = {'SWAP_CAPABLE': '#2ca25f', 'ONLINE_FULL': '#1f77b4', 'ONLINE_PARTIAL': '#EA7600', 'TAM_ONLY': '#7f7f7f'}
+colors = [tier_colors[t] for t in eng_ranked['effort_tier']]
+ax.barh(eng_ranked['HX'], eng_ranked['engineering_priority_score'], color=colors)
+ax.set_xlabel('Engineering Priority Score (Probability x Consequence / Effort)')
+ax.set_title('Comprehensive Cleaning Priority (green=swap-capable, blue=online-full, orange=online-partial, gray=TAM-only)',
+              fontsize=10)
+ax.invert_yaxis()
+plt.tight_layout()
+plt.savefig(os.path.join(FIG_DIR, '2d_engineering_priority_score.png'), bbox_inches='tight')
+plt.show()
+
+DATA_DIR_ENG = r'C:\Desktop\Bangchak Internship 2026\Data'
+eng_ranked.to_csv(DATA_DIR_ENG + r'\Engineering_Priority_Score.csv', index=False)
+print('Wrote Engineering_Priority_Score.csv', eng_ranked.shape)
+
+print()
+print('=' * 70)
+print('FINAL RECOMMENDATION -- Comprehensive Engineering Priority')
+print('=' * 70)
+for rank, (_, row) in enumerate(eng_ranked.head(6).iterrows(), 1):
+    worsen_tag = ' [WORSENING]' if row['worsening'] else ''
+    safety_tag = ' [SAFETY]' if row['safety_flag'] else ''
+    print(f"  #{rank}  {row['HX']:<10} ({row['effort_tier']:<26s})  "
+          f"Score: {row['engineering_priority_score']:.3f}{worsen_tag}{safety_tag}")
+print('=' * 70)
+print()
+print('Can be scheduled online now (SWAP_CAPABLE or ONLINE_CLEAN_DEMONSTRATED):')
+print('  ' + ', '.join(eng_ranked.loc[eng_ranked['effort_tier'] != 'TAM_ONLY', 'HX'].tolist()))
+print('Must wait for next TAM:')
+print('  ' + ', '.join(eng_ranked.loc[eng_ranked['effort_tier'] == 'TAM_ONLY', 'HX'].tolist()))
+
+=== cell 27 ===
+---
+## 5. Summary
+
+Top cleaning recommendations, ranked and reasoned:
+
+=== cell 28 ===
+print('=' * 70)
+print('TOP CLEANING RECOMMENDATIONS -- CIT-Gain Basis')
+print('=' * 70)
+for rank, (_, row) in enumerate(priority.head(5).iterrows(), 1):
+    print(f"  #{rank}  {row['HX']:<10} ({row['group']})  "
+          f"Fouling: {row['median_pct_drop_per_30d']:+.1f}%/30d  "
+          f"Priority: {row['priority_score']:.3f}  "
+          f"Est. CIT gain: +{row['expected_CIT_gain_C']:.1f} degC")
+print('=' * 70)
+
+print()
+print('=' * 70)
+print('TOP CLEANING RECOMMENDATIONS -- Hot-End Coking Risk Basis')
+print('=' * 70)
+for rank, (_, row) in enumerate(flagged.head(5).iterrows(), 1):
+    print(f"  #{rank}  {row['HX']:<10} ({row['group']})  "
+          f"Fouling: {row['median_pct_drop_per_30d']:+.1f}%/30d  "
+          f"Mean crude-out: {row['mean_cold_out_C']:.0f} degC  "
+          f"Coking risk score: {row['coking_risk_score']:.3f}")
+print('=' * 70)
+
+print()
+print('=' * 70)
+print('TOP CLEANING RECOMMENDATIONS -- Residue-Chain Structural Risk Basis')
+print('=' * 70)
+for rank, (_, row) in enumerate(residue_risk.head(5).iterrows(), 1):
+    print(f"  #{rank}  {row['HX']:<10} (chain position {row['chain_position']})  "
+          f"Fouling: {row['median_pct_drop_per_30d']:+.1f}%/30d  "
+          f"Risk score: {row['residue_chain_risk_score']:.3f}")
+print('=' * 70)
+
+if len(inactive):
+    print('Currently off/substituted (no live status): ' + ', '.join(inactive['HX'].tolist()))
+
+# Combined action list: three bases merged, ranked within their own basis,
+# then interleaved by rank so the overall list reflects 'act on this soon'
+# regardless of which method produced the number. A HX can appear more than
+# once if it scores highly on more than one basis (e.g. E113A on both
+# coking-risk and residue-chain-risk) -- that's a signal, not a dedup bug.
+cit_basis = priority[['HX', 'group', 'median_pct_drop_per_30d']].copy()
+cit_basis['basis'] = 'CIT_gain'
+cit_basis['score'] = priority['priority_score']
+cit_basis['detail'] = priority['expected_CIT_gain_C'].map(lambda v: f'+{v:.1f} degC CIT')
+
+risk_basis = flagged[['HX', 'group', 'median_pct_drop_per_30d']].copy()
+risk_basis['basis'] = 'Coking_risk'
+risk_basis['score'] = flagged['coking_risk_score']
+risk_basis['detail'] = flagged['mean_cold_out_C'].map(lambda v: f'{v:.0f} degC crude-out')
+
+residue_basis = residue_risk[['HX', 'median_pct_drop_per_30d']].copy()
+residue_basis['group'] = 'CPHT-2'
+residue_basis['basis'] = 'Residue_chain_risk'
+residue_basis['score'] = residue_risk['residue_chain_risk_score']
+residue_basis['detail'] = residue_risk['chain_position'].map(lambda v: f'chain position {v}')
+
+combined_action_list = pd.concat([cit_basis, risk_basis, residue_basis], ignore_index=True)
+combined_action_list['rank_within_basis'] = combined_action_list.groupby('basis')['score'].rank(ascending=False)
+combined_action_list = combined_action_list.sort_values(['rank_within_basis', 'basis']).reset_index(drop=True)
+
+print()
+print('=' * 70)
+print('COMBINED ACTION LIST (three bases, interleaved by within-basis rank)')
+print('=' * 70)
+for _, row in combined_action_list.iterrows():
+    print(f"  [{row['basis']:19s}] {row['HX']:<10} ({row['group']})  "
+          f"Fouling: {row['median_pct_drop_per_30d']:+.1f}%/30d  {row['detail']}")
+
+DATA_DIR_OUT = r'C:\Desktop\Bangchak Internship 2026\Data'
+ranking.to_csv(DATA_DIR_OUT + r'\Cleaning_Priority_Ranking.csv', index=False)
+print('Wrote Cleaning_Priority_Ranking.csv', ranking.shape)
+# combined_action_list is printed above for the interleaved 3-basis view but is not
+# exported -- no downstream script/notebook reads a Cleaning_Combined_Action_List.csv
+# (confirmed by repo-wide grep, 2026-07-12 pipeline audit); Engineering_Priority_Score.csv
+# (written later in this notebook) is the ranking file actually consumed downstream.
+
+=== cell 29 ===
+---
+## 6. Limitations
+
+- **CPHT-1 gain estimates (E102, E101AB, E101CD) are the least trustworthy
+  numbers in this table.** `E102`'s +11.3 degC estimate is implausibly large
+  for one HX given CPHT-1's entire job is raising crude from ~37 degC to
+  the desalter feed temperature — a single-variable regression against CIT
+  can't separate "this HX's own fouling" from "this HX's Q moves with overall
+  plant health/season, which also moves CIT." CPHT-1's true effect on CIT is
+  indirect (via desalter outlet temperature, not measured directly here), so
+  treat these three rows as **directional (still plausibly top-4), not
+  quantitatively reliable** until a desalter-outlet-mediated model replaces
+  this simple regression. CPHT-2 rows sit on a literal series chain to CIT
+  and are comparatively more trustworthy.
+- `Q_shortfall` is derived from `2b`'s campaign baseline/current snapshot, not
+  a live regression forecast — it's a point-in-time estimate, re-run
+  periodically as new data comes in rather than treated as a fixed number.
+- Terminal-position HX (E113A, E112C, E111, E109AB, E112AB) now get a coking-risk
+  score (section 1.5-1.6) and, where they sit in the residue chain, a residue-chain
+  risk score (section 1.7-1.8) instead of a CIT-degC number -- still not directly
+  comparable to the CIT-gain figures, but no longer dropped from the ranking.
+- The crude-property vs fouling-rate correlation for the residue chain (section 1.7)
+  is exploratory only -- 3-6 online-clean runs per HX is too few for statistical
+  confidence (all p > 0.15). Re-run once more cleaning cycles accumulate; until then,
+  the residue-chain risk score uses chain position + measured fouling rate only, not
+  a fitted crude-quality effect.
+- No cleaning cost/downtime data is incorporated — this ranks *benefit*, not
+  benefit-per-effort. Combine with a maintenance cost/duration estimate before
+  scheduling.
+- This consolidates and re-grounds the equivalent analysis in
+  `09_cit_ranking_baseline.ipynb` (sections 5-7, 11) on the corrected
+  `Operating_State.csv` from `2a` — that notebook's ML CIT-prediction sections
+  (8-10) are a separate, larger deliverable (full CIT forecasting model) and
+  are out of scope here.
+
