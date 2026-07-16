@@ -23,3 +23,6 @@ nbformat==5.10.4
 nbconvert==7.17.1
 jupyter-client==8.9.1
 ipykernel==7.3.0
+
+# testing (tests/, run: pytest tests/)
+pytest==8.4.2
