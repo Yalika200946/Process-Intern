@@ -76,3 +76,20 @@ TOTAL_CHARGE_TAG = '1fi005.pv'
 DATA_DIR = os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')
 PROCESS_WITH_CRUDE_CSV = DATA_DIR + r'\Process_information_with_crude.csv'
 OPERATING_STATE_CSV = DATA_DIR + r'\Operating_State.csv'
+
+# --- TAM/shutdown-window detection (01_data_cleaning.ipynb section 4.1) --------------
+# Previously hardcoded inline in the notebook cell only -- moved here following this
+# module's own established pattern (see header docstring) so these thresholds are
+# reviewable/discoverable in one place rather than buried in a large notebook cell.
+SHUTDOWN_FLOW_THRESHOLD = 200      # m3/hr; below this, a day is provisionally flagged shutdown
+RECOVERY_FLOW_THRESHOLD = 400      # m3/hr; flow must recover above this to end a shutdown window
+SHUTDOWN_MARGIN_DAYS = 7           # extra days removed on each side of a detected shutdown
+SHUTDOWN_ROLLING_WINDOW_DAYS = 30  # centered rolling median window, for visualization only
+
+# --- Cold-side temperature outlier correction (01_data_cleaning.ipynb section 4.2) ---
+# Same rationale as the TAM thresholds above.
+CHAIN_TOL_C = 5.0            # deg C tolerance before cold_out < cold_in - tol counts as a chain violation
+COLD_TEMP_ROLL_WIN = 30      # days, centered rolling window for z-score outlier detection
+COLD_TEMP_Z_THRESH = 3.0     # |z| above this is flagged an outlier
+COLD_TEMP_PHYS_MIN = 30      # deg C, physically implausible below this for the crude preheat train
+COLD_TEMP_PHYS_MAX = 380     # deg C, physically implausible above this
