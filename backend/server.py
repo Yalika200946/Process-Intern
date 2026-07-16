@@ -69,6 +69,34 @@ def validate_and_load(raw, filename):
     return df, missing
 
 
+def validate_raw_excel(raw, filename):
+    """Return missing_tags for a RAW process Excel headed for the full pipeline
+    (`/api/run-full` -> `run_all.py --input`). Raises ValueError on a file that
+    isn't even readable/structured as `notebooks/01_data_cleaning.ipynb` expects
+    (sheet 'Sheet1', tag names in row 4 / 1-indexed, data from row 8).
+
+    Unlike `validate_and_load` above (which validates an already-cleaned CSV
+    with tags as column headers), a raw historian export has tags embedded in
+    a header ROW, not as DataFrame columns -- so this is a separate check, not
+    a call to `validate_and_load`. Exists to close the gap where this upload
+    path previously staged the file with zero validation and let a malformed
+    file fail deep inside notebook 01 with a cryptic pandas error instead of a
+    clear message at the boundary (docs/03 section 2.2, FR-DQ-* gap)."""
+    if not filename.lower().endswith(('.xlsx', '.xls')):
+        raise ValueError("ไฟล์ pipeline เต็มรูปแบบต้องเป็น .xlsx/.xls (raw historian export) ไม่ใช่ไฟล์ประเภทอื่น")
+    buf = io.BytesIO(raw)
+    try:
+        raw_df = pd.read_excel(buf, sheet_name='Sheet1', header=None, nrows=8)
+    except Exception as e:
+        raise ValueError(f"อ่านไฟล์ Excel ไม่ได้ หรือไม่มี sheet ชื่อ 'Sheet1': {e}")
+    if raw_df.shape[0] < 8 or raw_df.shape[1] < 4:
+        raise ValueError("โครงสร้างไฟล์ไม่ตรงกับที่ pipeline คาดไว้ "
+                          "(ต้องมีอย่างน้อย 8 แถว และ 4 คอลัมน์ก่อนถึงแถวข้อมูลจริง)")
+    tags_row = raw_df.iloc[3, 3:]
+    found_tags = {t for t in tags_row if isinstance(t, str)}
+    return sorted(t for t in REQUIRED_TAGS if t not in found_tags)
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quieter console
         pass
@@ -270,6 +298,10 @@ class Handler(BaseHTTPRequestHandler):
             cmd = [sys.executable, str(ROOT / 'pipeline' / 'run_all.py'), '--timeout', '1200']
             staged = None
             if raw and filename:
+                missing = validate_raw_excel(raw, filename)
+                if missing:
+                    return self._send(422, {'error': f'ไฟล์ขาด tag ที่จำเป็น {len(missing)} คอลัมน์',
+                                            'missing_tags': missing[:20]})
                 staged = UPLOADS / filename
                 staged.write_bytes(raw)
                 cmd += ['--input', str(staged)]
@@ -282,6 +314,8 @@ class Handler(BaseHTTPRequestHandler):
                             + (f' · ใช้ไฟล์ {filename}' if staged else ' · ใช้ข้อมูลปัจจุบัน')),
                 'note': 'เมื่อเสร็จแล้วให้กดรีเฟรชหน้าเพื่อโหลดผลใหม่ · log: Data/uploads/pipeline_last.log',
             })
+        except ValueError as e:
+            self._send(422, {'error': str(e)})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 
