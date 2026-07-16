@@ -27,6 +27,9 @@ env/
 .DS_Store
 Thumbs.db
 
+# Office lock files (created while a .docx/.xlsx is open)
+~$*
+
 # ML Models (large files)
 src/ml/trained_models/training_weights/
 *.h5
