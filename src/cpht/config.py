@@ -69,7 +69,34 @@ def required_tags():
 DATA_DIR = os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')
 RAW_EXCEL = DATA_DIR + r'\Process information data (2024-2026).xlsx'
 
+# Crude assay, built by `notebooks/00_data_prep_crude_assay.ipynb` -- treated
+# as static/already-committed (not re-run by `pipeline/run_all.py` either;
+# see docs/ANALYSIS_PIPELINE_GUIDE.md item 3). Not a constant in the legacy
+# `cpht_config.py` (each legacy notebook hardcoded this path inline), so
+# centralized here instead of repeating that scatter in notebooks_v2.
+CRUDE_PROPERTY_CSV = DATA_DIR + r'\Crude_property_profiled.csv'
+
 # Where notebooks_v2 write their step outputs -- kept separate from the
 # legacy chain's `Data/*.csv` filenames so the two pipelines can run side by
 # side without overwriting each other's artifacts during migration.
 V2_OUTPUT_DIR = DATA_DIR + r'\v2'
+
+# --- TAM/shutdown-window detection (Notebook 02) ------------------------------
+# Ported verbatim from `notebooks/01_data_cleaning.ipynb` -- these thresholds
+# are legacy-validated, not re-derived here (see docs/04's "do not
+# re-litigate" list). Centralized as constants (rather than scattered inline
+# per-notebook, which is the Phase 6 gap identified in the legacy pipeline)
+# so notebooks_v2 doesn't repeat that mistake from day one.
+SHUTDOWN_FLOW_THRESHOLD = 200      # m3/hr; below this, a day is provisionally flagged shutdown
+RECOVERY_FLOW_THRESHOLD = 400      # m3/hr; flow must recover above this to end a shutdown window
+SHUTDOWN_MARGIN_DAYS = 7           # extra days removed on each side of a detected shutdown
+SHUTDOWN_ROLLING_WINDOW_DAYS = 30  # centered rolling median window, for visualization only
+
+# --- Cold-side temperature outlier correction (Notebook 03) ------------------
+# Ported verbatim from `notebooks/01_data_cleaning.ipynb` section 4.2 -- same
+# "do not re-litigate" rationale as the TAM thresholds above.
+CHAIN_TOL_C = 5.0            # deg C tolerance before cold_out < cold_in - tol counts as a chain violation
+COLD_TEMP_ROLL_WIN = 30      # days, centered rolling window for z-score outlier detection
+COLD_TEMP_Z_THRESH = 3.0     # |z| above this is flagged an outlier
+COLD_TEMP_PHYS_MIN = 30      # deg C, physically implausible below this for the crude preheat train
+COLD_TEMP_PHYS_MAX = 380     # deg C, physically implausible above this
