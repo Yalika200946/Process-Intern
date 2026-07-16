@@ -86,6 +86,23 @@ def _recompute_clean_baseline(feat, ost, hx_config):
     return redone
 
 
+def _label_fouling_phases(feat, hx_config):
+    """Write `{hx}_fouling_phase` (INITIATION/AFTER_INITIATION) per HX using
+    nb_audit.label_fouling_phase -- the SAME INITIATION_LAG_DAYS boundary
+    robust_fouling_rate already uses internally to exclude early-run points, made an
+    explicit, visible column instead of a silent regression-input filter. See
+    label_fouling_phase's docstring for why this doesn't change the rate fit itself.
+    Mutates `feat` in place; returns the list of HX actually labeled."""
+    labeled = []
+    for hx in hx_config:
+        dod_col = f'{hx}_days_on_duty'
+        if dod_col not in feat:
+            continue
+        feat[f'{hx}_fouling_phase'] = A.label_fouling_phase(feat[dod_col])
+        labeled.append(hx)
+    return labeled
+
+
 def main():
     feat = pd.read_csv(FEAT, parse_dates=['Timestamp']).set_index('Timestamp')
     ost_path = DATA / 'Operating_State.csv'
@@ -94,11 +111,17 @@ def main():
     if ost is None:
         print('WARNING: Operating_State.csv missing — falling back to no state mask '
               '(rates and baseline will be less reliable; run 2a first).')
+        phase_labeled = _label_fouling_phases(feat, HX_CONFIG)
+        feat.to_csv(FEAT)
+        print(f'Labeled INITIATION/AFTER_INITIATION phase for {len(phase_labeled)}/{len(HX_CONFIG)} HX '
+              f'-> overwrote {FEAT.name}')
     else:
         redone = _recompute_clean_baseline(feat, ost, HX_CONFIG)
+        phase_labeled = _label_fouling_phases(feat, HX_CONFIG)
         feat.to_csv(FEAT)
         print(f'Recomputed in-service-masked U_clean_run/U_relative/Rf_run for '
-              f'{len(redone)}/{len(HX_CONFIG)} HX -> overwrote {FEAT.name}')
+              f'{len(redone)}/{len(HX_CONFIG)} HX; labeled fouling phase for '
+              f'{len(phase_labeled)}/{len(HX_CONFIG)} HX -> overwrote {FEAT.name}')
 
     rows = []
     for hx in HX_CONFIG:

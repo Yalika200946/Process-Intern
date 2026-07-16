@@ -147,9 +147,38 @@ def plausibility_checks(checks, show=True):
 
 INSERVICE_STATES = ('NORMAL', 'SUBSTITUTE_ACTIVE', 'PARALLEL')  # HX actively transferring heat
 
+# Days-on-duty below this are excluded from the fouling-rate regression in
+# robust_fouling_rate below (fast initial film-formation transient, not yet the steady
+# after-initiation trend a rate/ranking should be computed from) -- named here as a module
+# constant, not just a default-argument literal, so label_fouling_phase() below can use the
+# EXACT SAME boundary rather than a second, driftable copy of "15".
+INITIATION_LAG_DAYS = 15
+
+
+def label_fouling_phase(days_on_duty):
+    """Per-point INITIATION / AFTER_INITIATION label using the same boundary
+    (INITIATION_LAG_DAYS) robust_fouling_rate already uses to exclude early-run points from
+    its regression -- that exclusion happens silently inside the fit today; this makes it an
+    explicit, visible label instead (docs/03's diagram-derived Phase Separation requirement:
+    "Initiation Phase (post-clean/induction)" / "After-initiation Phase (steady-operation)").
+
+    This does NOT change or re-derive the boundary itself, and does not touch
+    robust_fouling_rate's fitting logic (AIC race between linear/asymptotic Kern-Seaton
+    curves, tail-slope rate, intra-run recovery split -- already a more sophisticated
+    phase-aware model than a fixed two-phase label would be on its own). It only exposes,
+    as a column other consumers can read/plot, the same cutoff the rate fit already applies.
+
+    NaN days_on_duty (HX not on duty that day) map to None, not a phase label.
+    Returns a numpy array of dtype=object with values 'INITIATION'/'AFTER_INITIATION'/None."""
+    d = np.asarray(days_on_duty, float)
+    label = np.full(d.shape, None, dtype=object)
+    valid = np.isfinite(d)
+    label[valid] = np.where(d[valid] < INITIATION_LAG_DAYS, 'INITIATION', 'AFTER_INITIATION')
+    return label
+
 
 def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
-                        lag_days=15, winsor_ceil=1.10, recent_days=60,
+                        lag_days=INITIATION_LAG_DAYS, winsor_ceil=1.10, recent_days=60,
                         min_span_days=30, min_pts=20, min_normal_frac=0.5,
                         slope_tol=5e-4, intra_recovery=0.15, inservice_states=INSERVICE_STATES,
                         min_r2_gate=0.30, max_sign_change_rate=0.35):
