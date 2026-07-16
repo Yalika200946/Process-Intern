@@ -31,12 +31,41 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'cleaning_history.json'
+EVENTS_CSV = DATA / 'Cleaning_Events.csv'
 sys.path.append(str(NB))
 from cpht_config import HX_CONFIG as COLD_CFG, CIT_TAG, TOTAL_CHARGE_TAG
 
 CORR_MIN = 0.20                              # min |Q-CIT corr| for a trustworthy sensitivity estimate
 
 EVENT_LABEL = {'SWITCH': 'สลับเชลล์ / ล้างออนไลน์', 'TAM': 'TAM (turnaround)'}
+
+
+def event_confidence(event_type, u_recovered):
+    """Confidence tier for a detected cleaning event (Confirmed/Probable/Possible/Uncertain),
+    matching the tier names in the project's target workflow diagram. Not a new detection
+    method -- it's the existing implicit heuristic (reset rows in `{hx}_event_type`, itself
+    derived from Operating_State.csv transitions / known TAM dates) PROMOTED with a confidence
+    read off signals this file already computes (U_recovered), instead of treating every
+    reset row as equally certain regardless of whether a real performance jump backs it up.
+
+    - TAM: 'Confirmed' -- plant-wide turnaround with a known real date (ground truth in this
+      project, not inferred from process behavior at all).
+    - SWITCH (shell swap / online clean) with a measurable, positive U_relative recovery jump:
+      'Probable' -- the config-derived label (a shell swap happened) IS corroborated by an
+      actual measured performance recovery.
+    - SWITCH with a jump computed but small/flat/negative (ambiguous -- e.g. could be a feed-rate
+      or crude-assay change coinciding with the swap, not fouling recovery): 'Possible'.
+    - SWITCH where before/after data isn't even sufficient to compute a jump: 'Uncertain' --
+      the event is asserted by configuration only, with no corroborating signal at all.
+
+    This still has no confirm/reject UI and no maintenance log to validate against (see
+    docs/03 FR-CL-007/008, still open) -- it narrows "how much to trust this row" using data
+    already on hand, it doesn't close those gaps."""
+    if event_type == 'TAM':
+        return 'Confirmed'
+    if u_recovered is None:
+        return 'Uncertain'
+    return 'Probable' if u_recovered > 0.01 else 'Possible'
 
 
 def _num(v, nd=3):
@@ -71,6 +100,11 @@ def main():
                'note': 'แสดง "วัดจริง" เทียบ "โมเดล" เพื่อให้วิศวกรตรวจว่าโมเดลตรงกับของจริงแค่ไหน',
            },
            'hx': {}}
+
+    all_events = []   # flat, explicit, persisted (Cleaning_Events.csv) -- one row per HX per event,
+                       # promoted from the implicit `{hx}_event_type`/`{hx}_days_on_duty` reset-row
+                       # scan below so other notebooks can read events directly instead of
+                       # re-deriving them from Feature_calculated.csv's per-HX columns (docs/03 FR-CL).
 
     for hx in [c[:-len('_U_relative')] for c in feat.columns if c.endswith('_U_relative')]:
         ucol, qcol = f'{hx}_U_relative', f'{hx}_Q'
@@ -153,12 +187,20 @@ def main():
             note = ''
             if not estimable and cit_meas is not None:
                 note = 'sensitivity อ่อน/downstream — ค่า CIT วัดจริงไม่น่าเชื่อถือ'
+            confidence = event_confidence(et, u_rec)
             cleans.append(dict(
                 date=row['Timestamp'].strftime('%Y-%m-%d'), type=et, method_label=EVENT_LABEL.get(et, et),
+                confidence=confidence,
                 run_ended=run_ended, U_before=u_b, U_after=u_a, U_recovered=u_rec,
                 Q_before=q_b, Q_after=q_a, Q_recovered_kW=q_rec,
                 cit_measured_C=cit_meas, cit_measured_method=cit_method, gain_estimable=bool(estimable),
                 cit_model_C=cit_model, note=note))
+            all_events.append(dict(
+                HX=hx, date=row['Timestamp'].strftime('%Y-%m-%d'), type=et, confidence=confidence,
+                U_before=u_b, U_after=u_a, U_recovered=u_rec, Q_before=q_b, Q_after=q_a,
+                Q_recovered_kW=q_rec, cit_measured_C=cit_meas, cit_measured_method=cit_method,
+                gain_estimable=bool(estimable), cit_model_C=cit_model,
+                run_ended=(run_ended['run'] if run_ended else None)))
 
         # next-clean forecast row (from end_of_run.json)
         eh = eor['hx'].get(hx, {})
@@ -178,6 +220,11 @@ def main():
     OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(',', ':')), encoding='utf-8')
     tot = sum(v['n_cleans'] for v in out['hx'].values())
     print(f'Wrote {OUT.name}: {len(out["hx"])} HX, {tot} cleaning events, {OUT.stat().st_size // 1024} KB')
+
+    events_df = pd.DataFrame(all_events)
+    events_df.to_csv(EVENTS_CSV, index=False, encoding='utf-8')
+    conf_counts = events_df['confidence'].value_counts().to_dict() if len(events_df) else {}
+    print(f'Wrote {EVENTS_CSV.name}: {len(events_df)} events, confidence breakdown: {conf_counts}')
 
 
 if __name__ == '__main__':
