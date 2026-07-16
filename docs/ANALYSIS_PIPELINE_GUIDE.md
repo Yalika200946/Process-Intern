@@ -38,7 +38,7 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 | 6 | `notebooks/06_fouling_rate_forecast.ipynb` | พยากรณ์ | โมเดล clean-baseline (fit ช่วง 30 วันแรกหลังล้าง) แล้ววัดช่องว่างทำนาย-จริงเป็นสัญญาณ fouling ที่ถี่กว่ารายรอบ | `Q_Deviation_Signal.csv` | กราฟ predicted vs actual Q (เส้นที่เห็นในแดชบอร์ดแท็บ "HX รายตัว") |
 | 7 | `notebooks/07_time_to_clean_prediction.ipynb` | พยากรณ์ | แปลงสัญญาณจาก #6 เป็น "เหลืออีกกี่วันต้องล้าง" โดยใช้ threshold จากประวัติจริงต่อ HX | `Time_To_Clean_Prediction.csv` | ตาราง days-to-clean ต่อ HX |
 | 8 | `notebooks/08_cleaning_priority_ranking.ipynb` | จัดอันดับ | รวม #4 (fouling/Q shortfall) + #5 (CIT sensitivity) + coking-risk เป็นคะแนนจัดอันดับเดียว (rank-percentile, ไม่ใช้ min-max) — **นี่คือ ranking ตัวจริงที่ระบบอื่นใช้ต่อ** | `Cleaning_Priority_Ranking.csv`, `Engineering_Priority_Score.csv` | ตารางจัดอันดับ E113A/E109AB/... พร้อม probability×consequence÷effort |
-| 9 | `notebooks/09_cit_ranking_baseline.ipynb` | โมเดล CIT | Notebook สำรวจรุ่นแรก (ใหญ่กว่า) — สร้าง feature matrix สำหรับโมเดล CIT และเทรน RF/XGB/LSTM ตัวแรก **หน้าที่จริงคือ "สร้างวัตถุดิบให้ #10-12" ไม่ใช่ ranking ที่ใช้งานจริง** (ranking ที่ใช้จริงคือ #8) | `hx_Q_cleaning_priority.csv` | ranking เวอร์ชันเก่า (เก็บไว้เพราะ #10-12 อ่านไฟล์นี้ต่อ) |
+| 9 | `notebooks/09_cit_model_feature_matrix.ipynb` | โมเดล CIT | Notebook สำรวจรุ่นแรก (ใหญ่กว่า) — สร้าง feature matrix สำหรับโมเดล CIT และเทรน RF/XGB/LSTM ตัวแรก **หน้าที่จริงคือ "สร้างวัตถุดิบให้ #10-12" ไม่ใช่ ranking ที่ใช้งานจริง** (ranking ที่ใช้จริงคือ #8) | `hx_Q_cleaning_priority.csv` | ranking เวอร์ชันเก่า (เก็บไว้เพราะ #10-12 อ่านไฟล์นี้ต่อ) |
 | 10 | `notebooks/10_cit_model_benchmark.ipynb` | โมเดล CIT (มุมพยากรณ์) | เทียบ XGB/RF/LSTM กับ **persistence baseline** (CIT วันนี้=เมื่อวาน) ด้วย walk-forward CV — **ข้อค้นพบหลัก: persistence ชนะ (R²≈0.80), ML แพ้ทุกตัว** | `Model_Comparison_Metrics.csv` | ตาราง CV R²/RMSE เทียบ baseline |
 | 11 | `notebooks/11_cit_shap_importance.ipynb` | โมเดล CIT (มุม attribution) | เอาโมเดลจาก #10 มาหา SHAP importance — ย้ำว่าเป็น **ความสัมพันธ์ ไม่ใช่การพยากรณ์** (เพราะ #10 บอกแล้วว่าโมเดลแพ้ baseline) | `hx_Q_cleaning_priority_v2.csv` | กราฟ SHAP bar ranking HX ที่มีผลต่อ CIT มากสุด |
 | 12 | `notebooks/12_economic_delta_cit.ipynb` | โมเดล CIT (มุม clean-baseline) | วิธีที่ 3: เทรนเฉพาะช่วงหลัง TAM ที่ยืนยันว่าสะอาดจริง (2024-06-14) แล้ววัด Δ CIT จากจุดนั้น — cross-check วิธี #10/#11 | `clean_baseline_sandbox.json` (ใช้จริง), `Delta_CIT_*.csv` (ไม่มีใครอ่านต่อ) | กราฟ Δ CIT ต่อ HX |
@@ -100,7 +100,7 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 1. **ยุบ `2_correlation.ipynb` + `2_pca.ipynb` → `02b_correlation_and_pca.ipynb` เดียว** — ทั้งคู่เป็น EDA ล้วนบน
    `Feature_calculated.csv` เดียวกัน ไม่มีใครอ่าน output ต่อ (มีแต่กราฟ) เคยเสนอไว้แล้วใน `docs/02_Requirement_v2_SSOT.md`.
 
-2. **เปลี่ยนคำอธิบายบทบาทของ `09_cit_ranking_baseline.ipynb`** (ไม่ต้องแก้โค้ด แค่แก้ comment/markdown หัว notebook)
+2. **เปลี่ยนคำอธิบายบทบาทของ `09_cit_model_feature_matrix.ipynb`** (ไม่ต้องแก้โค้ด แค่แก้ comment/markdown หัว notebook)
    จาก "ranking notebook" เป็น **"ตัวสร้าง feature matrix + ranking รุ่นแรกให้ #10/#11 ใช้ต่อ"** — เพราะ ranking ที่ใช้งานจริง
    ตอนนี้คือ #8 (`2d`) ไม่ใช่ #9 (`5`) ห้ามลบ/รวมกับ #8 เพราะ #10-#12 ยังอ่าน output ของ #9 อยู่.
 
@@ -145,7 +145,7 @@ fetch/แสดงตรง ๆ อีกแล้ว.
 ทุกข้อเสนอในหัวข้อ 2, 4, 5 ด้านบน **ทำเสร็จแล้ว**:
 - ลำดับแท็บสลับแล้ว (พยากรณ์&ความเสี่ยง มาก่อนแผนล้าง HX)
 - ยุบ `2_correlation.ipynb`+`2_pca.ipynb` → `02b_correlation_and_pca.ipynb` แล้ว (รันผ่าน, ไม่มี error)
-- แก้ header markdown ของ `09_cit_ranking_baseline.ipynb` ให้บอกบทบาทจริงชัดเจนแล้ว
+- แก้ header markdown ของ `09_cit_model_feature_matrix.ipynb` ให้บอกบทบาทจริงชัดเจนแล้ว
 - ไฟล์ตาย/สคริปต์ scaffolding ทั้งหมดใน §5.1 ย้ายไป `notebooks/_archive_2026-07-12/` แล้ว (ไม่ได้ลบถาวร เผื่อต้องใช้อ้างอิง)
 - เอา export `Cleaning_Combined_Action_List.csv` (2d) และ `Delta_CIT_Signal.csv`/`Delta_CIT_Cleaning_Gain.csv` (6d) ออกแล้ว
 - ลบ `SchedulePanel`/`NetworkSchedulePanel`/`PlanTable` + fetch ที่ไม่ใช้แล้วออกจากแดชบอร์ดแล้ว

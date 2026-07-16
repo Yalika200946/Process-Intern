@@ -1,7 +1,7 @@
 """
 Shared CIT feature-matrix builder for the model-benchmark / SHAP notebooks (6a, 6b).
 
-Mirrors the feature engineering in `09_cit_ranking_baseline.ipynb` (sections 2, 3, 8)
+Mirrors the feature engineering in `09_cit_model_feature_matrix.ipynb` (sections 2, 3, 8)
 exactly, so the XGBoost/RF/LSTM benchmark (6a) and SHAP explainability (6b) explain the
 same feature set that `outputs/hx_Q_cleaning_priority.csv` is built from. Extracted here
 instead of re-copied into two more notebooks -- same single-source-of-truth rationale as

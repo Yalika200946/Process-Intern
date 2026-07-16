@@ -56,7 +56,7 @@ CHAIN = [
     '06_fouling_rate_forecast.ipynb',
     '07_time_to_clean_prediction.ipynb',
     '08_cleaning_priority_ranking.ipynb',
-    '09_cit_ranking_baseline.ipynb',
+    '09_cit_model_feature_matrix.ipynb',
     '10_cit_model_benchmark.ipynb',
     '11_cit_shap_importance.ipynb',
     '12_economic_delta_cit.ipynb',
