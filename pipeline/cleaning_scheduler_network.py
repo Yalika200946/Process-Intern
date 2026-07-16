@@ -209,6 +209,84 @@ def furnace_fg_deficit_ceiling_C(econ, topo, limit_overrides=None):
                                    + ' + export_economics.LEGACY formula (สูตรเดียวกับ banner หน้าเตาบน dashboard)'))
 
 
+def furnace_current_state_alerts(topo):
+    """Real-time snapshot check against COT, Stack Temp, O2, Draft, and per-pass tube-skin --
+    completely SEPARATE from the CIT-deficit-driven constraints above (furnace_fg_deficit_ceiling_C,
+    tube_skin_risk_advisory). Those project a FUTURE ceiling from a validated FG_FLOW/CIT-deficit
+    energy balance; no equivalent validated formula exists in this project to project COT, stack
+    temp, O2, draft, or tube-skin forward from a CIT-deficit trajectory (confirmed: searching this
+    file and METHODOLOGY.md turns up no such equation) -- so this function deliberately does NOT
+    try to predict them. It only reads pfd_topology.json's already-measured `value`/`band` fields
+    (COT/STACK/O2/DRAFT) and `skin_val`/`skin_alarm` (per pass) and reports whether TODAY's real
+    reading is already inside a warning/critical band.
+
+    Why this exists as its own function instead of folding into tube_skin_risk_advisory: that flag
+    is an indirect proxy (derived from projected FG-flow headroom, not from any actual tube-skin
+    reading) -- structurally, it can stay False even when a pass's *actual measured* skin_val is
+    already past its alarm, since nothing in its formula reads skin_val at all. Observed on this
+    project's own live data while adding this function: FG_FLOW currently sits well below its
+    limit (headroom > 2 t/h) while Pass 1/2's measured skin_val is already >= skin_alarm (400degC)
+    -- exactly the silent-miss scenario this function exists to catch. A real current exceedance
+    must never be missed just because the CIT-deficit proxy didn't trigger.
+
+    band convention (matches build_dashboard_topology.py / the dashboard's own display bands):
+    4-value [crit_lo, warn_lo, warn_hi, crit_hi]; value <= crit_lo or >= crit_hi -> 'critical',
+    value <= warn_lo or >= warn_hi -> 'warning', else 'normal'.
+
+    Returns dict(alerts=[...], pass_headrooms=[...], worst_pass=..., note=...). `alerts` is empty
+    when nothing is in a warning/critical band right now -- callers should treat an empty list as
+    "no current exceedance", not as "not checked"."""
+    topo = topo or {}
+    furnace = topo.get('furnace') or []
+    alerts = []
+    for key in ('COT', 'STACK', 'O2', 'DRAFT'):
+        f = next((x for x in furnace if x.get('key') == key), None)
+        if not f or f.get('value') is None:
+            continue
+        band = f.get('band')
+        value = f['value']
+        severity = 'normal'
+        if band and len(band) == 4:
+            lo_crit, lo_warn, hi_warn, hi_crit = band
+            if value <= lo_crit or value >= hi_crit:
+                severity = 'critical'
+            elif value <= lo_warn or value >= hi_warn:
+                severity = 'warning'
+        if severity != 'normal':
+            high_side = bool(band and value >= band[2])
+            alerts.append(dict(key=key, name=f.get('name'), value=value, unit=f.get('unit'),
+                               limit=f.get('limit'), band=band, severity=severity,
+                               advice=(f.get('advice_hi') if high_side else f.get('advice_lo')),
+                               limit_assumed=f.get('limit_assumed')))
+
+    passes = topo.get('passes') or []
+    pass_headrooms = []
+    for p in passes:
+        skin_val, skin_alarm = p.get('skin_val'), p.get('skin_alarm')
+        if skin_val is None or skin_alarm is None:
+            continue
+        headroom_C = round(skin_alarm - skin_val, 2)
+        pass_headrooms.append(dict(pass_no=p.get('pass'), skin_val=skin_val, skin_alarm=skin_alarm,
+                                   headroom_C=headroom_C, over_alarm=bool(headroom_C <= 0)))
+    worst_pass = min(pass_headrooms, key=lambda x: x['headroom_C']) if pass_headrooms else None
+    # flag EVERY pass currently over alarm, not just the worst -- more than one pass can be
+    # over alarm simultaneously (observed on this project's own live data: passes 1 and 2 both
+    # were), and only reporting the worst would silently drop the others.
+    for p in pass_headrooms:
+        if p['over_alarm']:
+            alerts.append(dict(key=f"TUBE_SKIN_PASS{p['pass_no']}",
+                               name=f"Tube-skin Pass {p['pass_no']}",
+                               value=p['skin_val'], unit='°C', limit=p['skin_alarm'],
+                               severity='critical',
+                               advice='Tube-skin เกิน alarm จริงตอนนี้ (ค่าวัดจริง ไม่ใช่การพยากรณ์) — ตรวจสอบด่วน',
+                               limit_assumed=False))
+
+    return dict(alerts=alerts, pass_headrooms=pass_headrooms, worst_pass=worst_pass,
+               note=('สแนปช็อตค่าจริงตอนนี้จาก pfd_topology.json (value/band/skin_val ล่าสุด) '
+                     'ไม่ใช่การพยากรณ์จาก CIT deficit — แยกจาก tube_skin_risk_advisory ที่เป็น proxy '
+                     'เชิงพยากรณ์จาก FG-flow headroom เท่านั้น'))
+
+
 OBJ_SCALE = 1e-6   # THB -> million-THB, purely for the SLSQP solve (see window_objective docstring)
 
 
@@ -523,6 +601,11 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     tube_skin_risk_advisory = bool(furnace_ceiling_C is not None and furnace_ceiling_C > 0
                                    and max_realized_deficit_C >= 0.8 * furnace_ceiling_C)
 
+    # real-time snapshot (COT/Stack/O2/Draft/tube-skin vs their OWN measured value right now) --
+    # independent of the CIT-deficit projection above; see furnace_current_state_alerts docstring
+    # for why this can catch exceedances the projection-based advisory above structurally cannot.
+    furnace_state = furnace_current_state_alerts(topo)
+
     # --- per-TAM-cycle breakdown (make the cross-cycle balance visible, not just implicit
     #     in the annual cap): count online-clean actions/cost per cycle boundary. ---
     cycle_bounds = [0] + [p + 1 for p in tam_reset_periods] + [n_periods]
@@ -601,6 +684,10 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
                               'tube-skin/coking (ยังไม่มีโมเดลคำนวณ tube-skin ตรงจาก CIT ในโปรเจกต์นี้ '
                               'เป็น advisory เชิงเหตุผลจากสายโซ่ fouling→firing→tube-skin เท่านั้น '
                               'ไม่ใช่ค่าที่ validate แล้ว)') if tube_skin_risk_advisory else None),
+        furnace_current_state_alerts=furnace_state['alerts'],
+        furnace_current_state_pass_headrooms=furnace_state['pass_headrooms'],
+        furnace_current_state_worst_pass=furnace_state['worst_pass'],
+        furnace_current_state_note=furnace_state['note'],
         window_size_sweep=sweep, optimal_window_months=best_window,
         comparison_vs_v1=dict(
             scope=f'ถึง TAM แรก ({cycle_labels[0]}) เท่านั้น — v1 ไม่เคยถูกวางแผนเลยจุดนี้',
