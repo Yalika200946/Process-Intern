@@ -22,7 +22,7 @@ cleaned-process file can regenerate on its own and reports exactly what it did.
 Run:  python backend/server.py         (defaults to http://localhost:8899)
 """
 import os
-import json, sys, subprocess, io
+import json, logging, sys, subprocess, io
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import pandas as pd
@@ -36,6 +36,15 @@ UPLOADS.mkdir(parents=True, exist_ok=True)
 TOPO_OUT  = DASH / 'data' / 'pfd_topology.json'
 PARAMS_OUT= DASH / 'data' / 'opt_params.json'
 PORT      = int(os.environ.get('PORT') or (sys.argv[1] if len(sys.argv) > 1 else 8899))
+
+# Structured log file -- BaseHTTPRequestHandler.log_message() is overridden to a no-op below
+# ("quieter console"), so previously nothing about a request/failure was persisted anywhere;
+# this is the only record of what the backend did/failed on, across every endpoint, without
+# watching the terminal live.
+logging.basicConfig(
+    level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.FileHandler(DATA / 'backend_server.log', encoding='utf-8')])
+log = logging.getLogger('backend.server')
 
 sys.path.append(str(NB))
 from cpht_config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
@@ -102,6 +111,15 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def _send(self, code, body, ctype='application/json'):
+        # Single choke point every response goes through -- logging HERE (rather than at each
+        # individual except-block across every endpoint below) means every non-2xx response
+        # gets a persisted record automatically, including any future endpoint that forgets to
+        # log its own errors.
+        if code >= 400:
+            log.error(f'{self.command} {self.path} -> {code}: '
+                      f'{body if isinstance(body, dict) else "<binary/other>"}')
+        else:
+            log.info(f'{self.command} {self.path} -> {code}')
         data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode('utf-8')
         self.send_response(code)
         self.send_header('Content-Type', ctype)

@@ -21,7 +21,7 @@ Usage:
   python pipeline/run_all.py --input new.xlsx     # stage a new raw Excel first
   python pipeline/run_all.py --only 13            # just the terminal exporter
 """
-import argparse, os, shutil, subprocess, sys, time
+import argparse, logging, os, shutil, subprocess, sys, time
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +30,19 @@ NB   = REPO / 'notebooks'
 DATA = Path(r'C:\Desktop\Bangchak Internship 2026\Data')
 DASH_DATA = REPO / 'dashboard' / 'data'
 RAW_INPUT = DATA / 'Process information data (2024-2026).xlsx'   # notebook 1's FILEPATH
+LOG_FILE = DATA / 'pipeline_run.log'
+
+# Structured logging alongside (not replacing) the existing console prints -- previously the
+# only record of a run was whatever terminal output happened to be visible at the time, or,
+# via the dashboard's "run full pipeline" button, backend/server.py's raw subprocess stdout
+# capture with no timestamps/levels at all. `log` below writes to LOG_FILE only (console
+# already gets the print()-based step-status lines; a StreamHandler here would just duplicate
+# them) with a timestamp + level, so a run triggered from the dashboard -- no one watching
+# the terminal -- is still diagnosable afterward from Data/pipeline_run.log.
+logging.basicConfig(
+    level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[logging.FileHandler(LOG_FILE, encoding='utf-8')])
+log = logging.getLogger('run_all')
 
 # dependency-ordered chain that produces the dashboard artifacts.
 # (00/00b EDA-only and 02b correlation/PCA excluded; 05 kept because 08 reads its
@@ -112,6 +125,7 @@ def main():
 
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     print(f'== CPHT pipeline run {ts} ==')
+    log.info(f'=== pipeline run {ts} started (args: {vars(args)}) ===')
     data_bk, dash_bk = backup(ts)
     print(f'backed up -> {data_bk.name}, {dash_bk.name}')
 
@@ -135,9 +149,11 @@ def main():
         ok, dt, err = run_nb(nb, args.timeout)
         status = 'OK ' if ok else 'FAIL'
         print(f'  [{status}] {nb:48s} {dt:6.1f}s')
+        log.info(f'CHAIN step {nb}: {"OK" if ok else "FAIL"} ({dt:.1f}s)')
         results.append((nb, ok, dt))
         if not ok:
             print('  --- stderr tail ---\n' + '\n'.join('    ' + l for l in err.splitlines()[-12:]))
+            log.error(f'CHAIN step {nb} failed:\n{err}')
             failed = nb
             break
         # authoritative robust fouling rate needs Operating_State.csv (from 03) — run it
@@ -147,8 +163,11 @@ def main():
             r = subprocess.run([sys.executable, str(REPO / 'pipeline' / 'compute_fouling_rate.py')],
                                capture_output=True, text=True, env=env)
             print(f'  [{"OK " if r.returncode == 0 else "FAIL"}] {"robust fouling rate (post-03)":48s}')
+            log.info(f'compute_fouling_rate.py: {"OK" if r.returncode == 0 else "FAIL"}')
             if r.returncode != 0:
-                print('    ' + (r.stderr or r.stdout or '')[-800:]); failed = 'compute_fouling_rate.py'; break
+                print('    ' + (r.stderr or r.stdout or '')[-800:])
+                log.error(f'compute_fouling_rate.py failed:\n{r.stderr or r.stdout}')
+                failed = 'compute_fouling_rate.py'; break
 
     if failed and args.rollback_on_fail:
         print(f'rolling back from {data_bk.name} …')
@@ -158,18 +177,40 @@ def main():
 
     # post-processing (only if 13_cit_forecast_export ran, or --only wasn't a non-13 single step)
     ran_terminal = any('13_cit_forecast_export' in n and ok for n, ok, _ in results)
+    post_failed = []   # (label,) of every POST step that failed -- previously untracked, so a
+                        # failure here silently didn't affect the final exit code (see below).
     if ran_terminal or not args.only:
         print('post-processing (honest metrics / bands / topology):')
         for label, cmd in POST:
             env = {**os.environ, 'PYTHONUTF8': '1'}
             r = subprocess.run(cmd, capture_output=True, text=True, env=env)
             print(f'  [{"OK " if r.returncode==0 else "FAIL"}] {label}')
+            log.info(f'POST step "{label}": {"OK" if r.returncode == 0 else "FAIL"}')
             if r.returncode != 0:
                 print('    ' + (r.stderr or '')[-400:])
+                log.error(f'POST step "{label}" failed:\n{r.stderr}')
+                post_failed.append(label)
+
+    if post_failed:
+        # every POST step still runs regardless of an earlier one's failure (many are
+        # logically independent, e.g. PHM/RUL doesn't need cleaning_scheduler_network's
+        # output) -- but a failed step's OWN artifact, and anything reading it downstream in
+        # this same POST list, is now STALE (still holds whatever it had from the previous
+        # run, not this one). Surface that explicitly rather than letting it look identical
+        # to a clean run in the console/log.
+        msg = (f'{len(post_failed)} POST step(s) failed: {post_failed} -- their output files '
+               'are STALE (unchanged from the previous run), not missing or corrupted, but '
+               'the dashboard may now be serving a mix of fresh and stale artifacts.')
+        print(f'!! {msg}')
+        log.warning(msg)
 
     n_ok = sum(1 for _, ok, _ in results if ok)
-    print(f'== done: {n_ok}/{len(results)} notebooks OK; backups in {data_bk.name} ==')
-    sys.exit(0 if not failed else 1)
+    print(f'== done: {n_ok}/{len(results)} notebooks OK'
+          + (f', {len(post_failed)} POST step(s) FAILED' if post_failed else '')
+          + f'; backups in {data_bk.name} ==')
+    exit_code = 1 if (failed or post_failed) else 0
+    log.info(f'=== pipeline run {ts} finished, exit_code={exit_code} ===')
+    sys.exit(exit_code)
 
 
 if __name__ == '__main__':
