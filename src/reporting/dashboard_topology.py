@@ -17,12 +17,11 @@ from pathlib import Path
 import pandas as pd
 
 HERE = Path(__file__).parent
-sys.path.append(str(HERE))
-from cpht_config import (CPHT_1_HX, CPHT_2_HX, CHAIN_PREDECESSOR,
+REPO = HERE.parent.parent
+sys.path.append(str(REPO))
+from src.domain.config import (CPHT_1_HX, CPHT_2_HX, CHAIN_PREDECESSOR,
                          PARALLEL_SHELL_GROUPS, HX_CONFIG as COLD_CFG)
-from cpht_features import HX_CONFIG as FULL_CFG, parse_hx
-
-REPO = HERE.parent
+from src.features.heat_duty import HX_CONFIG as FULL_CFG, parse_hx
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'pfd_topology.json'
 

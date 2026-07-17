@@ -1,5 +1,7 @@
 # Business Problem & Requirements — CPHT Fouling / CIT Optimization
 
+**Status:** REQUIRES_REVIEW
+
 Status: **DRAFT v2 — รวมเนื้อหาจาก `Business Problem Analysis and Requirements.docx` เข้ากับสถานะโค้ดจริงปัจจุบัน**
 
 **ความสัมพันธ์กับเอกสารอื่น:**

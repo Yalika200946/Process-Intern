@@ -15,7 +15,7 @@
 - `dashboard/data/*.json` มี **instrument tag จริง + อุณหภูมิ/flow จริง** = ข้อมูลลับของโรงกลั่น
 - **ห้ามขึ้น public host แบบเปิด (Vercel/GitHub Pages) ด้วยข้อมูลจริง** — URL สาธารณะ = ใครก็เห็น
 - `.gitignore` ตั้งไว้แล้วให้**ไม่ commit ข้อมูลจริง** (`dashboard/data/*.json`, `Data/`, `uploads/`) → กัน push หลุดขึ้น repo
-- ถ้าจะเผยแพร่โค้ดต่อสาธารณะ: `notebooks/cpht_config.py` มี tag จริง → เก็บ repo เป็น **private** หรือเผยแพร่แค่ `demo/`
+- ถ้าจะเผยแพร่โค้ดต่อสาธารณะ: `src/domain/config.py` (เดิม `notebooks/cpht_config.py`) มี tag จริง → เก็บ repo เป็น **private** หรือเผยแพร่แค่ `demo/`
 
 ---
 

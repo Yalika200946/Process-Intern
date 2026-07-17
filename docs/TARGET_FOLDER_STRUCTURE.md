@@ -1,5 +1,7 @@
 # Target Folder Structure
 
+**Status:** PROPOSED
+
 ## Principles
 
 - The target structure is additive. Legacy files remain in place until separately approved.

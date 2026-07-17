@@ -19,8 +19,8 @@ import pandas as pd
 REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 OUT  = REPO / 'dashboard' / 'data' / 'model_metrics.json'
-sys.path.append(str(NB))
-from cpht_features import build_cit_feature_matrix
+sys.path.append(str(REPO))
+from src.features.heat_duty import build_cit_feature_matrix
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import TimeSeriesSplit

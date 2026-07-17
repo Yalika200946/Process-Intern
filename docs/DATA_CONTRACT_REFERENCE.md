@@ -1,5 +1,7 @@
 # Data Contract Reference
 
+**Status:** CURRENT
+
 ## Purpose
 
 `config/data_contracts.yaml` is the machine-readable interface between canonical pipeline stages 00–16. A stage may read approved upstream outputs, but it must never rely on notebook memory or overwrite an upstream dataset.

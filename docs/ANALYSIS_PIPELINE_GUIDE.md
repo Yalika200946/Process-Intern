@@ -1,5 +1,7 @@
 # CPHT Analysis Pipeline — Orientation Guide
 
+**Status:** CURRENT
+
 **อ่านไฟล์นี้ก่อนไฟล์อื่น** — สรุปว่าทั้งโปรเจกต์มีอะไรบ้าง เรียงลำดับยังไง หน้าไหนแสดงอะไร และอันไหนควรยุบ/เอาออก
 เพื่อให้ตามงานที่ทำไปแล้วทัน ไม่ต้องไล่เปิดทีละไฟล์ 24 notebook + 15 script เอง
 
@@ -45,13 +47,13 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 | 13 | `notebooks/13_cit_forecast_export.ipynb` | Export | รวบผลจาก #7/#11/#10 พยากรณ์ล่วงหน้า 182 วัน แล้ว export JSON หลักเกือบทั้งหมดให้แดชบอร์ด | `forecast_6mo.json`, `hx_ranking.json`, `cleaning_recommendations.json` | เป็น export notebook ไม่มีอะไรให้ดูเอง |
 | 14 | `pipeline/gen_honest_metrics.py` | Export (แก้ #13) | เขียนทับ `model_metrics.json` ที่ #13 สร้างแบบ misleading (split เดียว R²≈0.82) ด้วยตัวเลข walk-forward CV ที่ซื่อสัตย์จาก #10 | `model_metrics.json` (ทับ) | — |
 | 15 | `notebooks/add_forecast_intervals.py` | Export | เติมแถบความเชื่อมั่น (√t growth) ให้กราฟพยากรณ์ 6 เดือน | `forecast_6mo.json` (เติม) | — |
-| 16 | `notebooks/build_dashboard_topology.py` | Export | สร้าง P&ID/topology JSON + ค่าคงที่เตา F101 | `pfd_topology.json` | — |
+| 16 | `src/reporting/dashboard_topology.py` | Export | สร้าง P&ID/topology JSON + ค่าคงที่เตา F101 | `pfd_topology.json` | — |
 | 17 | `pipeline/phm_analysis.py` | Export | RUL (Monte-Carlo P10/50/90), Weibull reliability, SHAP degradation driver (associative เท่านั้น) | `rul.json`, `reliability.json`, `drivers.json`, `propagation_models.json` | ป้อนแท็บ "พยากรณ์ & ความเสี่ยง" |
 | 18 | `pipeline/export_hx_timeseries.py` | Export | Time-series ต่อ HX สำหรับแท็บ "HX รายตัว" | `hx_timeseries.json` | — |
 | 19 | `pipeline/export_end_of_run.py` | Export | คำนวณ "ใกล้เกณฑ์ล้างแค่ไหน" ต่อ HX พร้อม guard กัน rate ค้างจากรอบเก่า (`rate_source`) | `end_of_run.json` | — |
 | 20 | `pipeline/export_cleaning_history.py` | เศรษฐศาสตร์/ข้อจำกัด | ตรวจสอบทุกเหตุการณ์ล้าง/สลับในอดีต เทียบ CIT ที่คืนจริง vs โมเดล | `cleaning_history.json` | ตารางประวัติล้างในแท็บ "HX รายตัว" |
 | 21 | `pipeline/export_economics.py` | เศรษฐศาสตร์/ข้อจำกัด | โมเดลเงินเดียว: CIT → ฿/ปี ด้วยสูตรโรงงาน, ใช้ ΔCIT วัดจริงก่อนเสมอ | `economics.json` | — |
-| 22 | `notebooks/cleaning_logistics.py` | เศรษฐศาสตร์/ข้อจำกัด | จำแนกวิธีล้างต่อ HX จากไฟล์ bypass จริงของโรงงาน (full/บางส่วน/none) | `cleaning_logistics.json` | ตารางในแท็บ "แผนล้าง HX" |
+| 22 | `src/optimization/cleaning_logistics.py` | เศรษฐศาสตร์/ข้อจำกัด | จำแนกวิธีล้างต่อ HX จากไฟล์ bypass จริงของโรงงาน (full/บางส่วน/none) | `cleaning_logistics.json` | ตารางในแท็บ "แผนล้าง HX" |
 | 23 | `notebooks/14_tam_constraint_analysis.ipynb` | เศรษฐศาสตร์/ข้อจำกัด | วิเคราะห์ CIT เต็มช่วง 2021-2026, SOR/EOR ต่อรอบ, event-study ต่อการล้างทุกครั้ง (รันท้าย ๆ เพราะต้องใช้ output ที่แก้ไขแล้วทั้งหมด ไม่ใช่เพราะสำคัญน้อย) | `tam_analysis.json` | กราฟ CIT slide-style ในแท็บ "แผนล้าง HX" |
 | 24 | `pipeline/cleaning_scheduler.py` (v1) | เศรษฐศาสตร์/ข้อจำกัด | ช่วงล้างที่เหมาะสมต่อ HX แบบอิสระ T\*=√(2C/kr), เพดาน 4 ครั้ง/ปี | `cleaning_schedule.json` | ใช้เป็น input ให้ #25/#27 (ไม่แสดงบนแดชบอร์ดตรง ๆ แล้ว) |
 | 25 | `pipeline/cleaning_scheduler_network.py` (v2) | เศรษฐศาสตร์/ข้อจำกัด | จัดตารางทั้งเครือข่ายพร้อมกัน (moving-window optimizer), เทียบกับ v1 อย่างเป็นธรรม | `cleaning_schedule_v2.json` | ใช้เป็น input ให้ #27 |

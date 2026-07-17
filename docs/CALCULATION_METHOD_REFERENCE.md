@@ -1,5 +1,7 @@
 # Calculation Method Reference
 
+**Status:** CURRENT
+
 ## Purpose
 
 This reference accompanies `SOURCE_OF_TRUTH_REGISTER.csv`. It defines the target calculation boundaries without promoting unresolved legacy formulas to approved engineering truth.

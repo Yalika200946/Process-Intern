@@ -14,7 +14,7 @@ forecast with no uncertainty over-states confidence. Fouling deviation behaves
 like a drifting/random-walk series, so forecast uncertainty grows with the
 square-root of the horizon: band(t) = z * sigma_daily * sqrt(t), where
 sigma_daily is the std of day-to-day deviation changes in each HX's CURRENT run
-(from Cold_Out_Deviation_Signal.csv). z=1.28 -> ~80% interval.
+(from Q_Deviation_Signal.csv). z=1.28 -> ~80% interval.
 
 This turns "crosses threshold on day 48" into an honest range the operator can
 read as earliest/latest. Run: python add_forecast_intervals.py
@@ -30,7 +30,7 @@ DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 202
 FC   = REPO / 'dashboard' / 'data' / 'forecast_6mo.json'
 Z    = 1.28  # ~80% band
 
-sig = pd.read_csv(DATA / 'Cold_Out_Deviation_Signal.csv', parse_dates=['Timestamp'])
+sig = pd.read_csv(DATA / 'Q_Deviation_Signal.csv', parse_dates=['Timestamp'])
 fc = json.loads(FC.read_text(encoding='utf-8'))
 
 def fit_stats(hx):

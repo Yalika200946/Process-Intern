@@ -1,5 +1,7 @@
 # Visual Analysis Requirements
 
+**Status:** CURRENT
+
 ## Principles
 
 - Notebooks show fleet summaries and representative cases, not all repeated HX plots.

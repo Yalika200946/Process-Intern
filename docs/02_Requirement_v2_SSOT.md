@@ -1,4 +1,6 @@
 # Requirement v2 — Single Source of Truth (SSOT)
+
+**Status:** REQUIRES_REVIEW
 ## CPHT Fouling → CIT Optimization · Plant 3 TPU · Bangchak
 
 สถานะ: **DRAFT v2 — รออนุมัติก่อนแก้ notebook จริง**

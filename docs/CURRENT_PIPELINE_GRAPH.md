@@ -1,5 +1,7 @@
 # Current CPHT Pipeline Graph
 
+**Status:** CURRENT
+
 ## Legend
 
 - Solid arrow: confirmed by an actual file read/write, import, dashboard fetch, or orchestrator call.

@@ -1,5 +1,7 @@
 # Target Notebook Content Plan
 
+**Status:** PROPOSED
+
 ## Notebook template
 
 Every target notebook should use this order:

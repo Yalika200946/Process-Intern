@@ -1,5 +1,7 @@
 # Source-of-Truth Candidates
 
+**Status:** CURRENT
+
 ## Status vocabulary
 
 - **CANDIDATE:** strongest current implementation to preserve as evidence during migration.

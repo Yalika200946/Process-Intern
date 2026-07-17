@@ -1,5 +1,7 @@
 # Unresolved Engineering Decisions
 
+**Status:** CURRENT
+
 ## Release rule
 
 Any item below blocks promotion of the affected calculation from candidate to approved source of truth. Until resolved, the register status remains `REQUIRES_ENGINEERING_CONFIRMATION`.
@@ -88,6 +90,18 @@ matching the actual TAM history. This is implemented, not open — see
 
 ## 5. Cleaning events
 
+0. **Status taxonomy (added 2026-07-17, restructuring pass):**
+   `pipeline/export_cleaning_history.py::event_status` and
+   `src/domain/bypass.py::feasibility_label` now emit the
+   CONFIRMED_TAM/SWITCH_CANDIDATE/UNEXPLAINED_RECOVERY/TAM_ONLY/
+   ONLINE_PARTIAL/ONLINE_FULL/SWAP_CAPABLE vocabulary as an *additive*
+   relabeling of the existing `event_type`/`confidence`/`online_mode`
+   values (no detection logic or threshold changed). `CONFIRMED_CLEAN` and
+   `REJECTED_EVENT` are reserved but never emitted yet — promoting a
+   `SWITCH_CANDIDATE` to `CONFIRMED_CLEAN` requires item 1 below (an
+   actual maintenance log) to cross-check against; until then this is
+   enforced by `tests/test_cleaning_event_taxonomy.py`, not just
+   documentation.
 1. Obtain or define the authoritative maintenance/cleaning log.
 2. Approve event types and confidence tiers.
 3. Define recovery thresholds and stable pre/post windows.
@@ -149,4 +163,21 @@ For each resolution, record:
 - superseded decision, if any.
 
 No notebook or dashboard change should be used as the approval record itself.
+
+## 11. Backend operational security (added 2026-07-17, restructuring pass)
+
+`backend/server.py` now sanitizes uploaded filenames (rejects path
+traversal/absolute paths via `Path(name).name`), caps upload size
+(`CPHT_MAX_UPLOAD_MB`, default 200MB), and refuses a second concurrent
+`/api/run-full` while one is already in progress. It still has **no
+authentication or authorization** on any endpoint (including
+`/api/run-full`, which can trigger a full pipeline run and overwrite
+shared `Data/`/`dashboard/data/` artifacts). This is currently mitigated
+only by binding to `127.0.0.1` by default (`CPHT_BIND` env var must be set
+explicitly to expose it beyond localhost). No auth scheme has been
+implemented here because none was specified — decide whether this backend
+will ever run somewhere multi-user/network-reachable before adding one;
+if so, define the required auth model (shared token? OS user mapping?
+reverse-proxy auth?) as an approved requirement first, per
+`03_Business_Problem_and_Requirements.md`'s FR process.
 

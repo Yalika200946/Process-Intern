@@ -11,7 +11,7 @@ coverage of the pipeline.
 """
 import numpy as np
 
-import nb_audit as A
+from src.validation import nb_audit as A
 
 
 def _synthetic_run(n=60, true_slope=-0.002, noise=0.01, start=1.0, seed=0):

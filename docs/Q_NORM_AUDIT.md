@@ -1,5 +1,7 @@
 # Q_norm Focused Audit
 
+**Status:** CURRENT
+
 ## Executive finding
 
 `Q_norm` is not one calculation in the current project. It is a reused name for at least three different quantities:

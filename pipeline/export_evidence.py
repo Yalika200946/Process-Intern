@@ -24,11 +24,10 @@ from pathlib import Path
 import pandas as pd
 
 REPO = Path(__file__).resolve().parent.parent
-NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 DASH = REPO / 'dashboard' / 'data'
 OUT  = DASH / 'evidence.json'
-sys.path.append(str(NB))
+sys.path.append(str(REPO))
 
 R2_GATE = 0.30   # LEGACY-ONLY fallback for a Fouling_Rate_By_Run.csv without a `reliable`
                  # column (current pipeline always has one — see below). Keep in sync with
@@ -42,7 +41,7 @@ def _load(name, default=None):
 
 def _tam_dates():
     try:
-        from cpht_features import get_tam_dates
+        from src.features.heat_duty import get_tam_dates
         return [str(pd.Timestamp(d).date()) for d in get_tam_dates()]
     except Exception:
         return []

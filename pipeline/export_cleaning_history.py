@@ -32,8 +32,8 @@ NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'cleaning_history.json'
 EVENTS_CSV = DATA / 'Cleaning_Events.csv'
-sys.path.append(str(NB))
-from cpht_config import HX_CONFIG as COLD_CFG, CIT_TAG, TOTAL_CHARGE_TAG
+sys.path.append(str(REPO))
+from src.domain.config import HX_CONFIG as COLD_CFG, CIT_TAG, TOTAL_CHARGE_TAG
 
 CORR_MIN = 0.20                              # min |Q-CIT corr| for a trustworthy sensitivity estimate
 
@@ -66,6 +66,30 @@ def event_confidence(event_type, u_recovered):
     if u_recovered is None:
         return 'Uncertain'
     return 'Probable' if u_recovered > 0.01 else 'Possible'
+
+
+def event_status(event_type, confidence):
+    """Additive status label alongside `confidence` -- maps the SAME existing
+    event_type/confidence values onto the CONFIRMED_TAM/CONFIRMED_CLEAN/
+    SWITCH_CANDIDATE/UNEXPLAINED_RECOVERY vocabulary requested for the
+    cleaning-event taxonomy (see docs/UNRESOLVED_ENGINEERING_DECISIONS.md).
+    Pure relabeling: does not change which events are detected, how
+    `event_confidence` is computed, or which rows exist.
+
+    CLAUDE.md's "do not assume post-TAM periods are perfectly clean" /
+    "an inferred event must not silently become confirmed" rules mean a
+    SWITCH event can only become CONFIRMED_CLEAN once it is cross-checked
+    against an actual maintenance log -- no such log is wired into this
+    project yet, so CONFIRMED_CLEAN is reserved vocabulary and is never
+    emitted today; every SWITCH is SWITCH_CANDIDATE regardless of
+    `confidence` until that log exists. See
+    tests/test_cleaning_event_taxonomy.py for the regression test that
+    keeps this true."""
+    if event_type == 'TAM':
+        return 'CONFIRMED_TAM'
+    if confidence == 'Probable':
+        return 'SWITCH_CANDIDATE'
+    return 'UNEXPLAINED_RECOVERY'   # Possible/Uncertain SWITCH: asserted by config, weak/no corroborating signal
 
 
 def _num(v, nd=3):
@@ -188,15 +212,17 @@ def main():
             if not estimable and cit_meas is not None:
                 note = 'sensitivity อ่อน/downstream — ค่า CIT วัดจริงไม่น่าเชื่อถือ'
             confidence = event_confidence(et, u_rec)
+            status = event_status(et, confidence)
             cleans.append(dict(
                 date=row['Timestamp'].strftime('%Y-%m-%d'), type=et, method_label=EVENT_LABEL.get(et, et),
-                confidence=confidence,
+                confidence=confidence, event_status=status,
                 run_ended=run_ended, U_before=u_b, U_after=u_a, U_recovered=u_rec,
                 Q_before=q_b, Q_after=q_a, Q_recovered_kW=q_rec,
                 cit_measured_C=cit_meas, cit_measured_method=cit_method, gain_estimable=bool(estimable),
                 cit_model_C=cit_model, note=note))
             all_events.append(dict(
                 HX=hx, date=row['Timestamp'].strftime('%Y-%m-%d'), type=et, confidence=confidence,
+                event_status=status,
                 U_before=u_b, U_after=u_a, U_recovered=u_rec, Q_before=q_b, Q_after=q_a,
                 Q_recovered_kW=q_rec, cit_measured_C=cit_meas, cit_measured_method=cit_method,
                 gain_estimable=bool(estimable), cit_model_C=cit_model,

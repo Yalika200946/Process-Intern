@@ -29,8 +29,8 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'end_of_run.json'
-sys.path.append(str(NB))
-import curve_models as cm
+sys.path.append(str(REPO))
+from src.models import fouling_curves as cm
 
 # --- engineering constants (documented, tunable) ---
 TRIGGER_DROP_FRAC   = 0.125   # U_relative loss that defines "must clean" (12.5%), per notebook 5
@@ -54,6 +54,8 @@ def main():
     dev  = pd.read_csv(DATA / 'Q_Deviation_Signal.csv', parse_dates=['Timestamp'])
     fr   = pd.read_csv(DATA / 'Fouling_Rate_By_Run.csv')
     ttc  = pd.read_csv(DATA / 'Time_To_Clean_Prediction.csv').set_index('HX')
+    if 'rate_kW_per_day' not in ttc.columns and 'rate_degC_per_day' in ttc.columns:
+        ttc = ttc.rename(columns={'rate_degC_per_day': 'rate_kW_per_day'})
     sens = pd.read_csv(DATA / 'Q_CIT_Sensitivity.csv').set_index('HX')
 
     ranking = {r['HX']: r for r in (_load_json('hx_ranking.json') or [])}
@@ -174,7 +176,7 @@ def main():
         t = ttc.loc[hx] if hx in ttc.index else None
         cur_short = _num(t['current_deviation'], 0) if t is not None else None
         thr_short = _num(t['threshold'], 0) if t is not None else None
-        rate_short = _num(t['rate_degC_per_day'], 3) if t is not None else None       # kW/day of shortfall
+        rate_short = _num(t['rate_kW_per_day'], 3) if t is not None else None
         days_duty = _num(t['days_to_threshold'], 0) if t is not None else None
         proj_duty_days, proj_duty_q = [], []
         if cur_Q is not None and rate_short is not None:

@@ -26,21 +26,27 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 DASH = REPO / 'dashboard' / 'data'
-sys.path.append(str(NB))
-import phm_config as C
-from curve_models import MODELS_RISING as MODELS, fit_model, predict_cross
+sys.path.append(str(REPO))
+from src.models import phm_config as C
+from src.models.fouling_curves import MODELS_RISING as MODELS, fit_model, predict_cross
 
 rng = np.random.default_rng(C.RANDOM_SEED)
 
 # ---------------- load ----------------
-dev = pd.read_csv(DATA / 'Cold_Out_Deviation_Signal.csv', parse_dates=['Timestamp'])
+# Canonical degradation signal produced by notebook 06 and consumed by notebook 07.
+# The former Cold_Out file can remain on disk from an older run and has different units.
+dev = pd.read_csv(DATA / 'Q_Deviation_Signal.csv', parse_dates=['Timestamp'])
 ttc = pd.read_csv(DATA / 'Time_To_Clean_Prediction.csv').set_index('HX')
+if 'rate_kW_per_day' not in ttc.columns and 'rate_degC_per_day' in ttc.columns:
+    # Transitional compatibility for artifacts generated before the unit-name fix.
+    # Values were already Q-duty kW/day; only the legacy column label was wrong.
+    ttc = ttc.rename(columns={'rate_degC_per_day': 'rate_kW_per_day'})
 fr  = pd.read_csv(DATA / 'Fouling_Rate_By_Run.csv')
 crude = pd.read_csv(DATA / 'Crude_property_profiled.csv', parse_dates=['Date']).set_index('Date').sort_index()
 HXES = sorted(dev['HX'].dropna().unique())
 
 # degradation model library (C1) — linear/asymptotic/power fit + AIC selection now live in
-# curve_models.py (shared with notebooks/nb_audit.py's U_relative fouling-rate estimator).
+# src/models/fouling_curves.py (shared with src/validation/nb_audit.py's U_relative fouling-rate estimator).
 
 def gp_fit_predict(t, y, t_query):
     from sklearn.gaussian_process import GaussianProcessRegressor
@@ -114,7 +120,7 @@ def run_c2():
         if hx not in ttc.index:
             continue
         row = ttc.loc[hx]
-        cur = float(row['current_deviation']); thr = float(row['threshold']); rate = float(row['rate_degC_per_day'])
+        cur = float(row['current_deviation']); thr = float(row['threshold']); rate = float(row['rate_kW_per_day'])
         if cur >= thr:
             out[hx] = dict(past_threshold=True, p10=0, p50=0, p90=0,
                            **{f'prob_{h}': 100.0 for h in C.HORIZONS},

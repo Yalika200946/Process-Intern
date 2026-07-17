@@ -63,6 +63,7 @@ notebooks/_archive_2026-07-12/root_nul
 logs/
 reports/figures/
 reports/tables/
+reports/executed_notebooks/
 models/*
 !models/.gitkeep
 data/raw/

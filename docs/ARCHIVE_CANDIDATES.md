@@ -1,5 +1,7 @@
 # Archive Candidates
 
+**Status:** CURRENT
+
 No file should be moved or deleted until the target pipeline reproduces approved outputs and the user gives separate approval.
 
 ## High-confidence archive candidates
@@ -18,25 +20,19 @@ Reason: no active production callers; superseded or prototype logic; stale confi
 
 Reason: duplicate editable sources for generated notebooks. Preserve temporarily for provenance only.
 
-### Legacy generic ML framework
+### Legacy generic ML framework — ARCHIVED 2026-07-17
 
-- `src/core.py`
-- `src/core_stateless.py`
-- `src/core_configs.py`
-- `src/utils/configs.py`
-- `src/utils/modelFuncs.py`
-- `src/utils/models.py`
-- `src/utils/prints.py`
-- `src/utils/utilities.py`
+- `src/archive/core.py` (was `src/core.py`)
+- `src/archive/core_stateless.py` (was `src/core_stateless.py`)
+- `src/archive/core_configs.py` (was `src/core_configs.py`)
+- `src/archive/utils/configs.py`, `modelFuncs.py`, `models.py`, `prints.py`, `utilities.py` (was `src/utils/*`)
 
-Reason: no active CPHT downstream users; hidden/global conventions; old model persistence; incomplete dependencies; target pipeline will use domain-specific modules.
+Reason: no active CPHT downstream users; hidden/global conventions; old model persistence; incomplete dependencies; target pipeline uses the domain-specific `src/domain`, `src/features`, `src/models`, `src/optimization`, `src/reporting`, `src/validation` modules instead (see `docs/MIGRATION_MAP.md`).
 
 ### Superseded user interfaces and schedulers
 
-- `dashboard/dashboard_pro.html`
-- `pipeline/cleaning_scheduler.py`
-
-Reason: superseded UI and competing independent scheduler. Keep scheduler temporarily as a simple baseline until Stage 13 validation is approved.
+- `archive/dashboard_pro.html` (was `dashboard/dashboard_pro.html`) — **ARCHIVED 2026-07-17**, superseded UI, no code reference.
+- `pipeline/cleaning_scheduler.py` — **NOT archived**: still called from `pipeline/run_all.py`'s POST chain as the v1 baseline schedule. Keep until Stage 13 validation is approved.
 
 ## Conditional archive candidates after logic extraction
 
@@ -45,10 +41,10 @@ Reason: superseded UI and competing independent scheduler. Keep scheduler tempor
 | `_eda_process_control.ipynb` (renamed from `00_data_prep_process_control.ipynb`, Phase 1) | Inventory/DQ representative plots |
 | `_eda_correlation_and_pca.ipynb` (renamed from `02b_correlation_and_pca.ipynb`) | Selected exploratory diagnostics |
 | `09_cit_model_feature_matrix.ipynb` | Any useful plotting/reference only; calculations should be rebuilt |
-| `phm_config.py` | Approved horizon/scenario settings |
-| `src/utils/analysis.py` | Any desired PCA/report plotting patterns |
-| `src/utils/metrics.py` | None if direct sklearn metrics are adopted |
-| `src/utils/plots.py` | Desired visual conventions |
+| `src/models/phm_config.py` (moved 2026-07-17, was `notebooks/phm_config.py`) | Approved horizon/scenario settings |
+| `src/archive/utils/analysis.py` (already archived 2026-07-17, extraction still pending) | Any desired PCA/report plotting patterns |
+| `src/archive/utils/metrics.py` (already archived 2026-07-17, extraction still pending) | None if direct sklearn metrics are adopted |
+| `src/archive/utils/plots.py` (already archived 2026-07-17, extraction still pending) | Desired visual conventions |
 | `_diagnostic_solver_comparison.ipynb` (renamed from `16b_optimizer_solver_comparison.ipynb`) | Solver acceptance evidence, if adopted by Stage 16 |
 
 ## Keep as reference, not canonical

@@ -1,5 +1,7 @@
 # Target CPHT and Furnace F101 Analytics Pipeline
 
+**Status:** PROPOSED
+
 ## 1. Purpose
 
 This document defines the clean target pipeline for Bangchak Plant 3 CPHT fouling and Furnace F101 decision support. It is an implementation blueprint only. It does not replace, move, or modify the legacy pipeline.

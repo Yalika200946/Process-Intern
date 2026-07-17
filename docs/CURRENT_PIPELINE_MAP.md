@@ -1,5 +1,7 @@
 # Current CPHT Pipeline Dependency Map
 
+**Status:** CURRENT
+
 ## Scope and interpretation
 
 This document records the pipeline as implemented on 2026-07-16. It is a current-state map, not a proposed architecture. It was derived from notebook cells, Python source, `pipeline/run_all.py`, dashboard fetch calls, and explicit file reads/writes.
@@ -51,7 +53,7 @@ Most plant data is outside the repository:
 
 `C:\Desktop\Bangchak Internship 2026\Data`
 
-The path is sometimes read through `CPHT_DATA_DIR`, but `pipeline/run_all.py` hard-codes the Windows location. Important external inputs include:
+The path is resolved consistently through `CPHT_DATA_DIR` (with the plant Windows location as a local default). Important external inputs include:
 
 - Raw process historian Excel
 - Raw crude assay Excel
@@ -114,7 +116,7 @@ Schema validation is incomplete:
 | `Feature_calculated.csv` | Notebook 02 | `compute_fouling_rate.py` | Intentional (see above); `fouling_baseline_corrected` column added Phase 1 item A2 so the two versions are distinguishable |
 | `model_metrics.json` | ~~Notebook 13~~ `gen_honest_metrics.py` (sole writer as of Phase 1 item A3) | n/a | Resolved: notebook 13 no longer writes this file at all |
 | `forecast_6mo.json` | Notebook 13 (interval logic folded in, Phase 1 item A4) | n/a | Resolved: `add_forecast_intervals.py` is superseded and no longer invoked by `run_all.py` |
-| `cleaning_plan.json` | Notebook 16 | Notebook 16 via backend recomputation | **Not a defect** (Phase 1 item A5 review): both "writes" are the same notebook cell (full regeneration each time); `backend/server.py`'s `/api/recompute-plan` re-executes that notebook via `nbconvert --execute --inplace` with different override-JSON inputs, which is legitimate interactive recomputation, not a duplicate-writer bug. No code change needed. |
+| `cleaning_plan.json` | Notebook 16 | Notebook 16 via backend recomputation | Both writes execute the same notebook with different override JSON inputs. Executed copies are written to `reports/executed_notebooks/`; the source notebook is not modified in place. |
 | Override JSONs | Dashboard/backend | Backend deletes or rewrites them | Runtime state is mixed with approved analytical outputs |
 
 Duplicated or competing outputs include:
@@ -156,7 +158,7 @@ They are not called by `run_all.py` or active pipeline scripts.
 
 ### Legacy Python branch
 
-`src/core*.py` and `src/utils/*.py` form an older generic furnace-ML framework. No active CPHT notebook or pipeline script imports them. Current reusable CPHT logic instead resides in `notebooks/*.py`.
+`src/archive/core*.py` and `src/archive/utils/*.py` (archived 2026-07-17, were `src/core*.py`/`src/utils/*.py`) form an older generic furnace-ML framework. No active CPHT notebook or pipeline script imports them. Current reusable CPHT logic resides in `src/domain`, `src/features`, `src/models`, `src/optimization`, `src/reporting`, `src/validation` (moved 2026-07-17 from `notebooks/*.py`; the notebooks still resolve these via one-line backward-compat shims left at their old `notebooks/*.py` paths — see `docs/MIGRATION_MAP.md`).
 
 ## Dashboard dependency boundary
 
@@ -218,4 +220,3 @@ code every time.
 trace it back through this table to `Engineering_Priority_Score.csv` — if a
 file isn't in this table's chain, it isn't part of the authoritative
 ranking.
-

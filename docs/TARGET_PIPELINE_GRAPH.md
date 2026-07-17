@@ -1,5 +1,7 @@
 # Target Pipeline Graph
 
+**Status:** PROPOSED
+
 ## Canonical stage flow
 
 ```mermaid

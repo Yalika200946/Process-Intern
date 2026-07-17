@@ -38,8 +38,13 @@ if hasattr(sys.stdout, 'reconfigure'):
 
 REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
-DATA = Path(r'C:\Desktop\Bangchak Internship 2026\Data')
+SRC  = REPO / 'src'
+DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 DASH_DATA = REPO / 'dashboard' / 'data'
+EXECUTED_NB = REPO / 'reports' / 'executed_notebooks'
+DATA.mkdir(parents=True, exist_ok=True)
+DASH_DATA.mkdir(parents=True, exist_ok=True)
+EXECUTED_NB.mkdir(parents=True, exist_ok=True)
 RAW_INPUT = DATA / 'Process information data (2024-2026).xlsx'   # notebook 1's FILEPATH
 LOG_FILE = DATA / 'pipeline_run.log'
 
@@ -84,28 +89,28 @@ POST = [
     # cell (section 2b) so forecast_6mo.json has exactly one writer with the complete
     # schema from the start -- add_forecast_intervals.py is superseded, not deleted
     # (see its own module docstring), and no longer invoked here.
-    ('P&ID topology + furnace',   [sys.executable, str(NB / 'build_dashboard_topology.py')]),
+    ('P&ID topology + furnace',   [sys.executable, str(SRC / 'reporting' / 'dashboard_topology.py')]),
     ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),
     ('per-HX time-series',           [sys.executable, str(REPO / 'pipeline' / 'export_hx_timeseries.py')]),
     ('End-of-Run duty forecast',     [sys.executable, str(REPO / 'pipeline' / 'export_end_of_run.py')]),
     ('cleaning audit history',       [sys.executable, str(REPO / 'pipeline' / 'export_cleaning_history.py')]),
     ('economics (CIT->฿)',           [sys.executable, str(REPO / 'pipeline' / 'export_economics.py')]),
-    ('cleaning/bypass/TAM list',     [sys.executable, str(NB / 'cleaning_logistics.py')]),
+    ('cleaning/bypass/TAM list',     [sys.executable, str(SRC / 'optimization' / 'cleaning_logistics.py')]),
     ('TAM deep analysis (nb 14)',    [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
-                                      '--inplace', '--ExecutePreprocessor.timeout=900',
+                                      f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=900',
                                       str(NB / '14_tam_constraint_analysis.ipynb')]),
     ('cleaning schedule -> TAM2028', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler.py')]),
     ('cleaning schedule v2 (network)', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler_network.py')]),
     ('evidence & confidence surface', [sys.executable, str(REPO / 'pipeline' / 'export_evidence.py')]),
     ('integrated cleaning plan (nb 16)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
-                                          '--inplace', '--ExecutePreprocessor.timeout=600',
+                                          f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=600',
                                           str(NB / '16_cleaning_plan_optimization.ipynb')]),
 ]
 
 BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crude.csv',
                'Feature_calculated.csv', 'Operating_State.csv', 'Feature_Q.csv',
                'Fouling_Rate_Ranking.csv', 'Fouling_Rate_By_Run.csv',
-               'Q_Deviation_Signal.csv', 'Cold_Out_Deviation_Signal.csv',
+               'Q_Deviation_Signal.csv',
                'Time_To_Clean_Prediction.csv', 'Q_CIT_Sensitivity.csv',
                'Cleaning_Priority_Ranking.csv', 'Engineering_Priority_Score.csv']
 
@@ -114,10 +119,31 @@ def run_nb(nb_name, timeout):
     env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'}
     t0 = time.time()
     r = subprocess.run(
-        [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute', '--inplace',
+        [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+         f'--output-dir={EXECUTED_NB}',
          f'--ExecutePreprocessor.timeout={timeout}', str(NB / nb_name)],
         capture_output=True, text=True, env=env)
     return r.returncode == 0, time.time() - t0, (r.stderr or '')[-1200:]
+
+
+def select_chain(only=None, start=None):
+    """Resolve CLI selectors and reject typos or ambiguous fragments."""
+    if only:
+        matches = [name for name in CHAIN if only in name]
+        if not matches:
+            raise ValueError(f'--only {only!r} does not match any production notebook')
+        if len(matches) > 1:
+            raise ValueError(f'--only {only!r} is ambiguous: {matches}')
+        return matches
+    if start:
+        matches = [i for i, name in enumerate(CHAIN) if start in name]
+        if not matches:
+            raise ValueError(f'--from {start!r} does not match any production notebook')
+        if len(matches) > 1:
+            names = [CHAIN[i] for i in matches]
+            raise ValueError(f'--from {start!r} is ambiguous: {names}')
+        return CHAIN[matches[0]:]
+    return list(CHAIN)
 
 
 def backup(ts):
@@ -136,8 +162,21 @@ def main():
     ap.add_argument('--only', help='run a single notebook basename fragment (e.g. 13)')
     ap.add_argument('--from', dest='start', help='start the chain at this notebook fragment')
     ap.add_argument('--timeout', type=int, default=900, help='per-notebook timeout (s)')
-    ap.add_argument('--rollback-on-fail', action='store_true')
+    rollback = ap.add_mutually_exclusive_group()
+    rollback.add_argument('--rollback-on-fail', dest='rollback_on_fail', action='store_true', default=True,
+                          help='restore backed-up artifacts when a chain step fails (default)')
+    rollback.add_argument('--no-rollback-on-fail', dest='rollback_on_fail', action='store_false',
+                          help='keep partial outputs for debugging')
     args = ap.parse_args()
+
+    # Validate all CLI choices before creating backup directories or staging input.
+    try:
+        chain = select_chain(args.only, args.start)
+    except ValueError as exc:
+        ap.error(str(exc))
+    up = Path(args.input) if args.input else None
+    if up is not None and not up.exists():
+        ap.error(f'input not found: {up}')
 
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
     print(f'== CPHT pipeline run {ts} ==')
@@ -145,20 +184,10 @@ def main():
     data_bk, dash_bk = backup(ts)
     print(f'backed up -> {data_bk.name}, {dash_bk.name}')
 
-    if args.input:
-        up = Path(args.input)
-        if not up.exists():
-            print(f'!! input not found: {up}'); sys.exit(2)
+    if up is not None:
         shutil.copy2(RAW_INPUT, data_bk / RAW_INPUT.name) if RAW_INPUT.exists() else None
         shutil.copy2(up, RAW_INPUT)
         print(f'staged new raw input: {up.name} -> {RAW_INPUT.name}')
-
-    chain = CHAIN
-    if args.only:
-        chain = [n for n in CHAIN if args.only in n]
-    elif args.start:
-        idx = next((i for i, n in enumerate(CHAIN) if args.start in n), 0)
-        chain = CHAIN[idx:]
 
     results, failed = [], None
     for nb in chain:
@@ -191,11 +220,13 @@ def main():
         for f in dash_bk.glob('*'): shutil.copy2(f, DASH_DATA / f.name)
         print('rolled back.'); sys.exit(1)
 
-    # post-processing (only if 13_cit_forecast_export ran, or --only wasn't a non-13 single step)
+    # Post-processing is valid only after notebook 13 completed in this same successful
+    # chain. Running it after an upstream failure would publish a mixture of fresh and
+    # stale artifacts from different snapshots.
     ran_terminal = any('13_cit_forecast_export' in n and ok for n, ok, _ in results)
     post_failed = []   # (label,) of every POST step that failed -- previously untracked, so a
                         # failure here silently didn't affect the final exit code (see below).
-    if ran_terminal or not args.only:
+    if not failed and ran_terminal:
         print('post-processing (honest metrics / bands / topology):')
         for label, cmd in POST:
             env = {**os.environ, 'PYTHONUTF8': '1'}

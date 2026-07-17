@@ -31,15 +31,16 @@ from pathlib import Path
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-sys.path.append(str(HERE))
-from cpht_config import CPHT_1_HX, CPHT_2_HX, PARALLEL_SHELL_GROUPS
-from cpht_features import HX_CONFIG as FULL_CFG, TAM_DATE, get_tam_dates
-from bypass_config import BYPASS_CONFIG   # real plant bypass list (2026-07-08) — AUTHORITATIVE
+REPO = HERE.parent.parent
+sys.path.append(str(REPO))
+from src.domain.config import CPHT_1_HX, CPHT_2_HX, PARALLEL_SHELL_GROUPS
+from src.features.heat_duty import HX_CONFIG as FULL_CFG, TAM_DATE, get_tam_dates
+from src.domain.bypass import BYPASS_CONFIG   # real plant bypass list (2026-07-08) — AUTHORITATIVE
 
 LAST_TAM = get_tam_dates()[-1]   # latest plant-wide TAM detected in the data
 
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
-OUT  = HERE.parent / 'dashboard' / 'data' / 'cleaning_logistics.json'
+OUT  = REPO / 'dashboard' / 'data' / 'cleaning_logistics.json'
 
 NEXT_TAM = '2028-06-01'      # ยืนยันแล้วจากผู้ใช้ 2026-07-13 (TAM รอบถัดไปอีก ~4 ปีหลังจากนี้ ~2032-06-01
                               # ยังเป็นค่าสมมติ -- ดู cleaning_scheduler_network.TAM_DATES)

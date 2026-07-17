@@ -38,9 +38,9 @@ NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = DATA / 'Fouling_Rate_By_Run.csv'
 FEAT = DATA / 'Feature_calculated.csv'
-sys.path.append(str(NB))
-import nb_audit as A
-from cpht_config import HX_CONFIG
+sys.path.append(str(REPO))
+from src.validation import nb_audit as A
+from src.domain.config import HX_CONFIG
 
 CLEAN_WINDOW_DAYS = 30   # must match notebook 02 §3.4 (first N days of a run = clean baseline)
 U_CLEAN_PCT       = 90   # P90, not max — robust to restart-transient spikes
@@ -215,9 +215,9 @@ def _hot_cold_balance_diagnostic():
     correlation (crude_properties.py) for lack of a residue-specific one, so this is a rough
     plausibility check, not a precise energy balance — never used to filter/gate any run."""
     import sys as _sys
-    _sys.path.append(str(NB))
-    import cpht_features as F
-    import crude_properties as CProp
+    _sys.path.append(str(REPO))
+    from src.features import heat_duty as F
+    from src.features import crude_properties as CProp
     proc = pd.read_csv(DATA / 'Process_information_cleaned.csv', parse_dates=['Timestamp']).set_index('Timestamp')
     crude = pd.read_csv(DATA / 'Crude_property_profiled.csv', parse_dates=['Date']).set_index('Date')
     sg = (crude['SG_15_6C'].reindex(proc.index).ffill().bfill()

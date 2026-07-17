@@ -19,9 +19,9 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'hx_timeseries.json'
-sys.path.append(str(NB))
-from cpht_config import HX_CONFIG
-from cpht_features import HX_CONFIG as FULL_CFG, parse_hx   # hot-side tags + labels
+sys.path.append(str(REPO))
+from src.domain.config import HX_CONFIG
+from src.features.heat_duty import HX_CONFIG as FULL_CFG, parse_hx   # hot-side tags + labels
 
 STEP = 3   # keep every 3rd day -> ~280 pts/HX instead of 836 (JSON stays small)
 

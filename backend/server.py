@@ -23,7 +23,7 @@ Run:  python backend/server.py         (defaults to http://localhost:8899)
 """
 import os
 import email.utils
-import json, logging, sys, subprocess, io
+import json, logging, sys, subprocess, io, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import pandas as pd
@@ -31,12 +31,41 @@ import pandas as pd
 ROOT      = Path(__file__).resolve().parent.parent
 DASH      = ROOT / 'dashboard'
 NB        = ROOT / 'notebooks'
+SRC       = ROOT / 'src'
 DATA      = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 UPLOADS   = DATA / 'uploads'
 UPLOADS.mkdir(parents=True, exist_ok=True)
 TOPO_OUT  = DASH / 'data' / 'pfd_topology.json'
 PARAMS_OUT= DASH / 'data' / 'opt_params.json'
-PORT      = int(os.environ.get('PORT') or (sys.argv[1] if len(sys.argv) > 1 else 8899))
+EXECUTED_NB = ROOT / 'reports' / 'executed_notebooks'
+EXECUTED_NB.mkdir(parents=True, exist_ok=True)
+# Keep module import side-effect free: pytest, WSGI helpers, and other callers place
+# their own flags in sys.argv.  The optional positional CLI port is parsed only in main.
+PORT      = int(os.environ.get('PORT', 8899))
+
+# Upload size cap -- previously /api/run and /api/run-full read `Content-Length` bytes
+# unconditionally, so an arbitrarily large (or falsified) Content-Length could exhaust
+# memory/disk before any tag validation ran. Override with CPHT_MAX_UPLOAD_MB.
+MAX_UPLOAD_BYTES = int(os.environ.get('CPHT_MAX_UPLOAD_MB', 200)) * 1024 * 1024
+
+# Guards /api/run-full against a second full-pipeline run starting while one is still
+# in progress (run_all.py takes several minutes and mutates shared Data/ CSVs + dashboard
+# JSON in place -- two overlapping runs would race on the same files). Tracks the most
+# recently started pipeline subprocess; `_full_run_lock` only protects the brief
+# check-then-launch window, not the run itself.
+_full_run_lock = threading.Lock()
+_full_run_proc = None
+
+
+def _safe_filename(name):
+    """Return just the basename of an untrusted X-Filename header value, rejecting
+    anything that would let it escape UPLOADS/ (e.g. '../../evil.py', an absolute path,
+    or a bare '..'). Previously `UPLOADS / filename` used the header value directly."""
+    name = (name or '').strip()
+    base = Path(name).name
+    if not base or base in ('.', '..'):
+        raise ValueError("X-Filename ไม่ถูกต้อง")
+    return base
 
 # Structured log file -- BaseHTTPRequestHandler.log_message() is overridden to a no-op below
 # ("quieter console"), so previously nothing about a request/failure was persisted anywhere;
@@ -47,8 +76,8 @@ logging.basicConfig(
     handlers=[logging.FileHandler(DATA / 'backend_server.log', encoding='utf-8')])
 log = logging.getLogger('backend.server')
 
-sys.path.append(str(NB))
-from cpht_config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
+sys.path.append(str(ROOT))
+from src.domain.config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
 
 sys.path.append(str(ROOT / 'pipeline'))
 import cleaning_scheduler_network as SCHED
@@ -157,8 +186,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(404, {'error': 'unknown endpoint'})
         try:
             n = int(self.headers.get('Content-Length', 0))
+            if n > MAX_UPLOAD_BYTES:
+                return self._send(413, {'error': f'ไฟล์ใหญ่เกินไป (>{MAX_UPLOAD_BYTES // (1024*1024)}MB)'})
             raw = self.rfile.read(n)
-            filename = self.headers.get('X-Filename', 'upload.csv')
+            filename = _safe_filename(self.headers.get('X-Filename', 'upload.csv'))
             try:
                 params = json.loads(self.headers.get('X-Params', '{}'))
             except Exception:
@@ -176,7 +207,7 @@ class Handler(BaseHTTPRequestHandler):
             PARAMS_OUT.write_text(json.dumps(params, ensure_ascii=False, indent=2), encoding='utf-8')
 
             # regenerate topology + furnace from the uploaded data
-            r = subprocess.run([sys.executable, str(NB / 'build_dashboard_topology.py'),
+            r = subprocess.run([sys.executable, str(SRC / 'reporting' / 'dashboard_topology.py'),
                                 str(UPLOADS / 'last_cleaned.csv'), str(TOPO_OUT)],
                                capture_output=True, text=True, timeout=120)
             if r.returncode != 0:
@@ -239,7 +270,8 @@ class Handler(BaseHTTPRequestHandler):
 
             env = {**os.environ, 'PYTHONUTF8': '1'}
             r = subprocess.run(
-                [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute', '--inplace',
+                [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+                 f'--output-dir={EXECUTED_NB}',
                  '--ExecutePreprocessor.timeout=420',
                  str(NB / '16_cleaning_plan_optimization.ipynb')],
                 capture_output=True, text=True, env=env, timeout=440)
@@ -318,23 +350,31 @@ class Handler(BaseHTTPRequestHandler):
         Optionally stages an uploaded RAW process Excel first. Returns
         immediately — the full chain takes several minutes; the dashboard
         refreshes when the operator reloads after it finishes."""
+        global _full_run_proc
         try:
-            n = int(self.headers.get('Content-Length', 0))
-            raw = self.rfile.read(n) if n else b''
-            filename = self.headers.get('X-Filename', '')
-            cmd = [sys.executable, str(ROOT / 'pipeline' / 'run_all.py'), '--timeout', '1200']
-            staged = None
-            if raw and filename:
-                missing = validate_raw_excel(raw, filename)
-                if missing:
-                    return self._send(422, {'error': f'ไฟล์ขาด tag ที่จำเป็น {len(missing)} คอลัมน์',
-                                            'missing_tags': missing[:20]})
-                staged = UPLOADS / filename
-                staged.write_bytes(raw)
-                cmd += ['--input', str(staged)]
-            env = {**__import__('os').environ, 'PYTHONUTF8': '1'}
-            log = (UPLOADS / 'pipeline_last.log').open('wb')
-            subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
+            with _full_run_lock:
+                if _full_run_proc is not None and _full_run_proc.poll() is None:
+                    return self._send(409, {'error': 'pipeline เต็มรูปแบบกำลังรันอยู่ กรุณารอให้เสร็จก่อนเริ่มใหม่'})
+
+                n = int(self.headers.get('Content-Length', 0))
+                if n > MAX_UPLOAD_BYTES:
+                    return self._send(413, {'error': f'ไฟล์ใหญ่เกินไป (>{MAX_UPLOAD_BYTES // (1024*1024)}MB)'})
+                raw = self.rfile.read(n) if n else b''
+                filename = self.headers.get('X-Filename', '')
+                cmd = [sys.executable, str(ROOT / 'pipeline' / 'run_all.py'), '--timeout', '1200']
+                staged = None
+                if raw and filename:
+                    filename = _safe_filename(filename)
+                    missing = validate_raw_excel(raw, filename)
+                    if missing:
+                        return self._send(422, {'error': f'ไฟล์ขาด tag ที่จำเป็น {len(missing)} คอลัมน์',
+                                                'missing_tags': missing[:20]})
+                    staged = UPLOADS / filename
+                    staged.write_bytes(raw)
+                    cmd += ['--input', str(staged)]
+                env = {**__import__('os').environ, 'PYTHONUTF8': '1'}
+                log = (UPLOADS / 'pipeline_last.log').open('wb')
+                _full_run_proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
             self._send(200, {
                 'ok': True, 'started': True,
                 'message': ('เริ่มรัน pipeline เต็มรูปแบบแล้ว (รันโน้ตบุ๊ก 13 ไฟล์ อาจใช้เวลาหลายนาที)'
@@ -350,6 +390,7 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == '__main__':
     # bind 127.0.0.1 by default (local only, safe). Docker/intranet sets CPHT_BIND=0.0.0.0
     HOST = os.environ.get('CPHT_BIND', '127.0.0.1')
-    print(f'CPHT backend on http://{HOST}:{PORT}/  (serving {DASH}, data={DATA})')
+    cli_port = int(sys.argv[1]) if len(sys.argv) > 1 else PORT
+    print(f'CPHT backend on http://{HOST}:{cli_port}/  (serving {DASH}, data={DATA})')
     print(f'  required tags for upload: {len(REQUIRED_TAGS)} columns')
-    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
+    ThreadingHTTPServer((HOST, cli_port), Handler).serve_forever()

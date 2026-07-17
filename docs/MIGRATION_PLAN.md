@@ -1,5 +1,7 @@
 # Phased Migration Plan
 
+**Status:** CURRENT
+
 ## Purpose
 
 `TARGET_PIPELINE.md` and the rest of the Codex analysis define the target

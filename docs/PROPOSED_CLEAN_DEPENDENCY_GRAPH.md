@@ -1,5 +1,7 @@
 # Proposed Clean Dependency Graph
 
+**Status:** PROPOSED
+
 ## Legacy consolidation into canonical stages
 
 ```mermaid
