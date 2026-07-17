@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0.0",
+  "decision_areas": [
+    "heat_exchanger_performance",
+    "fouling_analysis",
+    "cleaning_event_detection",
+    "cit_and_furnace_impact",
+    "forecasting",
+    "cleaning_prioritization",
+    "economic_evaluation",
+    "dashboard_decision_support"
+  ],
+  "mandatory_constraints": [
+    "cit_floor",
+    "cot_limit",
+    "fuel_gas_flow",
+    "fuel_gas_pressure",
+    "tube_skin_temperature_pass_1",
+    "tube_skin_temperature_pass_2",
+    "tube_skin_temperature_pass_3",
+    "tube_skin_temperature_pass_4",
+    "stack_temperature",
+    "flue_gas_o2",
+    "draft",
+    "swap_capability",
+    "tam_only"
+  ],
+  "approval_status": "REQUIRES_ENGINEERING_CONFIRMATION"
+}
+

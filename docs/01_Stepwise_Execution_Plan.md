@@ -33,10 +33,12 @@ Step 0 (clean data)
 ## Step 0 / 0b — Data Ingestion & Cleaning
 **Objective:** มีไฟล์ input สะอาด 1 ชุดที่ทุก Step ถัดไปใช้ร่วมกัน (ของเดิมถูกต้องแล้ว งานนี้คือ "รวมไฟล์" ไม่ใช่เขียนใหม่)
 
-**สิ่งที่ต้องทำ:**
-1. รวม `00_data_prep_crude_assay.ipynb` (crude property cleaning) + `01_data_cleaning.ipynb` (TAM removal, outlier fix, merge crude) → ไฟล์เดียว `00_data_ingestion_and_cleaning.ipynb`
+**สิ่งที่ต้องทำ:** *(หมายเหตุ Phase 1: `00_data_prep_crude_assay.ipynb`/`00_data_prep_process_control.ipynb` ถูกเปลี่ยนชื่อเป็น
+`_eda_crude_assay.ipynb`/`_eda_process_control.ipynb` แล้ว — ข้อเสนอ merge ด้านล่างนี้ยังไม่ได้ทำ, เป็นข้อเสนออนาคตแยกจาก
+`docs/MIGRATION_PLAN.md`)*
+1. รวม `_eda_crude_assay.ipynb` (crude property cleaning) + `01_data_cleaning.ipynb` (TAM removal, outlier fix, merge crude) → ไฟล์เดียว `00_data_ingestion_and_cleaning.ipynb`
 2. เก็บ logic เดิมทั้งหมดไว้ (thresholds, IQR outlier, chain-consistency check) — **ไม่แก้สมการ**
-3. `00_data_prep_process_control.ipynb` → เก็บแยกเป็น `00b_process_profiling.ipynb` (EDA อย่างเดียว, ไม่มีไฟล์ output ที่ step อื่นพึ่ง)
+3. `_eda_process_control.ipynb` → เก็บแยกเป็น `00b_process_profiling.ipynb` (EDA อย่างเดียว, ไม่มีไฟล์ output ที่ step อื่นพึ่ง)
 4. Output ที่ต้องคงชื่อเดิมไว้ (มี notebook อื่นอ้างอิงอยู่): `Process_information_with_crude.csv`
 
 **Validation checklist:**

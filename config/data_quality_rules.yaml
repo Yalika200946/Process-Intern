@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "rules": {
+    "duplicate_timestamp_tag": {"enabled": true, "severity": "ERROR"},
+    "timestamp_parse": {"enabled": true, "severity": "ERROR"},
+    "physical_ranges": {"enabled": false, "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "stuck_sensor": {"enabled": false, "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "shutdown_detection": {"enabled": false, "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "imputation": {
+      "future_looking_allowed": false,
+      "centered_window_allowed_for_predictive_data": false,
+      "methods": [],
+      "status": "REQUIRES_ENGINEERING_CONFIRMATION"
+    }
+  }
+}
+

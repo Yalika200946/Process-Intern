@@ -228,7 +228,8 @@ design เทียบ U_clean_run ที่วัดได้ก่อน)
 
 ### 8.5 Solver comparison — SLSQP relaxation vs mixed-integer (2026-07-13)
 v2 แก้ `y[hx,t]∈{0,1}` แบบ continuous relaxation (SLSQP) แล้ว round — ไม่รับประกันว่าเป็น optimum ของปัญหา integer
-จริง `pipeline/solver_comparison.py` + `16b_optimizer_solver_comparison.ipynb` เทียบ window เดียวกันทุกประการด้วย
+จริง `pipeline/solver_comparison.py` + `_diagnostic_solver_comparison.ipynb` (ชื่อเดิม `16b_optimizer_solver_comparison.ipynb`)
+เทียบ window เดียวกันทุกประการด้วย
 `scipy.optimize.differential_evolution(integrality=True)` (mixed-integer global search แบบไม่ต้องติดตั้งอะไรเพิ่ม
 — ไม่ใช่ Pyomo+Bonmin/Couenne เต็มรูปที่มี optimality-gap certificate ซึ่งหนักเกินไปสำหรับ dependency policy ของ
 โปรเจกต์นี้) และ GA เล็กๆ (dependency-free) **ผลจริงจากการรันครั้งแรก**: หน้าต่าง 2 เดือน ทั้งสามวิธีเท่ากัน, หน้าต่าง

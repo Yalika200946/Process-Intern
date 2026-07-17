@@ -49,8 +49,24 @@ const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const parseISO=s=>new Date(s+'T00:00:00');
 const thaiDate=iso=>iso?parseISO(iso).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}):'—';
 async function loadJSON(n){const r=await fetch(`${DATA_DIR}/${n}?t=${Date.now()}`);if(!r.ok)throw new Error(`${n}: ${r.status}`);return r.json();}
+// Last-Modified (backend/server.py's do_GET sets it from the file's mtime) lets the dashboard
+// detect when /api/run's "quick update" (topology only, see server.py's own docstring) has left
+// pfd_topology.json newer than hx_ranking.json/economics.json -- i.e. the ranking/economics shown
+// alongside the current topology are from an older pipeline run. Returns null (not 0) when the
+// header is unavailable (e.g. a plain static file server, or the demo build) so callers can tell
+// "not checked" apart from a real timestamp of zero.
+async function fetchLastModified(n){
+  try{const r=await fetch(`${DATA_DIR}/${n}?t=${Date.now()}`);if(!r.ok)return null;
+    const lm=r.headers.get('Last-Modified');return lm?new Date(lm).getTime():null;}
+  catch(e){return null;}
+}
 
-/* default optimization params (user-adjustable, mirror cpht_features / brief) */
+/* default optimization params (user-adjustable, mirror cpht_features / brief).
+   These are FALLBACK values only, used until dashboard/data/economics.json loads --
+   see App()'s econ-merge effect, which overwrites the overlapping fields (everything
+   except CIT_TARGET/CIT_MIN/NEXT_TAM/W_*, which aren't published there) with the
+   pipeline's own published constants so there is one source of truth instead of a
+   second hardcoded copy silently drifting from pipeline/export_economics.py. */
 const DEFAULT_PARAMS={
   CIT_TARGET:258.05, CIT_MIN:250, CP_CRUDE:2.2, RHO_CRUDE:850,
   LHV_FG:48000, FURNACE_EFF:0.88, NEXT_TAM:'2028-06-01',
@@ -59,6 +75,7 @@ const DEFAULT_PARAMS={
   STD_ENERGY:0.74, NG_PRICE:390, CIT_DECAY:0.5,
   // legacy assumptions (สูตร LHV/η — cross-check; FG_PRICE เป็นค่าสมมติ)
   FG_PRICE:18000, CLEANING_COST:300000, CO2_PRICE:1000, CO2_FACTOR:2.75,
+  M3_PER_BBL:0.1589873,
 };
 
 /* ═════════ P&ID LAYOUT ═════════ */
@@ -277,7 +294,7 @@ function FurnaceSVG({F,passes,cit,params}){
    </svg>);
 }
 
-function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,fgLimitOv,setFgLimitOv}){
+function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,fgLimitOv,setFgLimitOv,freshness}){
   // per-constraint limit overrides -- persisted locally (localStorage) since edits here are a
   // reference/export value only for 12 of the 13 rows: no live band-status calc consumes `limit`.
   // FG_FLOW is the ONE exception (see fgLimitOv/setFgLimitOv, lifted to App level) -- it's the
@@ -288,8 +305,15 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,f
   const setLimit=(k,v)=>{const n={...limitOv};if(v==null||Number.isNaN(v))delete n[k];else n[k]=v;localStorage.setItem('cpht_constraint_limit_overrides',JSON.stringify(n));setLimitOv(n);};
   if(!topo) return null;
   const F=topo.furnace, passes=topo.passes;
-  const cit=F.find(x=>x.key==='CIT')?.value;
-  const citDef=Math.max(0,params.CIT_TARGET-cit);
+  const citRow=F.find(x=>x.key==='CIT');
+  const cit=citRow?.value;
+  // CIT_TARGET/CIT_MIN read from pfd_topology.json's own CIT row (target/limit, already
+  // 258.05/250 there -- notebooks/build_dashboard_topology.py's single source) instead of
+  // duplicating those numbers in DEFAULT_PARAMS; params.CIT_TARGET/CIT_MIN remain only as
+  // the fallback if topology data is somehow missing them.
+  const citTarget=citRow?.target??params.CIT_TARGET;
+  const citMin=citRow?.limit??params.CIT_MIN;
+  const citDef=Math.max(0,citTarget-cit);
   const charge=topo.nodes['E113A']?.cold_flow_val||525;
   const dFG=(dC)=>charge*params.RHO_CRUDE*params.CP_CRUDE*dC/(params.LHV_FG*params.FURNACE_EFF); // kg/h
   const fgFlow=F.find(x=>x.key==='FG_FLOW')?.value||6.66;
@@ -309,30 +333,71 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,f
   // --- what-if optimization: PLANT formula (Energy Saving Benefit slide) ---
   // Saving[฿/ปี] = ΔCIT × STD_ENERGY(0.74 MMBTU/D/KBD/°C) × Feed[KBD] × NG[฿/MMBTU] × 360 × decay(0.5)
   // ΔCIT ต่อ HX จาก economics.json (วัดจริง median ก่อน, fallback โมเดล); ล้มกลับสูตร LHV เดิมถ้าไม่มีไฟล์
-  const feedKBD=charge*24/0.1589873/1000;
+  //
+  // When economics.per_hx is available, its rows already carry saving_thb_yr/baht_day/
+  // payback_days/legacy_fg_reduction_ton_h/legacy_co2_reduction_ton_day/cum_* -- all
+  // computed once by pipeline/export_economics.py using the exact same plant formula this
+  // panel used to duplicate client-side. Reading those fields directly (instead of
+  // recomputing them here) closes the two-independent-implementations gap flagged in
+  // docs/CURRENT_PIPELINE_MAP.md/docs/MIGRATION_PLAN.md Phase 1 item B3: the JS side no
+  // longer has its own copy of the economics formula to silently drift from the pipeline's.
+  const feedKBD=charge*24/params.M3_PER_BBL/1000;
   const plantYr=(dC)=>dC*params.STD_ENERGY*feedKBD*params.NG_PRICE*360*params.CIT_DECAY;
   const rows_e=economics&&economics.per_hx&&economics.per_hx.length?economics.per_hx:null;
   const cand=rows_e?rows_e:[...ranking].filter(r=>r.expected_CIT_gain_C>0).sort((a,b)=>a.priority_rank-b.priority_rank)
     .map((r,i)=>({HX:r.HX,rank:i+1,cit_gain_C:r.expected_CIT_gain_C,cit_gain_source:'model',cleaning_cost:params.CLEANING_COST}));
-  const wf=useMemo(()=>{let cCIT=0,cYr=0; return cand.map(r=>{
-    const dC=r.cit_gain_C; const yr=plantYr(dC); const bahtDay=yr/360;
-    const fgTh=dFG(dC)/1000; const co2Day=fgTh*24*params.CO2_FACTOR;
-    const cost=r.cleaning_cost||params.CLEANING_COST;
-    cCIT+=dC; cYr+=yr;
-    return {hx:r.HX,gain:dC,src:r.cit_gain_source,gainModel:r.cit_gain_model_C,fgTh,bahtDay,yr,cost,co2Day,
-            payback:bahtDay>0?cost/bahtDay:null,cumCIT:cCIT,cumYr:cYr,cumBaht:cYr/360,cumCO2:0};
-  });},[cand,params,charge]);
+  const wf=useMemo(()=>{
+    if(rows_e){
+      // published rows already carry the full waterfall -- just re-shape field names for the table below
+      return rows_e.map(r=>({hx:r.HX,gain:r.cit_gain_C,src:r.cit_gain_source,gainModel:r.cit_gain_model_C,
+        fgTh:r.legacy_fg_reduction_ton_h,co2Day:r.legacy_co2_reduction_ton_day,
+        bahtDay:r.baht_day,yr:r.saving_thb_yr,cost:r.cleaning_cost,payback:r.payback_days,
+        cumCIT:r.cum_cit_C,cumYr:r.cum_saving_thb_yr,cumBaht:r.cum_baht_day,cumCO2:r.cum_co2_reduction_ton_day}));
+    }
+    // fallback only: economics.json unavailable -- recompute locally from ranking's model estimate
+    // (same params-driven formula export_economics.py uses, kept here purely so the panel still
+    // renders something before the first pipeline run has produced economics.json)
+    let cCIT=0,cYr=0; return cand.map(r=>{
+      const dC=r.cit_gain_C; const yr=plantYr(dC); const bahtDay=yr/360;
+      const fgTh=dFG(dC)/1000; const co2Day=fgTh*24*params.CO2_FACTOR;
+      const cost=r.cleaning_cost||params.CLEANING_COST;
+      cCIT+=dC; cYr+=yr;
+      return {hx:r.HX,gain:dC,src:r.cit_gain_source,gainModel:r.cit_gain_model_C,fgTh,bahtDay,yr,cost,co2Day,
+              payback:bahtDay>0?cost/bahtDay:null,cumCIT:cCIT,cumYr:cYr,cumBaht:cYr/360,cumCO2:0};
+    });
+  },[cand,rows_e,params,charge]);
 
   const econ=[['NG_PRICE','ราคา NG (฿/MMBTU)'],['STD_ENERGY','Std Energy (MMBTU/D/KBD/°C)'],['CIT_DECAY','CIT decay factor'],['CLEANING_COST','ค่าล้าง default (฿)']];
 
   return (
    <div className="space-y-5 fade-up">
+    {/* freshness badge: topology regenerated more recently than ranking/economics, and/or
+        hx_ranking.json out of sync with engineering_priority.json (see the useEffect in
+        App() that computes `freshness`) */}
+    {freshness?.stale&&(
+      <div className="rounded-xl bg-[#D9A400]/[.08] border border-[#D9A400]/30 px-4 py-2.5 flex items-start gap-2.5">
+        <span className="text-[#D9A400] text-base">🕓</span>
+        <div className="text-[11.5px] text-bcp-black/80">
+          {freshness.topoStale&&<div>
+            <b>ข้อมูลอาจไม่ตรงรอบกัน:</b> P&ID/เตา (pfd_topology.json) อัปเดตหลังจากอันดับความเสี่ยง/ความคุ้มค่า
+            (hx_ranking.json/economics.json) — มักเกิดจากการกด "อัปเดตด่วน" (topology อย่างเดียว) โดยยังไม่รัน
+            pipeline เต็ม (notebooks 01→02→08→06→13) รอบใหม่ ตัวเลขที่แสดงร่วมกันด้านล่างอาจมาจากคนละรอบข้อมูล
+          </div>}
+          {freshness.rankVsEngStale&&<div className={freshness.topoStale?'mt-1':''}>
+            <b>อันดับสองแหล่งไม่ตรงกัน:</b> hx_ranking.json กับ engineering_priority.json ควรมีค่า
+            engineering_priority_score เท่ากันเสมอ (มาจาก notebook 08 ตัวเดียวกัน — ดู
+            docs/CURRENT_PIPELINE_MAP.md) แต่ตอนนี้เขียนคนละเวลากัน มักเกิดจากการรัน pipeline
+            บางส่วน (เช่น --only 13) โดยไม่ได้รัน notebook 08 ใหม่ด้วย
+          </div>}
+        </div>
+      </div>)}
+
     {/* alert banner if CIT low */}
-    {cit<params.CIT_MIN&&(
+    {cit<citMin&&(
       <div className="rounded-xl bg-bcp-red/[.07] border border-bcp-red/25 px-4 py-3 flex items-start gap-3">
         <span className="text-bcp-red text-lg">⚠</span>
         <div className="text-[12.5px] text-bcp-black/85">
-          <b className="text-bcp-red">CIT ต่ำกว่าเกณฑ์:</b> ปัจจุบัน {fmt(cit,1)}°C (ขั้นต่ำ {params.CIT_MIN}, เป้า {params.CIT_TARGET}°C)
+          <b className="text-bcp-red">CIT ต่ำกว่าเกณฑ์:</b> ปัจจุบัน {fmt(cit,1)}°C (ขั้นต่ำ {citMin}, เป้า {citTarget}°C)
           — ขาด {fmt(citDef,1)}°C → เตาเผา FG เพิ่ม ~<b>{fmt(dFG(citDef)/1000,3)} t/h</b> (~{fmt(dFG(citDef)/1000/fgFlow*100,1)}% ของ {fmt(fgFlow,2)})
           <span className="block mt-0.5">ต้นทุนการเดินที่ CIT ต่ำ (สูตรโรงงาน): <b className="text-bcp-red">~{Math.round(citDef*params.STD_ENERGY*feedKBD*params.NG_PRICE).toLocaleString()} ฿/วัน</b> (≈{(citDef*params.STD_ENERGY*feedKBD*params.NG_PRICE*360/1e6).toFixed(1)} ล้านบาท/ปี ถ้าคงอยู่ทั้งปี)</span>
         </div>
@@ -349,7 +414,7 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,f
         <h3 className="text-[14px] font-bold mb-1">Problem: fouling → เตาทำงานหนักขึ้น</h3>
         <p className="text-[11px] text-white/45 mb-3">โซ่ผลกระทบเมื่อ preheat train สกปรก (ไฮไลต์ = กำลังเกิดตอนนี้)</p>
         {[['Preheat-train fouling','ตะกรันสะสมใน HX',true],
-          ['CIT ↓','CIT ตกจากเป้า '+fmt(citDef,1)+'°C',cit<params.CIT_TARGET],
+          ['CIT ↓','CIT ตกจากเป้า '+fmt(citDef,1)+'°C',cit<citTarget],
           ['Firing ↑','เผา FG เพิ่ม ~'+fmt(dFG(citDef)/1000,2)+' t/h',citDef>0.5],
           ['Draft ↑ / O₂ ต้องจัดการ','flue gas มากขึ้น',bandStatus(F.find(x=>x.key==='O2'))!=='ok'],
           ['Tube skin ร้อน → Coking / Hot spot','pass ร้อนสุด '+fmt(maxSkin,0)+'°C',maxSkin>380],
@@ -1794,6 +1859,27 @@ function App(){
   const [fgLimitOv,setFgLimitOv]=useState(()=>{try{const v=JSON.parse(localStorage.getItem('cpht_fg_flow_limit_override')||'null');return typeof v==='number'?v:null;}catch(e){return null;}});
   const setFgLimitOvPersist=v=>{setFgLimitOv(v);localStorage.setItem('cpht_fg_flow_limit_override',JSON.stringify(v));};
 
+  // Once economics.json loads, overwrite the DEFAULT_PARAMS fallback constants with the
+  // pipeline's own published values (pipeline/export_economics.py's PLANT/LEGACY dicts +
+  // m3_per_bbl) -- runs exactly once so it doesn't clobber a user's manual edit made
+  // afterward via OptimizePanel. If economics.json is missing or predates this field set,
+  // the `??` fallbacks leave DEFAULT_PARAMS' hardcoded copies in place.
+  const econAppliedRef=useRef(false);
+  useEffect(()=>{
+    if(econ && !econAppliedRef.current){
+      econAppliedRef.current=true;
+      const pc=econ.plant_constants||{}, lc=econ.legacy_constants||{};
+      setParams(p=>({...p,
+        STD_ENERGY:pc.STD_ENERGY??p.STD_ENERGY, NG_PRICE:pc.NG_PRICE??p.NG_PRICE,
+        CIT_DECAY:pc.CIT_DECAY_FACTOR??p.CIT_DECAY,
+        CP_CRUDE:lc.CP_CRUDE??p.CP_CRUDE, RHO_CRUDE:lc.RHO_CRUDE??p.RHO_CRUDE,
+        LHV_FG:lc.LHV_FG??p.LHV_FG, FURNACE_EFF:lc.FURNACE_EFF??p.FURNACE_EFF,
+        FG_PRICE:lc.FG_PRICE??p.FG_PRICE, CO2_FACTOR:lc.CO2_FACTOR??p.CO2_FACTOR,
+        M3_PER_BBL:econ.m3_per_bbl??p.M3_PER_BBL,
+      }));
+    }
+  },[econ]);
+
   const load=useCallback(()=>{
     setLoading(true);
     const opt=n=>loadJSON(n).catch(()=>null); // optional files (may not be generated yet)
@@ -1806,6 +1892,40 @@ function App(){
       .catch(e=>{setErr(e.message);setLoading(false);});
   },[]);
   useEffect(load,[load]);
+
+  // Freshness check (Phase 1 item B4 + Phase 2 Part F): server.py's /api/run "quick update"
+  // only regenerates pfd_topology.json (see its own docstring above and
+  // CURRENT_PIPELINE_MAP.md's dashboard dependency-boundary section) -- ranking/economics
+  // can silently stay from an older full pipeline run. Compare Last-Modified across the
+  // files the Overview tab combines and surface it instead of showing a combination that
+  // was never generated together. STALE_THRESHOLD_MS gives room for the small clock skew
+  // between writes within one real pipeline run (export_engineering_priority.py and
+  // export_economics.py run seconds apart in pipeline/run_all.py's POST list, not
+  // simultaneously).
+  //
+  // Second check (Phase 2 Part F): hx_ranking.json and engineering_priority.json are both
+  // passthroughs of the SAME notebook-08 score (docs/CURRENT_PIPELINE_MAP.md's "Ranking/score
+  // traceability" table) two different hops downstream -- they should always match for a HX
+  // from the same pipeline run. A partial rerun (e.g. `--only 13` without also running
+  // notebook 08) leaves them holding different runs' numbers, exactly the scenario that
+  // produced a live mismatch during Phase 2 testing. `pipeline/export_engineering_priority.py`
+  // now warns about this server-side too (its own mtime check) -- this is the client-side
+  // surface of the same gap.
+  const [freshness,setFreshness]=useState({checked:false,stale:false});
+  useEffect(()=>{
+    Promise.all([fetchLastModified('pfd_topology.json'),fetchLastModified('economics.json'),
+      fetchLastModified('hx_ranking.json'),fetchLastModified('engineering_priority.json')])
+      .then(([topoTime,econTime,rankTime,engTime])=>{
+        if(topoTime==null&&(rankTime==null||engTime==null)){setFreshness({checked:false,stale:false});return;}
+        const STALE_THRESHOLD_MS=5*60*1000;   // 5 min -- generously above normal same-run write skew
+        const topoStale=topoTime!=null&&((econTime!=null&&topoTime-econTime>STALE_THRESHOLD_MS)
+                  ||(rankTime!=null&&topoTime-rankTime>STALE_THRESHOLD_MS));
+        const rankVsEngStale=rankTime!=null&&engTime!=null
+                  &&Math.abs(rankTime-engTime)>STALE_THRESHOLD_MS;
+        setFreshness({checked:true,stale:topoStale||rankVsEngStale,topoStale,rankVsEngStale,
+          topoTime,econTime,rankTime,engTime});
+      });
+  },[]);
 
   const units=useMemo(()=>{
     const m={};(topo?.order||[]).forEach(hx=>m[hx]={HX:hx});
@@ -1909,7 +2029,7 @@ function App(){
         <LogisticsTable logi={logi}/>
       </>}
       {tab==='furnace'&&<>
-        <FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ} engPriorityByHX={engPriorityByHX} fgLimitOv={fgLimitOv} setFgLimitOv={setFgLimitOvPersist}/>
+        <FurnacePanel topo={topo} params={params} setParams={setParams} ranking={ranking} economics={econ} engPriorityByHX={engPriorityByHX} fgLimitOv={fgLimitOv} setFgLimitOv={setFgLimitOvPersist} freshness={freshness}/>
         <ModelPanel models={models} ranking={ranking}/>
         <OptimizePanel params={params} setParams={setParams} onRerun={onRerun} onRunFull={onRunFull} status={rerun}/>
       </>}

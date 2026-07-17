@@ -112,16 +112,21 @@ def main():
         print('WARNING: Operating_State.csv missing — falling back to no state mask '
               '(rates and baseline will be less reliable; run 2a first).')
         phase_labeled = _label_fouling_phases(feat, HX_CONFIG)
+        # fouling_baseline_corrected stays False (as notebook 02 left it) -- the
+        # in-service-masked correction below did NOT run, so U_clean_run/U_relative/
+        # Rf_run are still the physical-mask-only version.
         feat.to_csv(FEAT)
         print(f'Labeled INITIATION/AFTER_INITIATION phase for {len(phase_labeled)}/{len(HX_CONFIG)} HX '
-              f'-> overwrote {FEAT.name}')
+              f'-> overwrote {FEAT.name} (fouling_baseline_corrected=False, no state mask applied)')
     else:
         redone = _recompute_clean_baseline(feat, ost, HX_CONFIG)
         phase_labeled = _label_fouling_phases(feat, HX_CONFIG)
+        feat['fouling_baseline_corrected'] = True
         feat.to_csv(FEAT)
         print(f'Recomputed in-service-masked U_clean_run/U_relative/Rf_run for '
               f'{len(redone)}/{len(HX_CONFIG)} HX; labeled fouling phase for '
-              f'{len(phase_labeled)}/{len(HX_CONFIG)} HX -> overwrote {FEAT.name}')
+              f'{len(phase_labeled)}/{len(HX_CONFIG)} HX -> overwrote {FEAT.name} '
+              f'(fouling_baseline_corrected=True)')
 
     rows = []
     for hx in HX_CONFIG:

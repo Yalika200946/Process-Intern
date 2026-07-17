@@ -25,6 +25,17 @@ import argparse, logging, os, shutil, subprocess, sys, time
 from datetime import datetime
 from pathlib import Path
 
+# This script's own console output includes Thai text (POST step labels like "economics
+# (CIT->฿)"), but Windows' default console codepage (cp1252) can't encode it -- print()
+# then raises UnicodeEncodeError and kills the run before the remaining POST steps (e.g.
+# export_economics.py) ever execute. Reconfigure stdout/stderr to UTF-8 unconditionally so
+# this script's own prints can never crash the run, independent of the console's codepage.
+# (Distinct from the existing PYTHONUTF8 env var below, which only affects the *subprocess*
+# notebooks/scripts this script launches, not this process's own stdout.)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(r'C:\Desktop\Bangchak Internship 2026\Data')
@@ -45,7 +56,9 @@ logging.basicConfig(
 log = logging.getLogger('run_all')
 
 # dependency-ordered chain that produces the dashboard artifacts.
-# (00/00b EDA-only and 02b correlation/PCA excluded; 05 kept because 08 reads its
+# (_eda_process_control/_eda_crude_assay/_eda_correlation_and_pca -- renamed Phase 1 from
+#  00_data_prep_process_control/00_data_prep_crude_assay/02b_correlation_and_pca -- are
+#  EDA-only and excluded; 05 kept because 08 reads its
 #  Q_CIT_Sensitivity.csv.)
 CHAIN = [
     '01_data_cleaning.ipynb',
@@ -67,7 +80,10 @@ CHAIN = [
 POST = [
     ('honest model_metrics.json', [sys.executable, str(REPO / 'pipeline' / 'gen_honest_metrics.py')]),
     ('engineering priority ranking (nb 08)', [sys.executable, str(REPO / 'pipeline' / 'export_engineering_priority.py')]),
-    ('forecast prediction bands', [sys.executable, str(NB / 'add_forecast_intervals.py')]),
+    # forecast prediction bands: folded into 13_cit_forecast_export.ipynb's own export
+    # cell (section 2b) so forecast_6mo.json has exactly one writer with the complete
+    # schema from the start -- add_forecast_intervals.py is superseded, not deleted
+    # (see its own module docstring), and no longer invoked here.
     ('P&ID topology + furnace',   [sys.executable, str(NB / 'build_dashboard_topology.py')]),
     ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),
     ('per-HX time-series',           [sys.executable, str(REPO / 'pipeline' / 'export_hx_timeseries.py')]),

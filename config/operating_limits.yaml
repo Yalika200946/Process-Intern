@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "limits": {
+    "cit_floor": {"value": null, "unit": "degC", "direction": "minimum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "cot_limit": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "fuel_gas_flow": {"value": null, "unit": null, "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "fuel_gas_pressure": {"value": null, "unit": null, "direction": "minimum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "tube_skin_temperature_pass_1": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "tube_skin_temperature_pass_2": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "tube_skin_temperature_pass_3": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "tube_skin_temperature_pass_4": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "stack_temperature": {"value": null, "unit": "degC", "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "flue_gas_o2": {"value": null, "unit": "percent", "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "draft": {"value": null, "unit": null, "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"}
+  }
+}
+

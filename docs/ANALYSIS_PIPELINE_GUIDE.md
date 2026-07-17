@@ -87,8 +87,8 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 
 | Notebook | ทำอะไร | หมายเหตุ |
 |---|---|---|
-| `00_data_prep_process_control.ipynb` | สำรวจข้อมูล raw เบื้องต้น (missing%, distribution) | ไม่มี output ที่ใครอ่านต่อ |
-| `00_data_prep_crude_assay.ipynb` | ทำความสะอาด crude assay | **output ถูกใช้จริงโดย #1** เพียงแต่ไม่ได้ถูกรันซ้ำใน `run_all.py` (สมมติว่าไฟล์นิ่งแล้ว) |
+| `_eda_process_control.ipynb` (ชื่อเดิม `00_data_prep_process_control.ipynb`, เปลี่ยนชื่อ Phase 1) | สำรวจข้อมูล raw เบื้องต้น (missing%, distribution) | ไม่มี output ที่ใครอ่านต่อ |
+| `_eda_crude_assay.ipynb` (ชื่อเดิม `00_data_prep_crude_assay.ipynb`) | ทำความสะอาด crude assay | **output ถูกใช้จริงโดย #1** เพียงแต่ไม่ได้ถูกรันซ้ำใน `run_all.py` (สมมติว่าไฟล์นิ่งแล้ว) |
 | `2_correlation.ipynb` | หา correlation ของ fouling driver ต่างๆ | ดูหัวข้อ 4 — แนะนำให้ยุบรวมกับ `2_pca` |
 | `2_pca.ipynb` | PCA ลดมิติของ fouling state | ดูหัวข้อ 4 |
 | `15_pipeline_diagnostic_audit.ipynb` | โหลดผลทุกขั้นตอน 0→6d มาเขียนสรุป/รีวิวเป็นข้อความ | เป็นเครื่องมือรีวิว ไม่ใช่ pipeline stage |
@@ -97,7 +97,7 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 
 ## 4. ข้อเสนอยุบรวม (ยังไม่ทำ — รอคุณตัดสินใจ)
 
-1. **ยุบ `2_correlation.ipynb` + `2_pca.ipynb` → `02b_correlation_and_pca.ipynb` เดียว** — ทั้งคู่เป็น EDA ล้วนบน
+1. **ยุบ `2_correlation.ipynb` + `2_pca.ipynb` → `_eda_correlation_and_pca.ipynb` (ชื่อเดิม `02b_correlation_and_pca.ipynb`, เปลี่ยนชื่ออีกครั้ง Phase 1) เดียว** — ทั้งคู่เป็น EDA ล้วนบน
    `Feature_calculated.csv` เดียวกัน ไม่มีใครอ่าน output ต่อ (มีแต่กราฟ) เคยเสนอไว้แล้วใน `docs/02_Requirement_v2_SSOT.md`.
 
 2. **เปลี่ยนคำอธิบายบทบาทของ `09_cit_model_feature_matrix.ipynb`** (ไม่ต้องแก้โค้ด แค่แก้ comment/markdown หัว notebook)
@@ -122,7 +122,7 @@ python pipeline/run_all.py --from 2a       # รันต่อจาก 2a (ใ
 ### 5.1 ลบไฟล์ได้เลย (ยืนยันแล้วว่าไม่มีใครอ่านต่อ)
 - `notebooks/01_case_operate_state.ipynb` — ต้นแบบ redesign ที่ค้างไว้ (`docs/02_Requirement_v2_SSOT.md` ยังเป็น DRAFT
   รอ approve) เขียนทับ**ชื่อไฟล์เดียวกัน** `Operating_State.csv` กับ #3 — เสี่ยงชนกันถ้าเผลอรัน
-- `notebooks/test_output.ipynb` — สำเนาซ้ำของ `00_data_prep_process_control.ipynb`
+- `notebooks/test_output.ipynb` — สำเนาซ้ำของ `_eda_process_control.ipynb` (ชื่อเดิม `00_data_prep_process_control.ipynb`)
 - `notebooks/scratch_fouling/` (ทั้งโฟลเดอร์) — sandbox ทดลองเก่า
 - root `nul`, `scratch_12mo.csv` — ไฟล์เศษ
 - `notebooks/_build_*.py`, `notebooks/_insert_*.py` — สคริปต์สร้าง notebook ครั้งเดียว ไม่ถูกเรียกจาก `run_all.py`
@@ -144,14 +144,14 @@ fetch/แสดงตรง ๆ อีกแล้ว.
 
 ทุกข้อเสนอในหัวข้อ 2, 4, 5 ด้านบน **ทำเสร็จแล้ว**:
 - ลำดับแท็บสลับแล้ว (พยากรณ์&ความเสี่ยง มาก่อนแผนล้าง HX)
-- ยุบ `2_correlation.ipynb`+`2_pca.ipynb` → `02b_correlation_and_pca.ipynb` แล้ว (รันผ่าน, ไม่มี error)
+- ยุบ `2_correlation.ipynb`+`2_pca.ipynb` → `_eda_correlation_and_pca.ipynb` (ชื่อเดิม `02b_correlation_and_pca.ipynb`, เปลี่ยนชื่ออีกครั้ง Phase 1) แล้ว (รันผ่าน, ไม่มี error)
 - แก้ header markdown ของ `09_cit_model_feature_matrix.ipynb` ให้บอกบทบาทจริงชัดเจนแล้ว
 - ไฟล์ตาย/สคริปต์ scaffolding ทั้งหมดใน §5.1 ย้ายไป `notebooks/_archive_2026-07-12/` แล้ว (ไม่ได้ลบถาวร เผื่อต้องใช้อ้างอิง)
 - เอา export `Cleaning_Combined_Action_List.csv` (2d) และ `Delta_CIT_Signal.csv`/`Delta_CIT_Cleaning_Gain.csv` (6d) ออกแล้ว
 - ลบ `SchedulePanel`/`NetworkSchedulePanel`/`PlanTable` + fetch ที่ไม่ใช้แล้วออกจากแดชบอร์ดแล้ว
 
 ตารางในหัวข้อ 1 ด้านบนยังตรงกับโครงสร้างปัจจุบัน (ไม่มีขั้นตอนไหนถูกลบ เปลี่ยนแค่ไฟล์ #4 ในหัวข้อ 4 ที่ตอนนี้ชื่อ
-`02b_correlation_and_pca.ipynb` แทน).
+`_eda_correlation_and_pca.ipynb` (ชื่อเดิม `02b_correlation_and_pca.ipynb`, เปลี่ยนชื่ออีกครั้ง Phase 1) แทน).
 
 ---
 

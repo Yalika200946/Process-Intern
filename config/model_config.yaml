@@ -1,0 +1,15 @@
+{
+  "schema_version": "1.0.0",
+  "time_series_validation": {
+    "random_split_allowed": false,
+    "method": "walk_forward_or_expanding_window",
+    "same_timestamp_leakage_check": true,
+    "future_leakage_check": true,
+    "target_leakage_check": true
+  },
+  "baseline_required": true,
+  "forecast_horizons": [],
+  "prediction_interval_coverage": null,
+  "approval_status": "REQUIRES_ENGINEERING_CONFIRMATION"
+}
+

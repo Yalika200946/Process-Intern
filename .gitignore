@@ -58,3 +58,16 @@ Data/
 # Windows reserved-device-name junk files (accidental `> nul` redirects; block git add on Windows)
 notebooks/_archive_2026-07-12/nul
 notebooks/_archive_2026-07-12/root_nul
+
+# Canonical pipeline runtime outputs
+logs/
+reports/figures/
+reports/tables/
+models/*
+!models/.gitkeep
+data/raw/
+data/interim/
+data/processed/
+data/features/
+data/gold/
+.env

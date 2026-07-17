@@ -1,4 +1,12 @@
 """
+SUPERSEDED (kept for reference only, no longer run from pipeline/run_all.py):
+this logic was folded directly into 13_cit_forecast_export.ipynb's export cell
+(section 2b) so forecast_6mo.json has exactly one writer instead of a notebook
+write followed by this script's patch. See docs/MIGRATION_PLAN.md Phase 1,
+item A4. Do not run this standalone against a forecast_6mo.json produced by
+the updated notebook 13 -- it would silently overwrite fields that notebook
+already wrote using the identical formula, defeating the point of the fix.
+
 A3: add a prediction-interval cone to dashboard/data/forecast_6mo.json.
 
 The 6c forecast is a single deterministic line (current_dev + rate*t). A point

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0.0",
+  "approval_status": "REQUIRES_ENGINEERING_CONFIRMATION",
+  "required_fields": [
+    "hx_id",
+    "train_position",
+    "swap_capable",
+    "tam_only",
+    "sensor_coverage",
+    "flow_allocation_method",
+    "approval_status"
+  ],
+  "heat_exchangers": [],
+  "special_cases": {
+    "E101G": {
+      "direct_sensors": false,
+      "measurement_type": "INFERRED",
+      "inference_method": "REQUIRES_ENGINEERING_CONFIRMATION"
+    }
+  }
+}
+

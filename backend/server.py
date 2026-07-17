@@ -22,6 +22,7 @@ cleaned-process file can regenerate on its own and reports exactly what it did.
 Run:  python backend/server.py         (defaults to http://localhost:8899)
 """
 import os
+import email.utils
 import json, logging, sys, subprocess, io
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -110,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):  # quieter console
         pass
 
-    def _send(self, code, body, ctype='application/json'):
+    def _send(self, code, body, ctype='application/json', extra_headers=None):
         # Single choke point every response goes through -- logging HERE (rather than at each
         # individual except-block across every endpoint below) means every non-2xx response
         # gets a persisted record automatically, including any future endpoint that forgets to
@@ -125,6 +126,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Content-Type', ctype)
         self.send_header('Content-Length', str(len(data)))
         self.send_header('Cache-Control', 'no-store')
+        for k, v in (extra_headers or {}).items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
@@ -134,7 +137,13 @@ class Handler(BaseHTTPRequestHandler):
         fp = (DASH / rel).resolve()
         if not str(fp).startswith(str(DASH.resolve())) or not fp.is_file():
             return self._send(404, {'error': 'not found'})
-        self._send(200, fp.read_bytes(), CTYPE.get(fp.suffix, 'application/octet-stream'))
+        # Last-Modified lets the dashboard detect when /api/run's "quick update" (topology
+        # only) has left pfd_topology.json newer than hx_ranking.json/economics.json --
+        # i.e. the displayed ranking/economics are stale relative to the current topology --
+        # without requiring every pipeline export script to embed its own generated_at field.
+        mtime = email.utils.formatdate(fp.stat().st_mtime, usegmt=True)
+        self._send(200, fp.read_bytes(), CTYPE.get(fp.suffix, 'application/octet-stream'),
+                   extra_headers={'Last-Modified': mtime})
 
     def do_POST(self):
         endpoint = self.path.split('?')[0]

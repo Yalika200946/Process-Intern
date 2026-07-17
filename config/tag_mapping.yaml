@@ -1,0 +1,25 @@
+{
+  "schema_version": "1.0.0",
+  "mapping_status": "REQUIRES_ENGINEERING_CONFIRMATION",
+  "required_fields": [
+    "tag_id",
+    "source_tag",
+    "canonical_name",
+    "asset_id",
+    "measurement_type",
+    "unit_raw",
+    "unit_canonical",
+    "valid_from",
+    "valid_to",
+    "approval_status"
+  ],
+  "tags": [],
+  "special_cases": {
+    "E101G": {
+      "sensor_available": false,
+      "measurement_type": "INFERRED",
+      "approval_status": "REQUIRES_ENGINEERING_CONFIRMATION"
+    }
+  }
+}
+

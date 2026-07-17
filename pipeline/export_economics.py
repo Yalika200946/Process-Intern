@@ -309,9 +309,15 @@ def main():
         return dC * PLANT['STD_ENERGY'] * feed_kbd * PLANT['NG_PRICE'] * \
                PLANT['DAYS_PER_YEAR'] * PLANT['CIT_DECAY_FACTOR']
 
-    def legacy_baht_day(dC):   # THB/day (first-principles cross-check)
+    def legacy_fg_ton_h(dC):   # tonnes/hr fuel-gas reduction (first-principles energy balance)
         kgph = charge * LEGACY['RHO_CRUDE'] * LEGACY['CP_CRUDE'] * dC / (LEGACY['LHV_FG'] * LEGACY['FURNACE_EFF'])
-        return kgph / 1000 * LEGACY['HOURS_PER_DAY'] * LEGACY['FG_PRICE']
+        return kgph / 1000
+
+    def legacy_baht_day(dC):   # THB/day (first-principles cross-check)
+        return legacy_fg_ton_h(dC) * LEGACY['HOURS_PER_DAY'] * LEGACY['FG_PRICE']
+
+    def legacy_co2_ton_day(dC):   # tonnes CO2/day avoided, same fuel-gas-reduction basis
+        return legacy_fg_ton_h(dC) * LEGACY['HOURS_PER_DAY'] * LEGACY['CO2_FACTOR']
 
     calib = event_study_calibration(chist)
 
@@ -332,13 +338,15 @@ def main():
         cand.append((r, dC, src, calib_factor))
     cand.sort(key=lambda t: t[0].get('priority_score', 0), reverse=True)
 
-    per_hx, cum_cit, cum_yr = [], 0.0, 0.0
+    per_hx, cum_cit, cum_yr, cum_co2 = [], 0.0, 0.0, 0.0
     for i, (r, dC, src, calib_factor) in enumerate(cand, 1):
         yr = plant_saving_yr(dC)
         day = yr / PLANT['DAYS_PER_YEAR']
         cost = CLEANING_COST_BY_HX.get(r['HX'], DEFAULT_CLEANING_COST)
+        co2_ton_day = legacy_co2_ton_day(dC)   # legacy first-principles basis (see fg_ton_h)
         cum_cit += dC
         cum_yr += yr
+        cum_co2 += co2_ton_day
         per_hx.append(dict(
             HX=r['HX'], rank=i,
             cit_gain_C=round(dC, 2), cit_gain_source=src,
@@ -349,13 +357,17 @@ def main():
             cleaning_cost=cost, cleaning_cost_assumed=COSTS_ASSUMED,
             payback_days=(round(cost / day, 1) if day > 0 else None),
             legacy_baht_day=round(legacy_baht_day(dC)),   # cross-check (LHV/η formula)
+            legacy_fg_reduction_ton_h=round(legacy_fg_ton_h(dC), 3),
+            legacy_co2_reduction_ton_day=round(co2_ton_day, 3),
             cum_cit_C=round(cum_cit, 2), cum_saving_thb_yr=round(cum_yr),
             cum_baht_day=round(cum_yr / PLANT['DAYS_PER_YEAR']),
+            cum_co2_reduction_ton_day=round(cum_co2, 3),
         ))
 
     totals = dict(n_hx=len(per_hx), cum_cit_C=round(cum_cit, 2),
                   saving_thb_yr=round(cum_yr),
                   baht_day=round(cum_yr / PLANT['DAYS_PER_YEAR']),
+                  co2_reduction_ton_day=round(cum_co2, 3),
                   independence_caveat=(
                       'ผลรวมนี้บวก ΔCIT ของแต่ละ HX ตรงๆ โดยสมมติว่าเป็นอิสระต่อกัน แต่ในเทรน '
                       'preheat แบบอนุกรม การล้าง HX ตัวหนึ่งจะเปลี่ยน ΔT ที่ HX ถัดไปในเทรนได้รับ '
@@ -369,6 +381,7 @@ def main():
     fg_check = fg_flow_cross_check(chist, feed_kbd)
 
     out = dict(formula='plant', plant_constants=PLANT, legacy_constants=LEGACY,
+               m3_per_bbl=M3_PER_BBL,
                charge_m3h=round(float(charge), 1), feed_kbd=round(feed_kbd, 1),
                slide_check_thb_yr=round(check),
                cleaning_costs_assumed=COSTS_ASSUMED, basis=BASIS,

@@ -208,7 +208,8 @@ def compute_q_features(df, streams, charge_tag=CHARGE_TAG, sg=None):
         if s['cold_flow'] and s['cold_in'] and s['cold_out']:
             t_avg = (df[s['cold_in']] + df[s['cold_out']]) / 2
             cp, rho_t = crude_properties.cp_rho_crude(t_avg, sg_use)
-            Q = rho_t * df[s['cold_flow']] * cp / 3600
+            dT_cold = df[s['cold_out']] - df[s['cold_in']]
+            Q = rho_t * df[s['cold_flow']] * cp * dT_cold / 3600
             duty_df[hx]   = Q
             Q_norm_df[hx] = Q / charge
         elif s['hot_flow'] and s['hot_in'] and s['hot_out']:

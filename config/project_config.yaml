@@ -1,0 +1,23 @@
+{
+  "project": {
+    "name": "bangchak_plant3_cpht_f101_analytics",
+    "plant": "Bangchak Plant 3",
+    "timezone": "Asia/Bangkok",
+    "canonical_timezone": "UTC",
+    "raw_data_immutable": true,
+    "processed_format": "parquet",
+    "stage_ids": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16"]
+  },
+  "paths": {
+    "raw": "data/raw",
+    "interim": "data/interim",
+    "processed": "data/processed",
+    "features": "data/features",
+    "gold": "data/gold",
+    "models": "models",
+    "logs": "logs",
+    "figures": "reports/figures",
+    "tables": "reports/tables"
+  }
+}
+
