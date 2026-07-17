@@ -1,5 +1,6 @@
 """
-Helper: builds _diagnostic_solver_comparison.ipynb (renamed Phase 1 from
+Helper: builds notebooks/diagnostics/solver_comparison.ipynb (moved into notebooks/diagnostics/
+2026-07-17; before that, _diagnostic_solver_comparison.ipynb, renamed Phase 1 from
 16b_optimizer_solver_comparison.ipynb -- outside run_all.py's numbered chain, so it no
 longer carries a chain-like number) from cell definitions.
 Run once: python _build_solver_comparison_notebook.py
@@ -183,6 +184,6 @@ nb = {"cells": cells,
                    "language_info": {"name": "python", "version": "3"}},
       "nbformat": 4, "nbformat_minor": 5}
 
-out = Path(__file__).parent / '_diagnostic_solver_comparison.ipynb'
+out = Path(__file__).parent / 'diagnostics' / 'solver_comparison.ipynb'
 out.write_text(json.dumps(nb, ensure_ascii=False, indent=1), encoding='utf-8')
 print(f'Wrote {out}')

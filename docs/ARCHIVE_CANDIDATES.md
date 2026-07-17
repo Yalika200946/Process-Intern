@@ -38,21 +38,21 @@ Reason: no active CPHT downstream users; hidden/global conventions; old model pe
 
 | File | Required extraction first |
 |---|---|
-| `_eda_process_control.ipynb` (renamed from `00_data_prep_process_control.ipynb`, Phase 1) | Inventory/DQ representative plots |
-| `_eda_correlation_and_pca.ipynb` (renamed from `02b_correlation_and_pca.ipynb`) | Selected exploratory diagnostics |
+| `notebooks/eda/process_control_exploration.ipynb` (moved 2026-07-17, was `_eda_process_control.ipynb`, originally `00_data_prep_process_control.ipynb`, Phase 1) | Inventory/DQ representative plots |
+| `notebooks/eda/correlation_and_pca.ipynb` (moved 2026-07-17, was `_eda_correlation_and_pca.ipynb`, originally `02b_correlation_and_pca.ipynb`) | Selected exploratory diagnostics |
 | `09_cit_model_feature_matrix.ipynb` | Any useful plotting/reference only; calculations should be rebuilt |
 | `src/models/phm_config.py` (moved 2026-07-17, was `notebooks/phm_config.py`) | Approved horizon/scenario settings |
 | `src/archive/utils/analysis.py` (already archived 2026-07-17, extraction still pending) | Any desired PCA/report plotting patterns |
 | `src/archive/utils/metrics.py` (already archived 2026-07-17, extraction still pending) | None if direct sklearn metrics are adopted |
 | `src/archive/utils/plots.py` (already archived 2026-07-17, extraction still pending) | Desired visual conventions |
-| `_diagnostic_solver_comparison.ipynb` (renamed from `16b_optimizer_solver_comparison.ipynb`) | Solver acceptance evidence, if adopted by Stage 16 |
+| `notebooks/diagnostics/solver_comparison.ipynb` (moved 2026-07-17, was `_diagnostic_solver_comparison.ipynb`, originally `16b_optimizer_solver_comparison.ipynb`) | Solver acceptance evidence, if adopted by Stage 16 |
 
 ## Keep as reference, not canonical
 
 - `10_cit_model_benchmark.ipynb`
 - `11_cit_shap_importance.ipynb`
 - `14_tam_constraint_analysis.ipynb`
-- `_diagnostic_solver_comparison.ipynb`
+- `notebooks/diagnostics/solver_comparison.ipynb` (moved 2026-07-17, was `_diagnostic_solver_comparison.ipynb`)
 - `pipeline/solver_comparison.py`
 - Existing generated figures and model artifacts
 

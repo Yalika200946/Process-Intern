@@ -10,6 +10,24 @@ status taxonomy, and clean up `docs/`. No formula, threshold, or engineering
 assumption changed. No notebook was executed in place. See
 `docs/UNRESOLVED_ENGINEERING_DECISIONS.md` for what remains open.
 
+## Notebook subfolder moves — EDA / diagnostics (2nd pass, same day)
+
+Clean 1:1 renames, no content change, into the `notebooks/eda/` and
+`notebooks/diagnostics/` subfolders now requested. The production-notebook
+side of this same request (11-file target list) is still at the proposal
+stage — see the pending mapping table shared for approval, not yet
+executed.
+
+| Old path | New path |
+|---|---|
+| `notebooks/_eda_crude_assay.ipynb` | `notebooks/eda/crude_assay_exploration.ipynb` |
+| `notebooks/_eda_process_control.ipynb` | `notebooks/eda/process_control_exploration.ipynb` |
+| `notebooks/_eda_correlation_and_pca.ipynb` | `notebooks/eda/correlation_and_pca.ipynb` |
+| `notebooks/_diagnostic_solver_comparison.ipynb` | `notebooks/diagnostics/solver_comparison.ipynb` |
+
+`notebooks/_build_solver_comparison_notebook.py`'s output path was updated
+to match; not re-run (would regenerate/execute the notebook).
+
 ## `src/` moves (shared modules out of `notebooks/*.py`)
 
 | Old path | New path | Notes |

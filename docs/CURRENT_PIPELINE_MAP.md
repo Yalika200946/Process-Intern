@@ -138,11 +138,11 @@ These are not identical schemas and answer different variants of “what should 
 
 ### Active but outside the production chain
 
-- `_eda_crude_assay.ipynb` (renamed from `00_data_prep_crude_assay.ipynb`, Phase 1): required when the crude profile must be rebuilt, but absent from `run_all.py`.
-- `_eda_process_control.ipynb` (renamed from `00_data_prep_process_control.ipynb`): EDA only.
-- `_eda_correlation_and_pca.ipynb` (renamed from `02b_correlation_and_pca.ipynb`): exploratory analysis only.
+- `notebooks/eda/crude_assay_exploration.ipynb` (moved 2026-07-17, was `_eda_crude_assay.ipynb`, originally `00_data_prep_crude_assay.ipynb`, Phase 1): required when the crude profile must be rebuilt, but absent from `run_all.py`.
+- `notebooks/eda/process_control_exploration.ipynb` (moved 2026-07-17, was `_eda_process_control.ipynb`, originally `00_data_prep_process_control.ipynb`): EDA only.
+- `notebooks/eda/correlation_and_pca.ipynb` (moved 2026-07-17, was `_eda_correlation_and_pca.ipynb`, originally `02b_correlation_and_pca.ipynb`): exploratory analysis only.
 - `15_pipeline_diagnostic_audit.ipynb`: diagnostic consumer only.
-- `_diagnostic_solver_comparison.ipynb` (renamed from `16b_optimizer_solver_comparison.ipynb`): offline optimizer verification.
+- `notebooks/diagnostics/solver_comparison.ipynb` (moved 2026-07-17, was `_diagnostic_solver_comparison.ipynb`, originally `16b_optimizer_solver_comparison.ipynb`): offline optimizer verification.
 
 ### Archived or obsolete notebooks
 

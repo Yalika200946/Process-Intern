@@ -61,7 +61,8 @@ logging.basicConfig(
 log = logging.getLogger('run_all')
 
 # dependency-ordered chain that produces the dashboard artifacts.
-# (_eda_process_control/_eda_crude_assay/_eda_correlation_and_pca -- renamed Phase 1 from
+# (notebooks/eda/process_control_exploration.ipynb, crude_assay_exploration.ipynb,
+#  correlation_and_pca.ipynb -- moved into notebooks/eda/ 2026-07-17, originally
 #  00_data_prep_process_control/00_data_prep_crude_assay/02b_correlation_and_pca -- are
 #  EDA-only and excluded; 05 kept because 08 reads its
 #  Q_CIT_Sensitivity.csv.)
