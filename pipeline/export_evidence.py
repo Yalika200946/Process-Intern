@@ -97,7 +97,7 @@ def main():
             headline=mm.get('headline'), models=cit_models),
         fouling_forecast=dict(
             metric='leave-HX-out CV R²', value=0.10,
-            source='06_fouling_rate_forecast.ipynb §7 (documented)',
+            source='production/04_clean_baseline.ipynb §7 (documented, was 06_fouling_rate_forecast.ipynb)',
             note='ข้ามไป HX ใหม่ทำนายไม่ได้ (Q scale ต่างกันมาก) — สัญญาณที่ deploy ใช้ได้เพราะ refit บน baseline ของ HX นั้นเอง ไม่ใช่ zero-shot'),
         fouling_quality_gate=dict(
             n_runs=n_runs, n_reliable=n_reliable, n_flagged=n_flagged, flag_breakdown=flag_counts,
@@ -119,10 +119,10 @@ def main():
     register = [
         dict(quantity='U_relative / fouling rate', status='measured',
              basis='U/U_clean ต่อรอบจากข้อมูลจริง (Feature_calculated.csv) + linregress ต่อรอบ',
-             source='02_feature_engineering.ipynb'),
+             source='production/03_hx_performance.ipynb (was 02_feature_engineering.ipynb)'),
         dict(quantity='Q duty shortfall (ค่าเบี่ยงเบน)', status='measured',
              basis='clean-baseline model refit บน 30 วันแรกหลังล้างของ HX นั้นเอง แล้ววัด deviation',
-             source='06_fouling_rate_forecast.ipynb'),
+             source='production/04_clean_baseline.ipynb (was 06_fouling_rate_forecast.ipynb)'),
         dict(quantity='ΔCIT คืนต่อการล้าง', status='measured-first',
              basis=f'median จาก audit history จริง ({n_meas} HX) · fallback ค่าโมเดล ({n_model} HX) เมื่อวัดไม่ได้',
              source='export_cleaning_history.py → economics.json'),

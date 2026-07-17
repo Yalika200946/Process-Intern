@@ -67,6 +67,15 @@ def _safe_filename(name):
         raise ValueError("X-Filename ไม่ถูกต้อง")
     return base
 
+
+def _subprocess_env():
+    inherited = os.environ.get('PYTHONPATH', '')
+    pythonpath = os.pathsep.join(
+        p for p in (str(ROOT), str(NB), str(ROOT / 'pipeline'), inherited) if p
+    )
+    return {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+            'PYTHONPATH': pythonpath, 'CPHT_DATA_DIR': str(DATA)}
+
 # Structured log file -- BaseHTTPRequestHandler.log_message() is overridden to a no-op below
 # ("quieter console"), so previously nothing about a request/failure was persisted anywhere;
 # this is the only record of what the backend did/failed on, across every endpoint, without
@@ -227,7 +236,7 @@ class Handler(BaseHTTPRequestHandler):
     def _recompute_plan(self):
         """Apply per-HX cleaning-cost overrides, an optional CIT-floor constraint, AND an
         optional furnace FG_FLOW limit override from the dashboard's "คำนวณใหม่" button, then
-        actually re-run notebook 16's optimizer (not a client-side approximation) so the
+        actually re-run production/13_cleaning_plan_optimization.ipynb's optimizer (not a client-side approximation) so the
         returned schedule/priority genuinely reflects the new inputs. Blocking — takes
         ~10-30s (longer with a tight CIT floor/limit, since that adds SLSQP constraints);
         the dashboard shows a loading state while this runs."""
@@ -257,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(422, {'error': 'cit_floor_C ต้องเป็นตัวเลข'})
                 cit_floor_path.write_text(json.dumps({'max_deficit_C': cit_floor_C}, indent=1), encoding='utf-8')
             elif cit_floor_path.exists():
-                cit_floor_path.unlink()   # no override in this request -> fall back to notebook 16's default
+                cit_floor_path.unlink()   # no override in this request -> fall back to production/13_cleaning_plan_optimization.ipynb's default
 
             furnace_limit_path = DASH / 'data' / 'furnace_limit_overrides.json'
             furnace_limits = body.get('furnace_limit_overrides')
@@ -268,15 +277,15 @@ class Handler(BaseHTTPRequestHandler):
             elif furnace_limit_path.exists():
                 furnace_limit_path.unlink()   # no override in this request -> fall back to pfd_topology.json's static limit
 
-            env = {**os.environ, 'PYTHONUTF8': '1'}
+            env = _subprocess_env()
             r = subprocess.run(
                 [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                  f'--output-dir={EXECUTED_NB}',
                  '--ExecutePreprocessor.timeout=420',
-                 str(NB / '16_cleaning_plan_optimization.ipynb')],
+                 str(NB / 'production' / '13_cleaning_plan_optimization.ipynb')],
                 capture_output=True, text=True, env=env, timeout=440)
             if r.returncode != 0:
-                return self._send(500, {'error': 'notebook 16 recompute failed', 'detail': (r.stderr or '')[-1500:]})
+                return self._send(500, {'error': 'production/13_cleaning_plan_optimization.ipynb recompute failed', 'detail': (r.stderr or '')[-1500:]})
 
             plan = json.loads((DASH / 'data' / 'cleaning_plan.json').read_text(encoding='utf-8'))
             floor_msg = f' · CIT floor {cit_floor_C}°C' if cit_floor_C is not None else ''
@@ -372,7 +381,7 @@ class Handler(BaseHTTPRequestHandler):
                     staged = UPLOADS / filename
                     staged.write_bytes(raw)
                     cmd += ['--input', str(staged)]
-                env = {**__import__('os').environ, 'PYTHONUTF8': '1'}
+                env = _subprocess_env()
                 log = (UPLOADS / 'pipeline_last.log').open('wb')
                 _full_run_proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, env=env)
             self._send(200, {

@@ -4,7 +4,7 @@
 
 ## Scope and interpretation
 
-This document records the pipeline as implemented on 2026-07-16. It is a current-state map, not a proposed architecture. It was derived from notebook cells, Python source, `pipeline/run_all.py`, dashboard fetch calls, and explicit file reads/writes.
+This document records the pipeline as implemented on 2026-07-16 (updated 2026-07-17 for the `notebooks/production/` reorg — see `docs/MIGRATION_MAP.md` for the full old->new path table). It is a current-state map, not a proposed architecture. It was derived from notebook cells, Python source, `pipeline/run_all.py`, dashboard fetch calls, and explicit file reads/writes.
 
 - **Confirmed dependency**: an actual import, read, write, subprocess invocation, or dashboard fetch is present in code.
 - **Inferred dependency**: historical intent, saved notebook output, naming, or documentation indicates a relationship, but the active code does not enforce it.
@@ -14,23 +14,35 @@ This document records the pipeline as implemented on 2026-07-16. It is a current
 
 ## Executive summary
 
-The active production chain is:
+The active production chain is (this is the real `pipeline/run_all.py` `CHAIN`
+run order, not the `production/` filenames' numeric prefixes — see the note
+below and `docs/MIGRATION_MAP.md` for why the two differ):
 
-1. `01_data_cleaning.ipynb`
-2. `02_feature_engineering.ipynb`
-3. `03_operating_state_classification.ipynb`
+1. `notebooks/production/01_data_quality.ipynb` (was `01_data_cleaning.ipynb`)
+2. `notebooks/production/03_hx_performance.ipynb` (was `02_feature_engineering.ipynb`)
+3. `notebooks/production/02_operating_modes.ipynb` (was `03_operating_state_classification.ipynb`)
 4. `pipeline/compute_fouling_rate.py`
-5. `04_fouling_rate_estimation.ipynb`
-6. `05_fouling_cit_sensitivity.ipynb`
-7. `06_fouling_rate_forecast.ipynb`
-8. `07_time_to_clean_prediction.ipynb`
-9. `08_cleaning_priority_ranking.ipynb`
-10. `09_cit_model_feature_matrix.ipynb`
-11. `10_cit_model_benchmark.ipynb`
-12. `11_cit_shap_importance.ipynb`
-13. `12_economic_delta_cit.ipynb`
-14. `13_cit_forecast_export.ipynb`
-15. A post-processing chain that creates the dashboard JSON artifacts.
+5. `notebooks/production/05_fouling_analysis.ipynb` (was `04_fouling_rate_estimation.ipynb`)
+6. `notebooks/production/09_cit_furnace_impact.ipynb` (was `05_fouling_cit_sensitivity.ipynb`)
+7. `notebooks/production/04_clean_baseline.ipynb` (was `06_fouling_rate_forecast.ipynb`)
+8. `notebooks/production/07_forecasting.ipynb` (was `07_time_to_clean_prediction.ipynb`)
+9. `notebooks/production/08_cleaning_priority.ipynb` (was `08_cleaning_priority_ranking.ipynb`)
+10. `09_cit_model_feature_matrix.ipynb` (unmoved — reference, not canonical)
+11. `10_cit_model_benchmark.ipynb` (unmoved — reference, not canonical)
+12. `11_cit_shap_importance.ipynb` (unmoved — reference, not canonical)
+13. `notebooks/production/10_economic_evaluation.ipynb` (was `12_economic_delta_cit.ipynb`)
+14. `notebooks/production/12_cit_forecast_export.ipynb` (was `13_cit_forecast_export.ipynb`)
+15. A post-processing chain that creates the dashboard JSON artifacts, including
+    `notebooks/production/13_cleaning_plan_optimization.ipynb` (was
+    `16_cleaning_plan_optimization.ipynb`) and `14_tam_constraint_analysis.ipynb`
+    (unmoved).
+
+**Note on numbering:** `production/03_hx_performance.ipynb` genuinely runs
+*before* `production/02_operating_modes.ipynb` — the real code dependency
+(operating-state resolution reads the feature table hx_performance produces)
+is the reverse of the target filenames' conceptual stage order. This is a
+known, documented mismatch (see `docs/MIGRATION_MAP.md`), not an error to
+silently "fix" by reordering actual calculation dependencies.
 
 The chain is not a clean directed acyclic data pipeline:
 

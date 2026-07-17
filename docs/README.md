@@ -20,20 +20,28 @@ and publishes an approved dataset to a dashboard. Start here.
 ```
 python pipeline/run_all.py                # recompute in place
 python pipeline/run_all.py --input new.xlsx
-python pipeline/run_all.py --only 13      # single notebook, for debugging
+python pipeline/run_all.py --only cit_forecast_export   # single notebook, for debugging
 ```
 
 See `RUN.md` (repo root) for the dashboard/backend and `DEPLOY.md` for
 Docker/deployment. `pipeline/run_all.py` executes the notebooks in
-`notebooks/` (numbered `01`–`16`) in dependency order, then a chain of
+`notebooks/production/` in dependency order — note the run order does not
+match the files' numeric prefixes exactly, see the comment at the top of
+`CHAIN` in `run_all.py` and `MIGRATION_MAP.md` — then a chain of
 `pipeline/*.py` post-processors that write `dashboard/data/*.json`.
 
 ## Where things live
 
-- **Production notebooks:** `notebooks/01_*.ipynb`–`16_*.ipynb` (flat,
-  numbered — see `CURRENT_PIPELINE_MAP.md` for the exact chain).
-- **EDA / diagnostic notebooks:** `notebooks/_eda_*.ipynb`,
-  `notebooks/_diagnostic_*.ipynb` — not called by `run_all.py`.
+- **Production notebooks:** `notebooks/production/01_*.ipynb`–`13_*.ipynb`
+  (see `CURRENT_PIPELINE_MAP.md` for the exact run order, which differs
+  from the numeric prefixes — see `MIGRATION_MAP.md`). Three reference-only
+  CIT-model notebooks (`09_cit_model_feature_matrix.ipynb`,
+  `10_cit_model_benchmark.ipynb`, `11_cit_shap_importance.ipynb`) stay at
+  the `notebooks/` root, not in `production/` — documented as "reference,
+  not canonical" in `ARCHIVE_CANDIDATES.md`.
+- **EDA notebooks:** `notebooks/eda/*.ipynb` — not called by `run_all.py`.
+- **Diagnostic notebooks:** `notebooks/diagnostics/*.ipynb` — verify models/
+  solvers, never a source of truth for dashboard values.
 - **Archived notebooks:** `notebooks/_archive_2026-07-12/`.
 - **Shared engineering/modeling code:** `src/domain`, `src/features`,
   `src/models`, `src/optimization`, `src/reporting`, `src/validation` (see

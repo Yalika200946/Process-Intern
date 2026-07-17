@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_only_selector_requires_one_real_notebook():
-    assert select_chain(only="13") == ["13_cit_forecast_export.ipynb"]
+    assert select_chain(only="12_cit_forecast") == ["production/12_cit_forecast_export.ipynb"]
     with pytest.raises(ValueError, match="does not match"):
         select_chain(only="does-not-exist")
     with pytest.raises(ValueError, match="ambiguous"):
@@ -20,8 +20,8 @@ def test_only_selector_requires_one_real_notebook():
 
 
 def test_from_selector_requires_one_real_notebook():
-    selected = select_chain(start="06")
-    assert selected[0] == "06_fouling_rate_forecast.ipynb"
+    selected = select_chain(start="04_clean_baseline")
+    assert selected[0] == "production/04_clean_baseline.ipynb"
     assert selected == CHAIN[5:]
     with pytest.raises(ValueError, match="does not match"):
         select_chain(start="does-not-exist")
@@ -49,7 +49,7 @@ def test_active_forecast_consumers_use_q_deviation_signal():
     """Prevent a stale Cold_Out artifact from silently re-entering production."""
     active_consumers = [
         ROOT / "pipeline" / "phm_analysis.py",
-        ROOT / "notebooks" / "13_cit_forecast_export.ipynb",
+        ROOT / "notebooks" / "production" / "12_cit_forecast_export.ipynb",
     ]
     for path in active_consumers:
         text = path.read_text(encoding="utf-8")

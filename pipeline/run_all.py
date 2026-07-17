@@ -4,7 +4,7 @@ CPHT end-to-end pipeline orchestrator.
 Recomputes every dashboard artifact from process data by executing the VALIDATED
 notebooks in dependency order (reusing their logic rather than re-implementing
 it), then re-applying the honest post-processing so the dashboard's model card
-and forecast bands survive notebook 13's exports.
+and forecast bands survive production/12_cit_forecast_export.ipynb's exports.
 
 Design notes:
   * Runs each notebook headless with `nbconvert --execute` under **UTF-8 mode**
@@ -14,12 +14,13 @@ Design notes:
     the original), so no notebook needs editing to point at the upload.
   * Everything is backed up to Data/backup_<ts>/ and dashboard/data/backup_<ts>/
     first; `--rollback-on-fail` restores them if any notebook errors.
-  * `--only 13` or `--from 06` run partial chains for debugging.
+  * `--only cit_forecast_export` or `--from clean_baseline` run partial chains
+    for debugging (matches on any unique fragment of the CHAIN path).
 
 Usage:
   python pipeline/run_all.py                      # recompute in place
   python pipeline/run_all.py --input new.xlsx     # stage a new raw Excel first
-  python pipeline/run_all.py --only 13            # just the terminal exporter
+  python pipeline/run_all.py --only cit_forecast_export   # just the terminal exporter
 """
 import argparse, logging, os, shutil, subprocess, sys, time
 from datetime import datetime
@@ -64,30 +65,46 @@ log = logging.getLogger('run_all')
 # (notebooks/eda/process_control_exploration.ipynb, crude_assay_exploration.ipynb,
 #  correlation_and_pca.ipynb -- moved into notebooks/eda/ 2026-07-17, originally
 #  00_data_prep_process_control/00_data_prep_crude_assay/02b_correlation_and_pca -- are
-#  EDA-only and excluded; 05 kept because 08 reads its
+#  EDA-only and excluded; 09_cit_furnace_impact kept because 08_cleaning_priority reads its
 #  Q_CIT_Sensitivity.csv.)
+#
+# Renamed into notebooks/production/ 2026-07-17 (see docs/MIGRATION_MAP.md for the full
+# old->new table). NOTE: the new filenames' leading numbers follow the TARGET_PIPELINE.md
+# conceptual stage order (data quality -> operating modes -> hx performance -> ...), which
+# is NOT the same as this list's actual execution order below -- e.g.
+# 03_hx_performance.ipynb genuinely must run before 02_operating_modes.ipynb because the
+# real code dependency is the other way round (operating-state resolution reads the
+# feature table hx_performance produces). Reconciling the two would mean reordering real
+# notebook calculation dependencies, not just filenames -- out of scope for a pure rename,
+# and not done here. This list is the real, validated run order; trust it over the
+# filenames' numeric prefixes. 09_cit_model_feature_matrix/10_cit_model_benchmark/
+# 11_cit_shap_importance are intentionally NOT moved into notebooks/production/ (kept at
+# their original notebooks/ root path) -- ARCHIVE_CANDIDATES.md/SOURCE_OF_TRUTH_CANDIDATES.md
+# already document them as "reference, not canonical" (10's own finding: ML loses to a
+# persistence baseline), but they still produce files 12_cit_forecast_export.ipynb and
+# gen_honest_metrics.py read, so they stay in CHAIN.
 CHAIN = [
-    '01_data_cleaning.ipynb',
-    '02_feature_engineering.ipynb',
-    '03_operating_state_classification.ipynb',
-    '04_fouling_rate_estimation.ipynb',
-    '05_fouling_cit_sensitivity.ipynb',
-    '06_fouling_rate_forecast.ipynb',
-    '07_time_to_clean_prediction.ipynb',
-    '08_cleaning_priority_ranking.ipynb',
+    'production/01_data_quality.ipynb',
+    'production/03_hx_performance.ipynb',
+    'production/02_operating_modes.ipynb',
+    'production/05_fouling_analysis.ipynb',
+    'production/09_cit_furnace_impact.ipynb',
+    'production/04_clean_baseline.ipynb',
+    'production/07_forecasting.ipynb',
+    'production/08_cleaning_priority.ipynb',
     '09_cit_model_feature_matrix.ipynb',
     '10_cit_model_benchmark.ipynb',
     '11_cit_shap_importance.ipynb',
-    '12_economic_delta_cit.ipynb',
-    '13_cit_forecast_export.ipynb',
+    'production/10_economic_evaluation.ipynb',
+    'production/12_cit_forecast_export.ipynb',
 ]
 
-# post-processors that MUST run after 13 (CIT forecast export) to keep honest artifacts
+# post-processors that MUST run after the terminal cit_forecast_export notebook to keep honest artifacts
 POST = [
     ('honest model_metrics.json', [sys.executable, str(REPO / 'pipeline' / 'gen_honest_metrics.py')]),
     ('engineering priority ranking (nb 08)', [sys.executable, str(REPO / 'pipeline' / 'export_engineering_priority.py')]),
-    # forecast prediction bands: folded into 13_cit_forecast_export.ipynb's own export
-    # cell (section 2b) so forecast_6mo.json has exactly one writer with the complete
+    # forecast prediction bands: folded into production/12_cit_forecast_export.ipynb's own
+    # export cell (section 2b) so forecast_6mo.json has exactly one writer with the complete
     # schema from the start -- add_forecast_intervals.py is superseded, not deleted
     # (see its own module docstring), and no longer invoked here.
     ('P&ID topology + furnace',   [sys.executable, str(SRC / 'reporting' / 'dashboard_topology.py')]),
@@ -103,9 +120,9 @@ POST = [
     ('cleaning schedule -> TAM2028', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler.py')]),
     ('cleaning schedule v2 (network)', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler_network.py')]),
     ('evidence & confidence surface', [sys.executable, str(REPO / 'pipeline' / 'export_evidence.py')]),
-    ('integrated cleaning plan (nb 16)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+    ('integrated cleaning plan (production/13)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                           f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=600',
-                                          str(NB / '16_cleaning_plan_optimization.ipynb')]),
+                                          str(NB / 'production' / '13_cleaning_plan_optimization.ipynb')]),
 ]
 
 BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crude.csv',
@@ -116,8 +133,24 @@ BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crud
                'Cleaning_Priority_Ranking.csv', 'Engineering_Priority_Score.csv']
 
 
+def subprocess_env():
+    """Environment shared by notebooks and post-processors during the migration.
+
+    Production notebooks now live one directory below the compatibility shims in
+    ``notebooks/``.  Put both the repository package root and shim directory on
+    PYTHONPATH so moved notebooks can resolve old imports while new code imports
+    ``src`` directly.
+    """
+    inherited = os.environ.get('PYTHONPATH', '')
+    pythonpath = os.pathsep.join(
+        p for p in (str(REPO), str(NB), str(REPO / 'pipeline'), inherited) if p
+    )
+    return {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+            'PYTHONPATH': pythonpath, 'CPHT_DATA_DIR': str(DATA)}
+
+
 def run_nb(nb_name, timeout):
-    env = {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8'}
+    env = subprocess_env()
     t0 = time.time()
     r = subprocess.run(
         [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
@@ -160,7 +193,7 @@ def backup(ts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--input', help='new raw process Excel to stage before running')
-    ap.add_argument('--only', help='run a single notebook basename fragment (e.g. 13)')
+    ap.add_argument('--only', help='run a single notebook path fragment (e.g. cit_forecast_export)')
     ap.add_argument('--from', dest='start', help='start the chain at this notebook fragment')
     ap.add_argument('--timeout', type=int, default=900, help='per-notebook timeout (s)')
     rollback = ap.add_mutually_exclusive_group()
@@ -202,10 +235,11 @@ def main():
             log.error(f'CHAIN step {nb} failed:\n{err}')
             failed = nb
             break
-        # authoritative robust fouling rate needs Operating_State.csv (from 03) — run it
-        # right after 03 so 04/08/06/07/exports downstream read the physical, reliable version.
-        if '03_operating_state' in nb:
-            env = {**os.environ, 'PYTHONUTF8': '1'}
+        # authoritative robust fouling rate needs Operating_State.csv (from operating_modes) —
+        # run it right after operating_modes so fouling_analysis/cleaning_priority/
+        # clean_baseline/forecasting downstream read the physical, reliable version.
+        if 'operating_modes' in nb:
+            env = subprocess_env()
             r = subprocess.run([sys.executable, str(REPO / 'pipeline' / 'compute_fouling_rate.py')],
                                capture_output=True, text=True, env=env)
             print(f'  [{"OK " if r.returncode == 0 else "FAIL"}] {"robust fouling rate (post-03)":48s}')
@@ -221,16 +255,16 @@ def main():
         for f in dash_bk.glob('*'): shutil.copy2(f, DASH_DATA / f.name)
         print('rolled back.'); sys.exit(1)
 
-    # Post-processing is valid only after notebook 13 completed in this same successful
-    # chain. Running it after an upstream failure would publish a mixture of fresh and
-    # stale artifacts from different snapshots.
-    ran_terminal = any('13_cit_forecast_export' in n and ok for n, ok, _ in results)
+    # Post-processing is valid only after the terminal cit_forecast_export notebook completed
+    # in this same successful chain. Running it after an upstream failure would publish a
+    # mixture of fresh and stale artifacts from different snapshots.
+    ran_terminal = any('cit_forecast_export' in n and ok for n, ok, _ in results)
     post_failed = []   # (label,) of every POST step that failed -- previously untracked, so a
                         # failure here silently didn't affect the final exit code (see below).
     if not failed and ran_terminal:
         print('post-processing (honest metrics / bands / topology):')
         for label, cmd in POST:
-            env = {**os.environ, 'PYTHONUTF8': '1'}
+            env = subprocess_env()
             r = subprocess.run(cmd, capture_output=True, text=True, env=env)
             print(f'  [{"OK " if r.returncode==0 else "FAIL"}] {label}')
             log.info(f'POST step "{label}": {"OK" if r.returncode == 0 else "FAIL"}')
@@ -251,6 +285,13 @@ def main():
                'the dashboard may now be serving a mix of fresh and stale artifacts.')
         print(f'!! {msg}')
         log.warning(msg)
+        if args.rollback_on_fail:
+            print(f'rolling back complete snapshot from {data_bk.name} after POST failure ...')
+            for f in data_bk.glob('*'):
+                shutil.copy2(f, DATA / f.name)
+            for f in dash_bk.glob('*'):
+                shutil.copy2(f, DASH_DATA / f.name)
+            print('rolled back.'); sys.exit(1)
 
     n_ok = sum(1 for _, ok, _ in results if ok)
     print(f'== done: {n_ok}/{len(results)} notebooks OK'
