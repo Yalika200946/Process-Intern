@@ -46,6 +46,24 @@ Any item below blocks promotion of the affected calculation from candidate to ap
    implement until confirmed — see notebook 03 §2.1 for the evidence to
    review.
 
+**RESOLVED separately, 2026-07-17 — TAM-only HX false shell-switch
+detection:** while reviewing the E101AB item above, confirmed (and fixed, by
+plant-engineer instruction) an unrelated but confirmed bug: HX with
+`bypass_config.BYPASS_CONFIG[hx]['online_mode'] == 'none'` (TAM-only, no
+swap/online-clean capability at all — E103AB, E106AB, E107AB, E109AB) were
+still going through `02_feature_engineering.ipynb`'s Q-jump-based
+shell-switch detection (STEP 2), even though they physically cannot have a
+mid-run "switch" outside a TAM. Before the fix: E107AB showed 17 detected
+runs, E103AB 9, E109AB 8, E106AB 6 — against only ~2 real TAM events in the
+dataset. Each false switch boundary fragmented one continuous fouling trend
+into shorter regression windows, corrupting the fouling rate and
+`08_cleaning_priority_ranking.ipynb`'s `trajectory_multiplier`/`worsening`
+term for exactly these 4 HX. Fixed by skipping Q-jump detection entirely for
+`online_mode == 'none'` HX (TAM dates and any real state transitions are
+still honored) — after the fix all 4 show 3 runs (1 data-start + 2 TAM),
+matching the actual TAM history. This is implemented, not open — see
+`02_feature_engineering.ipynb` STEP 2 for the code and comment.
+
 ## 3. Heat-transfer calculations
 
 1. Confirm heat-duty property method and units.
