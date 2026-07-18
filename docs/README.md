@@ -80,17 +80,24 @@ See `UNRESOLVED_ENGINEERING_DECISIONS.md` for the full register. Highlights:
 
 ## Canonical doc set
 
-| Doc | Status | Purpose |
-|---|---|---|
-| `CURRENT_PIPELINE_MAP.md` / `CURRENT_PIPELINE_GRAPH.md` | CURRENT | what the pipeline does today |
-| `MIGRATION_PLAN.md` | CURRENT | phased plan for closing the gap to the target design |
-| `MIGRATION_MAP.md` | CURRENT | old path → new path record for this restructuring pass |
-| `ARCHIVE_CANDIDATES.md` | CURRENT | what's safe to archive next, and why |
-| `SOURCE_OF_TRUTH_CANDIDATES.md` | CURRENT | which implementation is canonical per domain |
-| `DATA_CONTRACT_REFERENCE.md` / `CALCULATION_METHOD_REFERENCE.md` | CURRENT | stage contracts and formulas as implemented |
-| `UNRESOLVED_ENGINEERING_DECISIONS.md` | CURRENT | everything blocked on an engineer's sign-off |
-| `Q_NORM_AUDIT.md` | CURRENT | why `Q_norm` cannot be trusted as-is |
-| `VISUAL_ANALYSIS_REQUIREMENTS.md` / `ANALYSIS_PIPELINE_GUIDE.md` | CURRENT | plotting conventions / orientation |
-| `TARGET_PIPELINE*.md`, `TARGET_FOLDER_STRUCTURE.md`, `TARGET_NOTEBOOK_CONTENT_PLAN.md`, `PROPOSED_CLEAN_DEPENDENCY_GRAPH.md` | PROPOSED | aspirational full-governance design (medallion data layers, run manifests, 13 approval gates) — explicitly deferred, see `MIGRATION_PLAN.md` Phase 4 |
-| `02_Requirement_v2_SSOT.md`, `03_Business_Problem_and_Requirements.md` | REQUIRES_REVIEW | requirements drafts awaiting sign-off |
-| `archive/` | HISTORICAL | superseded docs, kept for history |
+`docs/` is grouped so you never need to open more than one folder to know
+what's true today, vs. drafted, vs. aspirational:
+
+- **`docs/` (top level) — read these, all CURRENT, all reflect the real code:**
+
+  | Doc | Purpose |
+  |---|---|
+  | `CURRENT_PIPELINE_MAP.md` / `CURRENT_PIPELINE_GRAPH.md` | what the pipeline does today |
+  | `MIGRATION_PLAN.md` | phased plan for closing the gap to the target design |
+  | `MIGRATION_MAP.md` | old path → new path record for every restructuring pass |
+  | `ARCHIVE_CANDIDATES.md` | what's safe to archive next, and why |
+  | `SOURCE_OF_TRUTH_CANDIDATES.md` | which implementation is canonical per domain |
+  | `DATA_CONTRACT_REFERENCE.md` / `CALCULATION_METHOD_REFERENCE.md` | stage contracts and formulas as implemented |
+  | `UNRESOLVED_ENGINEERING_DECISIONS.md` | everything blocked on an engineer's sign-off |
+  | `Q_NORM_AUDIT.md` | why `Q_norm` cannot be trusted as-is |
+  | `VISUAL_ANALYSIS_REQUIREMENTS.md` / `ANALYSIS_PIPELINE_GUIDE.md` | plotting conventions / orientation |
+  | `*.csv` (4 files) | row-level detail backing the docs above (dependency matrix, source-of-truth register, etc.) |
+
+- **`docs/requirements/` — REQUIRES_REVIEW, drafts awaiting sign-off, not "how it works today":** `02_Requirement_v2_SSOT.md`, `03_Business_Problem_and_Requirements.md`, and the 2 original `.docx` specs.
+- **`docs/future/` — PROPOSED, explicitly deferred (see `MIGRATION_PLAN.md` Phase 4), skip unless you're planning the next major phase:** `TARGET_PIPELINE*.md`, `TARGET_FOLDER_STRUCTURE.md`, `TARGET_NOTEBOOK_CONTENT_PLAN.md`, `PROPOSED_CLEAN_DEPENDENCY_GRAPH.md`.
+- **`docs/archive/` — HISTORICAL, superseded, kept only for history.**

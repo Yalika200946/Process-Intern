@@ -11,6 +11,11 @@ from pipeline.run_all import CHAIN, select_chain
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def test_every_production_chain_notebook_exists():
+    missing = [name for name in CHAIN if not (ROOT / "notebooks" / name).is_file()]
+    assert missing == []
+
+
 def test_only_selector_requires_one_real_notebook():
     assert select_chain(only="12_cit_forecast") == ["production/12_cit_forecast_export.ipynb"]
     with pytest.raises(ValueError, match="does not match"):

@@ -5,7 +5,7 @@ an assert inside pipeline/compute_fouling_rate.py, which only fires when someone
 full pipeline against the real ~500K-row dataset. These run fast against small synthetic
 runs so the invariant is checked on every code change, not just a full pipeline run.
 
-docs/03_Business_Problem_and_Requirements.md flags zero automated tests anywhere in the
+docs/requirements/03_Business_Problem_and_Requirements.md flags zero automated tests anywhere in the
 repo as a gap -- this is a starting point (highest-risk, already-fragile logic), not full
 coverage of the pipeline.
 """
