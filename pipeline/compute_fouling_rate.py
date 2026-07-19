@@ -11,7 +11,7 @@ exports) run after this and read the robust file.
 
 Method — `nb_audit.robust_fouling_rate` per HX per run (see METHODOLOGY §3.5):
   in-service mask (NORMAL/SUBSTITUTE_ACTIVE/PARALLEL) · winsorize U_relative to 1.10 ·
-  AIC-race curve fit (linear vs Kern-Seaton asymptote) directly on Rf, Theil-Sen slope
+  AIC-race curve fit (linear vs Kern-Seaton asymptote vs power-law) directly on Rf, Theil-Sen slope
   + 95% CI · U_relative cross-check (dU_rel/dt≤0) · recent-60d "current" rate ·
   intra-run recovery split · reliability gate → `reliable` + `rate_flag`.
 
@@ -190,14 +190,15 @@ def main():
             'dRf_per_day', 'intercept', 'dRf_per_month', 'dRf_per_day_raw', 'dRf_ci_lo', 'dRf_ci_hi',
             'dRf_per_day_recent', 'dUrel_per_day', 'dUrel_per_month', 'R2', 'p_value', 'N_regression_pts',
             'span_days', 'normal_frac', 'n_winsorized', 'split_after_day',
-            # asymptotic-fit diagnostics (curve_models.py AIC race on Rf, see nb_audit.robust_fouling_rate):
+            # curve-fit diagnostics (curve_models.py AIC race on Rf -- linear/asymptotic/power,
+            # see nb_audit.robust_fouling_rate):
             # dRf_per_day (above) IS dRf_per_day_tail — kept as one column so existing
             # consumers don't need to change; dRf_per_day_wholerun is the whole-run single-line
             # Theil-Sen estimate, kept as a secondary cross-check. dUrel_per_day_tail/_wholerun
             # are now just the plain Theil-Sen U_relative slope (secondary sign cross-check only).
             'model_selected', 'dRf_per_day_tail', 'dRf_per_day_wholerun',
             'dUrel_per_day_tail', 'dUrel_per_day_wholerun',
-            'tau_days', 'A_asymp', 'Rf_inf_asymp', 'asymp_aic', 'linear_aic', 'R2_model',
+            'tau_days', 'A_asymp', 'Rf_inf_asymp', 'asymp_aic', 'linear_aic', 'power_aic', 'R2_model',
             'sign_change_rate', 'last_day_on_duty',
             'reliable', 'rate_flag']
     df = pd.DataFrame(rows).reindex(columns=cols)

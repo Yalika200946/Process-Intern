@@ -207,15 +207,19 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
       * Theil-Sen slope     — median-of-pairwise-slopes (breakdown ~29%) on Rf, robust to
                               spikes OLS chokes on; returns a 95% CI. The robust linear
                               baseline used for the sign/CI reliability gate.
-      * asymptotic refit    — Rf rarely grows as one straight line for an entire run: a fast
-                              initial rise (film formation) typically flattens toward a mature
-                              fouling-resistance ceiling Rf_inf (Kern-Seaton form, literally
-                              the textbook Rf(t)=Rf_inf*(1-exp(-t/tau)) shape -- MODELS_RISING's
-                              'asymptotic'). An AIC race between a straight line and this rising
-                              asymptote (see curve_models.py, shared with the PHM engine) picks
-                              whichever shape actually fits, so a short/still-linear run isn't
-                              force-fit to a curve it doesn't need, and a genuinely two-phase
-                              run isn't mis-summarized by a single biased slope.
+      * curve refit         — Rf rarely grows as one straight line for an entire run: some HX
+                              show a fast initial rise (film formation) that flattens toward a
+                              mature fouling-resistance ceiling Rf_inf (Kern-Seaton form, the
+                              textbook Rf(t)=Rf_inf*(1-exp(-t/tau)) shape -- MODELS_RISING's
+                              'asymptotic'); others show genuinely ACCELERATING growth over the
+                              observed run (power-law, Rf(t)=a*t^b+c with b>1 -- confirmed
+                              empirically, e.g. E101AB/E110ABC, not assumed). An AIC race between
+                              linear / asymptotic / power (see curve_models.py, shared with the
+                              PHM engine) picks whichever shape actually fits, so a short/still-
+                              linear run isn't force-fit to a curve it doesn't need, and a run
+                              that doesn't decelerate isn't force-fit to a Kern-Seaton ceiling it
+                              never approaches (that previously degenerated to tau->inf trying to
+                              fake a straight line, and visibly failed to track the data).
       * tail-slope rate     — the reported `dRf_per_day` is the CURRENT rate: the analytic
                               derivative of the winning curve at the run's most recent point
                               (equals the Theil-Sen slope when linear wins). This is what "how
@@ -264,6 +268,7 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                split_after_day=None,
                model_selected=None, dRf_per_day_tail=None, dRf_per_day_wholerun=None,
                tau_days=None, A_asymp=None, Rf_inf_asymp=None, asymp_aic=None, linear_aic=None,
+               power_aic=None,
                R2_model=None, sign_change_rate=None, last_day_on_duty=None,
                reliable=False, rate_flag=None,
                # back-compat aliases: dUrel_per_day no longer gets its own curve fit (U_relative
@@ -343,28 +348,50 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
     ss_tot = float(np.sum((rf1 - rf1.mean()) ** 2))
     r2 = 1 - float(np.sum((rf1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
 
-    # AIC race: linear vs rising-asymptote (Kern-Seaton), on the same sorted (d1s, rf1s)
-    # window the Theil-Sen fit used. Deliberately NOT racing the 3rd 'power' shape here
-    # (unlike phm_analysis.py's deviation-signal race): power has no established physical
-    # basis for fouling resistance (linear and asymptotic are the two textbook models), and
-    # there is no downstream support for extrapolating/plotting a power-law winner (no
-    # amplitude/tau-equivalent parameters). `curve_models.fit_model` returns None (excluded
-    # from the race) on a non-converging fit rather than raising, so a run where the curve
-    # fit fails simply falls back to the linear/Theil-Sen result below.
+    # AIC race: linear vs rising-asymptote (Kern-Seaton) vs power-law, on the same sorted
+    # (d1s, rf1s) window the Theil-Sen fit used. Power was originally excluded here (no
+    # established physical basis for fouling resistance, unlike linear/asymptotic) --
+    # reinstated 2026-07-19 after empirically confirming several HX runs show genuinely
+    # ACCELERATING Rf growth (e.g. E101AB Run2: power AIC -15587 vs linear -15002 vs
+    # asymptotic -15000 with tau degenerating to ~7.5e4 years -- curve_fit's way of faking
+    # a straight line because the decelerating-only Kern-Seaton form literally cannot
+    # represent acceleration). Excluding power was silently forcing a straight-line fit
+    # that visibly failed to track the real curve (arcs below the fitted line mid-run,
+    # above it at both ends -- the standard signature of fitting a line through convex
+    # data) on every accelerating run, which directly understates/distorts the reported
+    # "current" tail rate used for ranking and RUL. `curve_models.fit_model` returns None
+    # (excluded from the race) on a non-converging fit rather than raising, so a run where
+    # a given curve fit fails simply falls back to whichever other shape(s) converged.
     fit_lin = cm.fit_model('linear', d1s, rf1s, models=cm.MODELS_RISING)
     fit_asy = cm.fit_model('asymptotic', d1s, rf1s, models=cm.MODELS_RISING)
-    fits = [f for f in (fit_lin, fit_asy) if f]
+    fit_pow = cm.fit_model('power', d1s, rf1s, models=cm.MODELS_RISING)
+    # Plausibility guard on the power fit's exponent: curve_fit can converge to a
+    # numerically-degenerate (near-zero coefficient, huge exponent) local optimum that
+    # achieves a similar SSE over the FITTED range but has a wildly unstable derivative
+    # at the tail evaluation point -- confirmed empirically (E111 Run4: b=25.8, dRf_tail
+    # jumped to 2.15e-3, ~27x every other run's value, and broke phm_analysis.py's C4
+    # driver-regression R^2). Every physically-plausible accelerating run found so far
+    # (E101AB b=1.73, E110ABC b=2.12, E109AB b=4.19, ...) falls well inside [0.15, 6];
+    # reject the fit outside that band rather than silently ranking on a fitting
+    # artifact, and fall back to linear/asymptotic instead.
+    if fit_pow is not None and not (0.15 <= abs(fit_pow['params'][1]) <= 6.0):
+        fit_pow = None
+    fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
     best = min(fits, key=lambda f: f['aic']) if fits else None
 
-    if best is not None and best['name'] == 'asymptotic':
-        model_selected = 'asymptotic'
-        dRf_tail = cm.tail_slope('asymptotic', best['params'], d1s[-1], models=cm.MODELS_RISING)
-        A_amp, tau, c_ceiling = best['params']
-        tau_days = float(tau)
-        rf_inf_asymp = float(c_ceiling)  # asymptotic Rf ceiling this run trends toward
-        a_asymp = float(A_amp)           # amplitude — with tau/c, fully reconstructs the
-                                          # fitted curve y(t)=A*(1-exp(-t/tau))+c for projection
-        pred_sel = cm.MODELS_RISING['asymptotic'][0](d1s, *best['params'])
+    if best is not None and best['name'] in ('asymptotic', 'power'):
+        model_selected = best['name']
+        dRf_tail = cm.tail_slope(model_selected, best['params'], d1s[-1], models=cm.MODELS_RISING)
+        p1, p2, p3 = best['params']
+        # asymptotic: (A amplitude, tau time-constant, c=Rf ceiling) -- Kern-Seaton form.
+        # power: (a coefficient, b exponent, c=Rf floor) -- same 3 slots repurposed since
+        # both are 3-parameter curves; `model_selected` says which meaning applies, and
+        # cm.MODELS_RISING[model_selected] is always used together with these params so
+        # nothing downstream needs to know the per-model parameter semantics itself.
+        tau_days = float(p2)
+        rf_inf_asymp = float(p3)
+        a_asymp = float(p1)
+        pred_sel = cm.MODELS_RISING[model_selected][0](d1s, *best['params'])
     else:
         model_selected = 'linear'
         dRf_tail = float(slope)
@@ -404,6 +431,7 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                Rf_inf_asymp=(round(rf_inf_asymp, 6) if rf_inf_asymp is not None else None),
                asymp_aic=(round(fit_asy['aic'], 2) if fit_asy else None),
                linear_aic=(round(fit_lin['aic'], 2) if fit_lin else None),
+               power_aic=(round(fit_pow['aic'], 2) if fit_pow else None),
                R2_model=round(float(r2_model), 3),
                sign_change_rate=round(sign_change_rate, 3),
                last_day_on_duty=round(float(d1s[-1]), 2))
