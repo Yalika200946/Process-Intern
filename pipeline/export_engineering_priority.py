@@ -73,9 +73,10 @@ def _check_hx_ranking_consistency():
               f'values than this script writes to engineering_priority.json for the same HX. '
               f'This happens when production/08_cleaning_priority.ipynb was re-run without also '
               f're-running production/14_cit_model_feature_matrix.ipynb through '
-              f'production/12_cit_forecast_export.ipynb (e.g. `run_all.py --only 12` or '
-              f'`--from 14` without `--from 08`). Re-run the full chain, or notebooks 08 through '
-              f'12 together, before trusting hx_ranking.json.')
+              f'production/10_economic_evaluation_forecast_export.ipynb (e.g. '
+              f'`run_all.py --only forecast_export` or `--from 14` without `--from 08`). '
+              f'Re-run the full chain, or notebooks 08 through the end, before trusting '
+              f'hx_ranking.json.')
 
 
 def main():

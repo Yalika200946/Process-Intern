@@ -4,7 +4,7 @@ CPHT end-to-end pipeline orchestrator.
 Recomputes every dashboard artifact from process data by executing the VALIDATED
 notebooks in dependency order (reusing their logic rather than re-implementing
 it), then re-applying the honest post-processing so the dashboard's model card
-and forecast bands survive production/12_cit_forecast_export.ipynb's exports.
+and forecast bands survive production/10_economic_evaluation_forecast_export.ipynb Part 2's exports.
 
 Design notes:
   * Runs each notebook headless with `nbconvert --execute` under **UTF-8 mode**
@@ -65,46 +65,50 @@ log = logging.getLogger('run_all')
 # (notebooks/eda/process_control_exploration.ipynb, crude_assay_exploration.ipynb,
 #  correlation_and_pca.ipynb -- moved into notebooks/eda/ 2026-07-17, originally
 #  00_data_prep_process_control/00_data_prep_crude_assay/02b_correlation_and_pca -- are
-#  EDA-only and excluded; 09_cit_furnace_impact kept because 08_cleaning_priority reads its
-#  Q_CIT_Sensitivity.csv.)
+#  EDA-only and excluded.)
 #
 # Renamed into notebooks/production/ 2026-07-17 (see docs/archive/MIGRATION_MAP.md for the full
 # old->new table). NOTE: the new filenames' leading numbers follow the TARGET_PIPELINE.md
 # conceptual stage order (data quality -> operating modes -> hx performance -> ...), which
 # is NOT the same as this list's actual execution order below.
 #
-# 2026-07-19 consolidation: notebook count reduced from 17 to fewer by merging notebooks that
-# ran back-to-back in this CHAIN with no other script in between (safe merge -- no intermediate
-# writer like compute_fouling_rate.py sits between the merged parts). Two merges:
+# 2026-07-19 consolidation (two rounds) reduced notebook count from 17 to 11 by merging
+# notebooks that ran back-to-back in this CHAIN with no other script in between (safe merge --
+# no intermediate writer like compute_fouling_rate.py sits between the merged parts), grouped
+# by shared real purpose rather than old filename:
 #   - 03_hx_performance.ipynb + 02_operating_modes.ipynb -> production/02_hx_performance_operating_modes.ipynb
-#     (in that cell order -- hx_performance genuinely runs first; the old filenames' numeric
-#     prefixes never matched real execution order, so merging removes that long-standing
-#     mismatch rather than encoding it in two files).
+#     (in that cell order -- hx_performance genuinely runs first).
 #   - 14_cit_model_feature_matrix.ipynb + 15_cit_model_benchmark.ipynb + 16_cit_shap_importance.ipynb
 #     -> production/14_cit_model_feature_matrix.ipynb (single file, 3 parts). These three were
 #     already documented as "reference, not canonical" (15's own finding: ML loses to a
-#     persistence baseline) but still produce files 12_cit_forecast_export.ipynb and
-#     gen_honest_metrics.py read, so the merged file stays in CHAIN.
+#     persistence baseline) but still produce files 12_cit_forecast_export.ipynb (now merged
+#     into 10, see below) and gen_honest_metrics.py read, so the merged file stays in CHAIN.
+#   - 09_cit_furnace_impact.ipynb + 04_clean_baseline.ipynb + 07_forecasting.ipynb ->
+#     production/04_fouling_cit_impact_forecast.ipynb (3 parts, in that cell order -- same
+#     real CHAIN order as before: CIT sensitivity -> clean-baseline fouling-rate forecast ->
+#     time-to-clean prediction; 07's input is literally 04's output).
+#   - 10_economic_evaluation.ipynb + 12_cit_forecast_export.ipynb ->
+#     production/10_economic_evaluation_forecast_export.ipynb (2 parts) -- the two notebooks
+#     that closed out the main CHAIN back-to-back with nothing in between.
+# The old long-standing filename/run-order mismatch these merges also happened to resolve is
+# NOT the reason for merging -- see docs/archive/MIGRATION_MAP.md for that separate history.
 CHAIN = [
     'production/01_data_quality.ipynb',
     'production/02_hx_performance_operating_modes.ipynb',
     'production/05_fouling_analysis.ipynb',
-    'production/09_cit_furnace_impact.ipynb',
-    'production/04_clean_baseline.ipynb',
-    'production/07_forecasting.ipynb',
+    'production/04_fouling_cit_impact_forecast.ipynb',
     'production/08_cleaning_priority.ipynb',
     'production/14_cit_model_feature_matrix.ipynb',
-    'production/10_economic_evaluation.ipynb',
-    'production/12_cit_forecast_export.ipynb',
+    'production/10_economic_evaluation_forecast_export.ipynb',
 ]
 
-# post-processors that MUST run after the terminal cit_forecast_export notebook to keep honest artifacts
+# post-processors that MUST run after the terminal 10_economic_evaluation_forecast_export.ipynb notebook to keep honest artifacts
 POST = [
     ('honest model_metrics.json', [sys.executable, str(REPO / 'pipeline' / 'gen_honest_metrics.py')]),
     ('engineering priority ranking (nb 08)', [sys.executable, str(REPO / 'pipeline' / 'export_engineering_priority.py')]),
-    # forecast prediction bands: folded into production/12_cit_forecast_export.ipynb's own
-    # export cell (section 2b) so forecast_6mo.json has exactly one writer with the complete
-    # schema from the start -- add_forecast_intervals.py is superseded, not deleted
+    # forecast prediction bands: folded into production/10_economic_evaluation_forecast_export.ipynb
+    # Part 2's own export cell (section 2b) so forecast_6mo.json has exactly one writer with the
+    # complete schema from the start -- add_forecast_intervals.py is superseded, not deleted
     # (see its own module docstring), and no longer invoked here.
     ('P&ID topology + furnace',   [sys.executable, str(SRC / 'reporting' / 'dashboard_topology.py')]),
     ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),

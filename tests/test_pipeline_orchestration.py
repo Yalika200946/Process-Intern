@@ -17,17 +17,19 @@ def test_every_production_chain_notebook_exists():
 
 
 def test_only_selector_requires_one_real_notebook():
-    assert select_chain(only="12_cit_forecast") == ["production/12_cit_forecast_export.ipynb"]
+    assert select_chain(only="forecast_export") == [
+        "production/10_economic_evaluation_forecast_export.ipynb"
+    ]
     with pytest.raises(ValueError, match="does not match"):
         select_chain(only="does-not-exist")
     with pytest.raises(ValueError, match="ambiguous"):
-        select_chain(only="1")
+        select_chain(only="0")
 
 
 def test_from_selector_requires_one_real_notebook():
-    selected = select_chain(start="04_clean_baseline")
-    assert selected[0] == "production/04_clean_baseline.ipynb"
-    assert selected == CHAIN[5:]
+    selected = select_chain(start="fouling_cit_impact_forecast")
+    assert selected[0] == "production/04_fouling_cit_impact_forecast.ipynb"
+    assert selected == CHAIN[3:]
     with pytest.raises(ValueError, match="does not match"):
         select_chain(start="does-not-exist")
 
@@ -54,7 +56,7 @@ def test_active_forecast_consumers_use_q_deviation_signal():
     """Prevent a stale Cold_Out artifact from silently re-entering production."""
     active_consumers = [
         ROOT / "pipeline" / "phm_analysis.py",
-        ROOT / "notebooks" / "production" / "12_cit_forecast_export.ipynb",
+        ROOT / "notebooks" / "production" / "10_economic_evaluation_forecast_export.ipynb",
     ]
     for path in active_consumers:
         text = path.read_text(encoding="utf-8")

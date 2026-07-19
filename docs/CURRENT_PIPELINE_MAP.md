@@ -24,19 +24,26 @@ below and `docs/archive/MIGRATION_MAP.md` for why the two differ):
    (was `03_operating_state_classification.ipynb`), in that cell order (hx-performance genuinely
    runs first; see the note below)
 3. `pipeline/compute_fouling_rate.py`
-4. `notebooks/production/05_fouling_analysis.ipynb` (was `04_fouling_rate_estimation.ipynb`)
-5. `notebooks/production/09_cit_furnace_impact.ipynb` (was `05_fouling_cit_sensitivity.ipynb`)
-6. `notebooks/production/04_clean_baseline.ipynb` (was `06_fouling_rate_forecast.ipynb`)
-7. `notebooks/production/07_forecasting.ipynb` (was `07_time_to_clean_prediction.ipynb`)
-8. `notebooks/production/08_cleaning_priority.ipynb` (was `08_cleaning_priority_ranking.ipynb`)
-9. `notebooks/production/14_cit_model_feature_matrix.ipynb` — merged 2026-07-19 from the former
+4. `notebooks/production/05_fouling_analysis.ipynb` (was `04_fouling_rate_estimation.ipynb`;
+   Section 7 "Cleaning-Event Validation" added 2026-07-19, replacing the empty placeholder
+   `06_cleaning_event_validation.ipynb`, since deleted)
+5. `notebooks/production/04_fouling_cit_impact_forecast.ipynb` — merged 2026-07-19 from
+   `09_cit_furnace_impact.ipynb` (was `05_fouling_cit_sensitivity.ipynb`) +
+   `04_clean_baseline.ipynb` (was `06_fouling_rate_forecast.ipynb`) +
+   `07_forecasting.ipynb` (was `07_time_to_clean_prediction.ipynb`), in that cell order
+   (same as the real CHAIN order before the merge) — one 3-part file answering "how much does
+   fouling affect CIT -> forecast the fouling -> days until each HX needs cleaning"
+6. `notebooks/production/08_cleaning_priority.ipynb` (was `08_cleaning_priority_ranking.ipynb`)
+7. `notebooks/production/14_cit_model_feature_matrix.ipynb` — merged 2026-07-19 from the former
    `14_cit_model_feature_matrix.ipynb` + `15_cit_model_benchmark.ipynb` + `16_cit_shap_importance.ipynb`
    (all three moved into `production/` from the `notebooks/` root earlier the same day, then
    merged into one 3-part file since they ran back-to-back in `CHAIN` with nothing in between —
    reference, not canonical; 15's own finding: ML loses to a persistence baseline)
-10. `notebooks/production/10_economic_evaluation.ipynb` (was `12_economic_delta_cit.ipynb`)
-11. `notebooks/production/12_cit_forecast_export.ipynb` (was `13_cit_forecast_export.ipynb`)
-12. A post-processing chain that creates the dashboard JSON artifacts, including
+8. `notebooks/production/10_economic_evaluation_forecast_export.ipynb` — merged 2026-07-19 from
+   `10_economic_evaluation.ipynb` (was `12_economic_delta_cit.ipynb`) +
+   `12_cit_forecast_export.ipynb` (was `13_cit_forecast_export.ipynb`), the two notebooks that
+   closed out the main `CHAIN` back-to-back with nothing in between
+9. A post-processing chain that creates the dashboard JSON artifacts, including
     `notebooks/production/13_cleaning_plan_optimization.ipynb` (was
     `16_cleaning_plan_optimization.ipynb`) and
     `notebooks/production/17_tam_constraint_analysis.ipynb` (moved into
@@ -48,8 +55,9 @@ hx-performance cells *before* operating-modes cells — the real code dependency
 is the reverse of the two old filenames' conceptual stage order. That long-standing
 mismatch (see `docs/archive/MIGRATION_MAP.md`) is now resolved by the merge itself:
 one file, cells in true execution order, no numbering to reconcile. The merged
-`14_cit_model_feature_matrix.ipynb`'s number still reflects *when* it was moved
-into `production/`, not its position in the real run order (see the `CHAIN` list above).
+`14_cit_model_feature_matrix.ipynb` and `04_fouling_cit_impact_forecast.ipynb` numbers still
+reflect *when*/*which* file each merge kept, not their position in the real run order (see the
+`CHAIN` list above).
 
 The chain is not a clean directed acyclic data pipeline:
 
@@ -88,9 +96,9 @@ If you're new to this project, read notebooks in this conceptual order (grouped 
 | Prepare data | `01_data_quality.ipynb`, EDA crude/process notebooks | Is the raw data usable? What's missing or out-of-range? |
 | Features/fouling | `02_hx_performance_operating_modes.ipynb`, `pipeline/compute_fouling_rate.py` | Q/ΔT/U per HX; which shell is actually active each day; authoritative fouling rate |
 | Ranking | `05_fouling_analysis.ipynb`, `08_cleaning_priority.ipynb` | Which HX fouls fastest, matters most to CIT, and is worth cleaning first |
-| Forecast | `04_clean_baseline.ipynb`, `07_forecasting.ipynb` | How many days until each HX needs cleaning |
-| CIT modeling | `14_cit_model_feature_matrix.ipynb` (3-part merged file: feature matrix + benchmark + SHAP), `09_cit_furnace_impact.ipynb` | Can CIT be forecast (answer: not beyond a persistence baseline — see `[[project_cit_persistence_finding]]`), and which HX drives it |
-| Economics/constraints | `10_economic_evaluation.ipynb`, `17_tam_constraint_analysis.ipynb` | What's a real cleaning worth, and what does the plant's real bypass capability allow |
+| Forecast | `04_fouling_cit_impact_forecast.ipynb` Parts 2-3 (was `04_clean_baseline.ipynb`, `07_forecasting.ipynb`) | How many days until each HX needs cleaning |
+| CIT modeling | `14_cit_model_feature_matrix.ipynb` (3-part merged file: feature matrix + benchmark + SHAP), `04_fouling_cit_impact_forecast.ipynb` Part 1 (was `09_cit_furnace_impact.ipynb`) | Can CIT be forecast (answer: not beyond a persistence baseline — see `[[project_cit_persistence_finding]]`), and which HX drives it |
+| Economics/constraints | `10_economic_evaluation_forecast_export.ipynb` Part 1 (was `10_economic_evaluation.ipynb`), `17_tam_constraint_analysis.ipynb` | What's a real cleaning worth, and what does the plant's real bypass capability allow |
 | Integrated plan | `13_cleaning_plan_optimization.ipynb` | The one recommended cleaning schedule, combining all of the above |
 
 ### Dashboard tab → pipeline stage
