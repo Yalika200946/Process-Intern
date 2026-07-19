@@ -177,6 +177,136 @@ def label_fouling_phase(days_on_duty):
     return label
 
 
+def intra_run_split_points(d, u, intra_recovery=0.15):
+    """Detect every intra-run recovery jump: a place where the 7-day rolling mean of
+    U_relative rises by more than `intra_recovery` within one nominal run (an undetected
+    minor clean that didn't trigger a full TAM/shell-switch run boundary upstream).
+
+    Single canonical detector -- both `robust_fouling_rate` (splits at only the LAST cut,
+    keeping the current sub-run for its authoritative scalar rate) and
+    `segment_fouling_rates` (splits at EVERY cut, for visualization/QA) call this, and the
+    notebook's chart markers are sourced from the same segment boundaries, so the annotated
+    "minor clean" markers can never disagree with what actually drove the fit.
+
+    `d`, `u` must already be the lag/spike/winsorize-filtered arrays a fit would use (same
+    array `robust_fouling_rate` operates on at this point in its own pipeline). Returns a
+    sorted array of cut days (empty if none found)."""
+    d = np.asarray(d, float)
+    u = np.asarray(u, float)
+    if len(u) < 8:
+        return np.array([])
+    order = np.argsort(d)
+    du = np.diff(pd.Series(u[order]).rolling(7, min_periods=3, center=True).mean().values)
+    jumps = np.where(du > intra_recovery)[0]
+    if not len(jumps):
+        return np.array([])
+    return np.sort(d[order][jumps + 1])
+
+
+def _fit_segment(d1, u1, rf1, min_span_days=30, min_pts=20, recent_days=60,
+                  slope_tol=5e-4, min_r2_gate=0.30, max_sign_change_rate=0.35):
+    """Given ONE already-filtered (lag/spike/winsorize/split) days_on_duty/u_relative/rf_run
+    segment, run the Theil-Sen baseline + AIC-race (linear/asymptotic/power) curve fit and the
+    reliability gate. Extracted so `robust_fouling_rate` (fits only the tail segment after the
+    last intra-run recovery) and `segment_fouling_rates` (fits EVERY intra-run sub-segment) use
+    byte-identical fitting logic -- the former's output is unaffected by this refactor, and the
+    latter's last segment always numerically matches the former's output exactly."""
+    from scipy import stats
+    out = dict(dRf_per_day=None, intercept=None, dRf_ci_lo=None, dRf_ci_hi=None,
+               dRf_per_day_recent=None, dUrel_per_day=None, R2=None,
+               model_selected=None, dRf_per_day_tail=None, dRf_per_day_wholerun=None,
+               tau_days=None, A_asymp=None, Rf_inf_asymp=None, asymp_aic=None, linear_aic=None,
+               power_aic=None, R2_model=None, sign_change_rate=None, last_day_on_duty=None,
+               reliable=False, rate_flag=None,
+               dUrel_per_day_tail=None, dUrel_per_day_wholerun=None)
+
+    span = float(d1.max() - d1.min()) if len(d1) else 0.0
+    if span < min_span_days:
+        out['rate_flag'] = 'insufficient_span'; return out
+    if len(d1) < min_pts:
+        out['rate_flag'] = 'few_points'; return out
+
+    order = np.argsort(d1)
+    d1s, rf1s = d1[order], rf1[order]
+
+    slope, intercept, lo, hi = stats.theilslopes(rf1, d1)
+    pred = intercept + slope * d1
+    ss_tot = float(np.sum((rf1 - rf1.mean()) ** 2))
+    r2 = 1 - float(np.sum((rf1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
+
+    # AIC race: linear vs rising-asymptote (Kern-Seaton) vs power-law -- see
+    # robust_fouling_rate's docstring for why power is in the race and the exponent
+    # plausibility guard (curve_fit can converge to a numerically-degenerate near-zero
+    # coefficient / huge exponent local optimum with a wildly unstable tail derivative).
+    fit_lin = cm.fit_model('linear', d1s, rf1s, models=cm.MODELS_RISING)
+    fit_asy = cm.fit_model('asymptotic', d1s, rf1s, models=cm.MODELS_RISING)
+    fit_pow = cm.fit_model('power', d1s, rf1s, models=cm.MODELS_RISING)
+    if fit_pow is not None and not (0.15 <= abs(fit_pow['params'][1]) <= 6.0):
+        fit_pow = None
+    fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
+    best = min(fits, key=lambda f: f['aic']) if fits else None
+
+    if best is not None and best['name'] in ('asymptotic', 'power'):
+        model_selected = best['name']
+        dRf_tail = cm.tail_slope(model_selected, best['params'], d1s[-1], models=cm.MODELS_RISING)
+        p1, p2, p3 = best['params']
+        tau_days = float(p2)
+        rf_inf_asymp = float(p3)
+        a_asymp = float(p1)
+        pred_sel = cm.MODELS_RISING[model_selected][0](d1s, *best['params'])
+    else:
+        model_selected = 'linear'
+        dRf_tail = float(slope)
+        tau_days = None
+        rf_inf_asymp = None
+        a_asymp = None
+        pred_sel = intercept + slope * d1s
+    ss_tot_sel = float(np.sum((rf1s - rf1s.mean()) ** 2))
+    r2_model = 1 - float(np.sum((rf1s - pred_sel) ** 2)) / ss_tot_sel if ss_tot_sel > 0 else 0.0
+
+    roll = pd.Series(rf1s).rolling(7, min_periods=3, center=True).mean().to_numpy()
+    dsig = np.sign(np.diff(roll))
+    dsig = dsig[np.isfinite(dsig) & (dsig != 0)]
+    sign_change_rate = float(np.mean(np.diff(dsig) != 0)) if len(dsig) > 1 else 0.0
+
+    rec = d1 >= (d1.max() - recent_days)
+    slope_recent = stats.theilslopes(rf1[rec], d1[rec])[0] if rec.sum() >= max(8, min_pts // 2) else None
+    slope_urel = float(stats.theilslopes(u1, d1)[0])   # secondary cross-check, always simple Theil-Sen
+
+    out.update(dRf_per_day=round(float(dRf_tail), 8),
+               intercept=round(float(intercept), 8),
+               dRf_ci_lo=round(float(lo), 8), dRf_ci_hi=round(float(hi), 8),
+               dRf_per_day_recent=(round(float(slope_recent), 8) if slope_recent is not None else None),
+               dUrel_per_day=round(slope_urel, 6),
+               dUrel_per_day_tail=round(slope_urel, 6),
+               dUrel_per_day_wholerun=round(slope_urel, 6),
+               R2=round(float(r2), 3),
+               model_selected=model_selected,
+               dRf_per_day_tail=round(float(dRf_tail), 8),
+               dRf_per_day_wholerun=round(float(slope), 8),
+               tau_days=(round(tau_days, 2) if tau_days is not None else None),
+               A_asymp=(round(a_asymp, 8) if a_asymp is not None else None),
+               Rf_inf_asymp=(round(rf_inf_asymp, 6) if rf_inf_asymp is not None else None),
+               asymp_aic=(round(fit_asy['aic'], 2) if fit_asy else None),
+               linear_aic=(round(fit_lin['aic'], 2) if fit_lin else None),
+               power_aic=(round(fit_pow['aic'], 2) if fit_pow else None),
+               R2_model=round(float(r2_model), 3),
+               sign_change_rate=round(sign_change_rate, 3),
+               last_day_on_duty=round(float(d1s[-1]), 2))
+
+    if slope <= 0 or lo <= -slope_tol:
+        out['rate_flag'] = 'negative_slope_recovery' if slope < -slope_tol else 'flat_no_signal'
+        return out
+    if r2_model < min_r2_gate:
+        out['rate_flag'] = 'noisy_low_r2'; return out
+    if sign_change_rate > max_sign_change_rate:
+        out['rate_flag'] = 'oscillating'; return out
+    if slope_urel > slope_tol:   # Rf rising but U_relative also rising -> inconsistent
+        out['rate_flag'] = 'urel_inconsistent'; return out
+    out['reliable'] = True; out['rate_flag'] = 'ok'
+    return out
+
+
 def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                         lag_days=INITIATION_LAG_DAYS, winsor_ceil=1.10, recent_days=60,
                         min_span_days=30, min_pts=20, min_normal_frac=0.5,
@@ -316,139 +446,91 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
     rf1 = np.where(winsor_mask, np.minimum(rf1, 0.0), rf1)
     u1 = np.clip(u1, None, winsor_ceil)
 
-    # intra-run cleaning guard: if U_relative jumps UP mid-run (an undetected clean/recovery,
-    # detected on U_relative since its dimensionless [0,1] scale is already calibrated across
-    # HX of very different Rf magnitude), never regress across it in EITHER unit -- keep only
-    # the segment AFTER the last such jump (the current sub-run).
-    split_at = None
-    if len(u1) >= 8:
-        order = np.argsort(d1)
-        du = np.diff(pd.Series(u1[order]).rolling(7, min_periods=3, center=True).mean().values)
-        jumps = np.where(du > intra_recovery)[0]
-        if len(jumps):
-            cut = d1[order][jumps[-1] + 1]
-            split_at = float(cut)
-            seg = d1 >= cut
-            d1, u1, rf1 = d1[seg], u1[seg], rf1[seg]
+    # intra-run cleaning guard: if U_relative jumps UP mid-run (an undetected clean/recovery),
+    # never regress across it in EITHER unit -- keep only the segment AFTER the LAST such jump
+    # (the current sub-run). `segment_fouling_rates` uses the same `intra_run_split_points`
+    # detector to fit EVERY sub-segment instead of discarding all but the tail, for
+    # visualization/QA -- this function's own scalar output is unaffected by that.
+    cuts = intra_run_split_points(d1, u1, intra_recovery=intra_recovery)
+    split_at = float(cuts[-1]) if len(cuts) else None
+    if split_at is not None:
+        seg = d1 >= split_at
+        d1, u1, rf1 = d1[seg], u1[seg], rf1[seg]
     span = float(d1.max() - d1.min()) if len(d1) else 0.0
     out['span_days'] = round(span, 1)
     out['n_winsorized'] = n_wins
     out['split_after_day'] = round(split_at, 1) if split_at is not None else None
 
-    if span < min_span_days:
-        out['rate_flag'] = 'insufficient_span'; return out
-    if len(d1) < min_pts:
-        out['rate_flag'] = 'few_points'; return out
-
-    order = np.argsort(d1)
-    d1s, rf1s = d1[order], rf1[order]
-
-    slope, intercept, lo, hi = stats.theilslopes(rf1, d1)
-    pred = intercept + slope * d1
-    ss_tot = float(np.sum((rf1 - rf1.mean()) ** 2))
-    r2 = 1 - float(np.sum((rf1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
-
-    # AIC race: linear vs rising-asymptote (Kern-Seaton) vs power-law, on the same sorted
-    # (d1s, rf1s) window the Theil-Sen fit used. Power was originally excluded here (no
-    # established physical basis for fouling resistance, unlike linear/asymptotic) --
-    # reinstated 2026-07-19 after empirically confirming several HX runs show genuinely
-    # ACCELERATING Rf growth (e.g. E101AB Run2: power AIC -15587 vs linear -15002 vs
-    # asymptotic -15000 with tau degenerating to ~7.5e4 years -- curve_fit's way of faking
-    # a straight line because the decelerating-only Kern-Seaton form literally cannot
-    # represent acceleration). Excluding power was silently forcing a straight-line fit
-    # that visibly failed to track the real curve (arcs below the fitted line mid-run,
-    # above it at both ends -- the standard signature of fitting a line through convex
-    # data) on every accelerating run, which directly understates/distorts the reported
-    # "current" tail rate used for ranking and RUL. `curve_models.fit_model` returns None
-    # (excluded from the race) on a non-converging fit rather than raising, so a run where
-    # a given curve fit fails simply falls back to whichever other shape(s) converged.
-    fit_lin = cm.fit_model('linear', d1s, rf1s, models=cm.MODELS_RISING)
-    fit_asy = cm.fit_model('asymptotic', d1s, rf1s, models=cm.MODELS_RISING)
-    fit_pow = cm.fit_model('power', d1s, rf1s, models=cm.MODELS_RISING)
-    # Plausibility guard on the power fit's exponent: curve_fit can converge to a
-    # numerically-degenerate (near-zero coefficient, huge exponent) local optimum that
-    # achieves a similar SSE over the FITTED range but has a wildly unstable derivative
-    # at the tail evaluation point -- confirmed empirically (E111 Run4: b=25.8, dRf_tail
-    # jumped to 2.15e-3, ~27x every other run's value, and broke phm_analysis.py's C4
-    # driver-regression R^2). Every physically-plausible accelerating run found so far
-    # (E101AB b=1.73, E110ABC b=2.12, E109AB b=4.19, ...) falls well inside [0.15, 6];
-    # reject the fit outside that band rather than silently ranking on a fitting
-    # artifact, and fall back to linear/asymptotic instead.
-    if fit_pow is not None and not (0.15 <= abs(fit_pow['params'][1]) <= 6.0):
-        fit_pow = None
-    fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
-    best = min(fits, key=lambda f: f['aic']) if fits else None
-
-    if best is not None and best['name'] in ('asymptotic', 'power'):
-        model_selected = best['name']
-        dRf_tail = cm.tail_slope(model_selected, best['params'], d1s[-1], models=cm.MODELS_RISING)
-        p1, p2, p3 = best['params']
-        # asymptotic: (A amplitude, tau time-constant, c=Rf ceiling) -- Kern-Seaton form.
-        # power: (a coefficient, b exponent, c=Rf floor) -- same 3 slots repurposed since
-        # both are 3-parameter curves; `model_selected` says which meaning applies, and
-        # cm.MODELS_RISING[model_selected] is always used together with these params so
-        # nothing downstream needs to know the per-model parameter semantics itself.
-        tau_days = float(p2)
-        rf_inf_asymp = float(p3)
-        a_asymp = float(p1)
-        pred_sel = cm.MODELS_RISING[model_selected][0](d1s, *best['params'])
-    else:
-        model_selected = 'linear'
-        dRf_tail = float(slope)
-        tau_days = None
-        rf_inf_asymp = None
-        a_asymp = None
-        pred_sel = intercept + slope * d1s
-    ss_tot_sel = float(np.sum((rf1s - rf1s.mean()) ** 2))
-    r2_model = 1 - float(np.sum((rf1s - pred_sel) ** 2)) / ss_tot_sel if ss_tot_sel > 0 else 0.0
-
-    # oscillation / operational-noise detector: sign-change frequency of the smoothed
-    # derivative. A genuine fouling trend (linear or asymptotic-rise) is mostly one-signed;
-    # an operational sawtooth (e.g. repeated shell-switch cycling) flips sign often regardless
-    # of its net slope, which a sign-of-net-slope-only check can miss.
-    roll = pd.Series(rf1s).rolling(7, min_periods=3, center=True).mean().to_numpy()
-    dsig = np.sign(np.diff(roll))
-    dsig = dsig[np.isfinite(dsig) & (dsig != 0)]
-    sign_change_rate = float(np.mean(np.diff(dsig) != 0)) if len(dsig) > 1 else 0.0
-
-    rec = d1 >= (d1.max() - recent_days)
-    slope_recent = stats.theilslopes(rf1[rec], d1[rec])[0] if rec.sum() >= max(8, min_pts // 2) else None
-    slope_urel = float(stats.theilslopes(u1, d1)[0])   # secondary cross-check, always simple Theil-Sen
-
-    out.update(dRf_per_day=round(float(dRf_tail), 8),
-               intercept=round(float(intercept), 8),
-               dRf_ci_lo=round(float(lo), 8), dRf_ci_hi=round(float(hi), 8),
-               dRf_per_day_recent=(round(float(slope_recent), 8) if slope_recent is not None else None),
-               dUrel_per_day=round(slope_urel, 6),
-               dUrel_per_day_tail=round(slope_urel, 6),
-               dUrel_per_day_wholerun=round(slope_urel, 6),
-               R2=round(float(r2), 3),
-               model_selected=model_selected,
-               dRf_per_day_tail=round(float(dRf_tail), 8),
-               dRf_per_day_wholerun=round(float(slope), 8),
-               tau_days=(round(tau_days, 2) if tau_days is not None else None),
-               A_asymp=(round(a_asymp, 8) if a_asymp is not None else None),
-               Rf_inf_asymp=(round(rf_inf_asymp, 6) if rf_inf_asymp is not None else None),
-               asymp_aic=(round(fit_asy['aic'], 2) if fit_asy else None),
-               linear_aic=(round(fit_lin['aic'], 2) if fit_lin else None),
-               power_aic=(round(fit_pow['aic'], 2) if fit_pow else None),
-               R2_model=round(float(r2_model), 3),
-               sign_change_rate=round(sign_change_rate, 3),
-               last_day_on_duty=round(float(d1s[-1]), 2))
-
-    # physical + reliability constraint: a genuine fouling run has Rf STRICTLY increasing
-    # (slope>0) with a CI whose lower bound is still essentially positive (> -slope_tol).
-    if slope <= 0 or lo <= -slope_tol:
-        out['rate_flag'] = 'negative_slope_recovery' if slope < -slope_tol else 'flat_no_signal'
-        return out
-    if r2_model < min_r2_gate:
-        out['rate_flag'] = 'noisy_low_r2'; return out
-    if sign_change_rate > max_sign_change_rate:
-        out['rate_flag'] = 'oscillating'; return out
-    if slope_urel > slope_tol:   # Rf rising but U_relative also rising -> inconsistent
-        out['rate_flag'] = 'urel_inconsistent'; return out
-    out['reliable'] = True; out['rate_flag'] = 'ok'
+    seg_result = _fit_segment(d1, u1, rf1, min_span_days=min_span_days, min_pts=min_pts,
+                               recent_days=recent_days, slope_tol=slope_tol,
+                               min_r2_gate=min_r2_gate, max_sign_change_rate=max_sign_change_rate)
+    out.update(seg_result)
     return out
+
+
+def segment_fouling_rates(days_on_duty, u_relative, rf_run, state=None,
+                          lag_days=INITIATION_LAG_DAYS, winsor_ceil=1.10, recent_days=60,
+                          min_span_days=30, min_pts=20, min_normal_frac=0.5,
+                          slope_tol=5e-4, intra_recovery=0.15, inservice_states=INSERVICE_STATES,
+                          min_r2_gate=0.30, max_sign_change_rate=0.35):
+    """Like `robust_fouling_rate`, but returns a fit for EVERY intra-run sub-segment (split at
+    every detected minor-clean recovery jump via `intra_run_split_points`), not just the tail
+    segment after the last one. Diagnostic/visualization use only: the authoritative per-run
+    scalar rate used by ranking/RUL/dashboard consumers comes from `robust_fouling_rate`
+    (unchanged by this function's existence) and always numerically equals this function's
+    LAST segment, since both share the identical prep pipeline and `_fit_segment` fitting code.
+
+    Returns a list of dicts (oldest segment first), each shaped like `robust_fouling_rate`'s
+    return dict plus `seg_index`/`seg_start_day`/`seg_end_day`/`N_regression_pts`."""
+    d = np.asarray(days_on_duty, float)
+    u = np.asarray(u_relative, float)
+    rf = np.asarray(rf_run, float)
+
+    fin = np.isfinite(d) & np.isfinite(u) & np.isfinite(rf) & (d >= lag_days)
+    st = np.asarray(state) if state is not None else None
+    in_service = np.isin(st, list(inservice_states)) if st is not None else None
+    normal_frac = float(in_service[fin].mean()) if (st is not None and fin.sum()) else 1.0
+    keep = fin & in_service if st is not None else fin
+    d1, u1, rf1 = d[keep], u[keep], rf[keep]
+
+    if normal_frac < min_normal_frac or len(d1) == 0:
+        return [dict(seg_index=0, seg_start_day=None, seg_end_day=None, N_regression_pts=int(len(d1)),
+                     reliable=False, rate_flag=('substituted_dominated' if len(d1) else 'no_data'))]
+
+    # spike guard + winsorize: identical to robust_fouling_rate's own copy, applied ONCE up
+    # front (shared across every sub-segment) rather than per-segment, so segmenting a run
+    # doesn't change how spikes/winsorize are judged near a cut boundary.
+    order0 = np.argsort(d1)
+    roll_med_rf = pd.Series(rf1[order0]).rolling(7, min_periods=3, center=True).median().to_numpy()
+    dev_rf = rf1[order0] - roll_med_rf
+    u_winsor_trigger_sorted = u1[order0] > winsor_ceil
+    spike_sorted = np.isfinite(dev_rf) & (dev_rf < -0.3 * np.nanmedian(np.abs(roll_med_rf[np.isfinite(roll_med_rf)]))
+                                          if np.isfinite(roll_med_rf).any() else False) & u_winsor_trigger_sorted
+    spike = np.zeros(len(d1), dtype=bool)
+    spike[order0[spike_sorted]] = True
+    if spike.any():
+        d1, u1, rf1 = d1[~spike], u1[~spike], rf1[~spike]
+
+    winsor_mask = u1 > winsor_ceil
+    rf1 = np.where(winsor_mask, np.minimum(rf1, 0.0), rf1)
+    u1 = np.clip(u1, None, winsor_ceil)
+
+    cuts = intra_run_split_points(d1, u1, intra_recovery=intra_recovery)
+    bounds = [float(d1.min())] + [float(c) for c in cuts] + [float(d1.max()) + 1.0]
+
+    segments = []
+    for i in range(len(bounds) - 1):
+        seg_mask = (d1 >= bounds[i]) & (d1 < bounds[i + 1])
+        d_seg, u_seg, rf_seg = d1[seg_mask], u1[seg_mask], rf1[seg_mask]
+        res = _fit_segment(d_seg, u_seg, rf_seg, min_span_days=min_span_days, min_pts=min_pts,
+                            recent_days=recent_days, slope_tol=slope_tol,
+                            min_r2_gate=min_r2_gate, max_sign_change_rate=max_sign_change_rate)
+        res['seg_index'] = i
+        res['seg_start_day'] = round(bounds[i], 1)
+        res['seg_end_day'] = round(float(d_seg.max()), 1) if len(d_seg) else round(bounds[i + 1], 1)
+        res['N_regression_pts'] = int(len(d_seg))
+        segments.append(res)
+    return segments
 
 
 def quality_gate_runs(fr_df, min_r2=0.3, min_pts=10):

@@ -43,6 +43,7 @@ REPO = Path(__file__).resolve().parent.parent
 NB   = REPO / 'notebooks'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = DATA / 'Fouling_Rate_By_Run.csv'
+SUBOUT = DATA / 'Fouling_Rate_By_Subrun.csv'
 FEAT = DATA / 'Feature_calculated.csv'
 sys.path.append(str(REPO))
 from src.validation import nb_audit as A
@@ -204,12 +205,46 @@ def main():
     df = pd.DataFrame(rows).reindex(columns=cols)
     df.to_csv(OUT, index=False)
 
+    # Diagnostic-only sidecar: every intra-run sub-segment (split at EVERY minor-clean
+    # recovery jump, not just the last one) for visualization/QA in notebook 02. This does
+    # NOT feed ranking/RUL/dashboard -- the authoritative per-run rate above (last segment
+    # only) is unaffected; nothing else currently reads this file.
+    sub_rows = []
+    for hx in HX_CONFIG:
+        rid_c, dod_c, ur_c = f'{hx}_run_id', f'{hx}_days_on_duty', f'{hx}_U_relative'
+        if rid_c not in feat or ur_c not in feat:
+            continue
+        rid = feat[rid_c]; dod = feat[dod_c]; ur = feat[ur_c]
+        rf = feat.get(f'{hx}_Rf_run')
+        state = ost[hx] if (ost is not None and hx in ost.columns) else None
+        if rf is None:
+            continue
+        for run in sorted(rid.dropna().unique()):
+            m = (rid == run).values
+            idx = feat.index[m]
+            run_start = idx.min()
+            segs = A.segment_fouling_rates(
+                dod[m], ur[m], rf[m],
+                state=(state[m] if state is not None else None))
+            for seg in segs:
+                seg.update(HX=hx, Run=int(run), Run_start=str(run_start.date()))
+                sub_rows.append(seg)
+
+    sub_cols = ['HX', 'Run', 'seg_index', 'Run_start', 'seg_start_day', 'seg_end_day',
+                'N_regression_pts', 'dRf_per_day', 'dRf_per_day_tail', 'dRf_per_day_wholerun',
+                'model_selected', 'tau_days', 'A_asymp', 'Rf_inf_asymp', 'R2_model',
+                'sign_change_rate', 'last_day_on_duty', 'reliable', 'rate_flag']
+    sub_df = pd.DataFrame(sub_rows).reindex(columns=sub_cols)
+    sub_df.to_csv(SUBOUT, index=False)
+
     rel = df[df['reliable'] == True]  # noqa: E712
     n_bad = int((rel['dRf_per_day'] <= 0).sum())
     assert n_bad == 0, f'PHYSICAL INVARIANT VIOLATED: {n_bad} reliable run(s) with dRf_per_day <= 0'
     miss = sorted(set(df['HX']) - set(rel['HX']))
     print(f'Wrote {OUT.name}: {len(df)} runs, {len(rel)} reliable (dRf/dt>0, physical), '
           f'{len(df) - len(rel)} flagged')
+    print(f'Wrote {SUBOUT.name}: {len(sub_df)} sub-segments (diagnostic only, splits at every '
+          f'minor-clean recovery jump; not read by any ranking/RUL/dashboard consumer)')
     print('  flags:', df['rate_flag'].value_counts().to_dict())
     if miss:
         print(f'  HX with no reliable run (rate falls back to partner/None downstream): {miss}')

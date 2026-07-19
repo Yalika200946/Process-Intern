@@ -81,6 +81,61 @@ class TestRobustFoulingRatePhysicalInvariant:
         assert res["rate_flag"] == "no_rf_data"
 
 
+def _synthetic_two_phase_run(seed=2, jump=0.05):
+    """Two fouling phases (60 days each) separated by a mid-run U_relative recovery jump --
+    used to exercise `intra_run_split_points`/`segment_fouling_rates`'s multi-segment path.
+    `jump` is deliberately small (realistic U_relative scale) since the 7-day CENTERED
+    rolling-mean smoothing dilutes any single-day step by roughly 1/7 -- callers that want
+    the jump to actually register as a cut should pass a correspondingly small
+    `intra_recovery` threshold rather than an unrealistically large jump."""
+    rng = np.random.default_rng(seed)
+    days1 = np.arange(60, dtype=float)
+    u1 = 1.0 - 0.0025 * days1 + rng.normal(0, 0.003, 60)
+    days2 = np.arange(60, 120, dtype=float)
+    u2 = (1.0 + jump) - 0.0025 * (days2 - 60) + rng.normal(0, 0.003, 60)
+    days = np.concatenate([days1, days2])
+    u = np.concatenate([u1, u2])
+    rf = 1.0 / np.clip(u, 1e-3, None) - 1.0
+    state = np.array(["NORMAL"] * len(days))
+    return days, u, rf, state
+
+
+class TestSegmentFoulingRates:
+    def test_intra_run_split_points_detects_a_sustained_jump(self):
+        """A clean, large sustained step in U_relative must register as a cut near the step
+        (the centered 7-day rolling mean spreads a step over ~7 days, so the exact cut index
+        lands a few days into the transition, not necessarily on day 0 of it)."""
+        days = np.arange(40, dtype=float)
+        u = np.where(days < 20, 0.5, 1.7)
+        cuts = A.intra_run_split_points(days, u, intra_recovery=0.15)
+        assert len(cuts) >= 1
+        assert 15 <= cuts[-1] <= 25
+
+    def test_no_cut_returns_single_segment_matching_robust_fouling_rate(self):
+        """The common case (confirmed empirically: 0/97 real runs in the production dataset
+        have any intra-run split) -- segment_fouling_rates must return exactly one segment,
+        and it must be numerically identical to robust_fouling_rate's own output, since both
+        share the same prep pipeline and `_fit_segment` fitting code."""
+        days, u, rf, state = _synthetic_run()
+        segs = A.segment_fouling_rates(days, u, rf, state=state)
+        auth = A.robust_fouling_rate(days, u, rf_run=rf, state=state)
+        assert len(segs) == 1
+        for key in ("dRf_per_day", "reliable", "rate_flag", "model_selected", "R2_model"):
+            assert segs[-1][key] == auth[key]
+
+    def test_last_segment_matches_authoritative_after_a_real_split(self):
+        """When a split IS found, segment_fouling_rates must return >1 segments, and its LAST
+        segment must still be numerically identical to what robust_fouling_rate computes for
+        the same full run (same intra_recovery threshold) -- proving the refactor didn't
+        change robust_fouling_rate's own scalar output even when segmentation kicks in."""
+        days, u, rf, state = _synthetic_two_phase_run()
+        segs = A.segment_fouling_rates(days, u, rf, state=state, intra_recovery=0.02)
+        auth = A.robust_fouling_rate(days, u, rf_run=rf, state=state, intra_recovery=0.02)
+        assert len(segs) > 1
+        for key in ("dRf_per_day", "reliable", "rate_flag", "model_selected", "R2_model"):
+            assert segs[-1][key] == auth[key]
+
+
 class TestLabelFoulingPhase:
     def test_boundary_matches_initiation_lag_days(self):
         """label_fouling_phase must split at EXACTLY the boundary robust_fouling_rate uses
