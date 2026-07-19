@@ -68,33 +68,32 @@ log = logging.getLogger('run_all')
 #  EDA-only and excluded; 09_cit_furnace_impact kept because 08_cleaning_priority reads its
 #  Q_CIT_Sensitivity.csv.)
 #
-# Renamed into notebooks/production/ 2026-07-17 (see docs/MIGRATION_MAP.md for the full
+# Renamed into notebooks/production/ 2026-07-17 (see docs/archive/MIGRATION_MAP.md for the full
 # old->new table). NOTE: the new filenames' leading numbers follow the TARGET_PIPELINE.md
 # conceptual stage order (data quality -> operating modes -> hx performance -> ...), which
-# is NOT the same as this list's actual execution order below -- e.g.
-# 03_hx_performance.ipynb genuinely must run before 02_operating_modes.ipynb because the
-# real code dependency is the other way round (operating-state resolution reads the
-# feature table hx_performance produces). Reconciling the two would mean reordering real
-# notebook calculation dependencies, not just filenames -- out of scope for a pure rename,
-# and not done here. This list is the real, validated run order; trust it over the
-# filenames' numeric prefixes. 09_cit_model_feature_matrix/10_cit_model_benchmark/
-# 11_cit_shap_importance are intentionally NOT moved into notebooks/production/ (kept at
-# their original notebooks/ root path) -- ARCHIVE_CANDIDATES.md/SOURCE_OF_TRUTH_CANDIDATES.md
-# already document them as "reference, not canonical" (10's own finding: ML loses to a
-# persistence baseline), but they still produce files 12_cit_forecast_export.ipynb and
-# gen_honest_metrics.py read, so they stay in CHAIN.
+# is NOT the same as this list's actual execution order below.
+#
+# 2026-07-19 consolidation: notebook count reduced from 17 to fewer by merging notebooks that
+# ran back-to-back in this CHAIN with no other script in between (safe merge -- no intermediate
+# writer like compute_fouling_rate.py sits between the merged parts). Two merges:
+#   - 03_hx_performance.ipynb + 02_operating_modes.ipynb -> production/02_hx_performance_operating_modes.ipynb
+#     (in that cell order -- hx_performance genuinely runs first; the old filenames' numeric
+#     prefixes never matched real execution order, so merging removes that long-standing
+#     mismatch rather than encoding it in two files).
+#   - 14_cit_model_feature_matrix.ipynb + 15_cit_model_benchmark.ipynb + 16_cit_shap_importance.ipynb
+#     -> production/14_cit_model_feature_matrix.ipynb (single file, 3 parts). These three were
+#     already documented as "reference, not canonical" (15's own finding: ML loses to a
+#     persistence baseline) but still produce files 12_cit_forecast_export.ipynb and
+#     gen_honest_metrics.py read, so the merged file stays in CHAIN.
 CHAIN = [
     'production/01_data_quality.ipynb',
-    'production/03_hx_performance.ipynb',
-    'production/02_operating_modes.ipynb',
+    'production/02_hx_performance_operating_modes.ipynb',
     'production/05_fouling_analysis.ipynb',
     'production/09_cit_furnace_impact.ipynb',
     'production/04_clean_baseline.ipynb',
     'production/07_forecasting.ipynb',
     'production/08_cleaning_priority.ipynb',
-    '09_cit_model_feature_matrix.ipynb',
-    '10_cit_model_benchmark.ipynb',
-    '11_cit_shap_importance.ipynb',
+    'production/14_cit_model_feature_matrix.ipynb',
     'production/10_economic_evaluation.ipynb',
     'production/12_cit_forecast_export.ipynb',
 ]
@@ -114,9 +113,9 @@ POST = [
     ('cleaning audit history',       [sys.executable, str(REPO / 'pipeline' / 'export_cleaning_history.py')]),
     ('economics (CIT->฿)',           [sys.executable, str(REPO / 'pipeline' / 'export_economics.py')]),
     ('cleaning/bypass/TAM list',     [sys.executable, str(SRC / 'optimization' / 'cleaning_logistics.py')]),
-    ('TAM deep analysis (nb 14)',    [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
+    ('TAM deep analysis (production/17)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                       f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=900',
-                                      str(NB / '14_tam_constraint_analysis.ipynb')]),
+                                      str(NB / 'production' / '17_tam_constraint_analysis.ipynb')]),
     ('cleaning schedule -> TAM2028', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler.py')]),
     ('cleaning schedule v2 (network)', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler_network.py')]),
     ('evidence & confidence surface', [sys.executable, str(REPO / 'pipeline' / 'export_evidence.py')]),
@@ -128,22 +127,22 @@ POST = [
 BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crude.csv',
                'Feature_calculated.csv', 'Operating_State.csv', 'Feature_Q.csv',
                'Fouling_Rate_Ranking.csv', 'Fouling_Rate_By_Run.csv',
+               'Cleaning_Event_Validation.csv',
                'Q_Deviation_Signal.csv',
                'Time_To_Clean_Prediction.csv', 'Q_CIT_Sensitivity.csv',
                'Cleaning_Priority_Ranking.csv', 'Engineering_Priority_Score.csv']
 
 
 def subprocess_env():
-    """Environment shared by notebooks and post-processors during the migration.
+    """Environment shared by notebooks and post-processors.
 
-    Production notebooks now live one directory below the compatibility shims in
-    ``notebooks/``.  Put both the repository package root and shim directory on
-    PYTHONPATH so moved notebooks can resolve old imports while new code imports
-    ``src`` directly.
+    Every notebook now imports directly from the ``src`` package (the old
+    ``notebooks/*.py`` compatibility shims were removed 2026-07-19), so only the
+    repository root and ``pipeline/`` need to be on PYTHONPATH.
     """
     inherited = os.environ.get('PYTHONPATH', '')
     pythonpath = os.pathsep.join(
-        p for p in (str(REPO), str(NB), str(REPO / 'pipeline'), inherited) if p
+        p for p in (str(REPO), str(REPO / 'pipeline'), inherited) if p
     )
     return {**os.environ, 'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
             'PYTHONPATH': pythonpath, 'CPHT_DATA_DIR': str(DATA)}

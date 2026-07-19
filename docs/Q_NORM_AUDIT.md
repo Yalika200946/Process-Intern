@@ -8,7 +8,7 @@
 
 1. cold-side duty divided by total crude charge, using temperature- and SG-dependent properties;
 2. fixed-property cold- or hot-side duty divided by total charge, with a scaled `dT/charge` proxy when flow is unavailable;
-3. in `notebooks/cpht_features.py`, a cold-side heat-capacity-rate term divided by charge, because `dT_cold` is missing from the implemented numerator.
+3. in `src/features/heat_duty.py` (was `notebooks/cpht_features.py`), a cold-side heat-capacity-rate term divided by charge, because `dT_cold` is missing from the implemented numerator.
 
 The current Stage 07 contract correctly leaves its units as `REQUIRES_ENGINEERING_CONFIRMATION` and prohibits interpreting it as fouling before approval.
 
@@ -84,7 +84,7 @@ These embedded results do not show a normal operating mean near 100. Values appr
 
 ## 2. Duplicate notebook calculation
 
-Location: `notebooks/09_cit_model_feature_matrix.ipynb`, cells 10–12.
+Location: `notebooks/production/14_cit_model_feature_matrix.ipynb`, cells 10–12.
 
 It implements:
 
@@ -114,7 +114,7 @@ Its embedded mean values differ from Stage 04, including E113A 15.045 and E112C 
 
 ## 3. Active shared CIT-feature defect
 
-Location: `notebooks/cpht_features.py`, `compute_q_features`, lines 189–224.
+Location: `src/features/heat_duty.py` (was `notebooks/cpht_features.py`), `compute_q_features`, lines 189–224.
 
 The cold-side branch currently implements:
 
@@ -132,8 +132,8 @@ The required `*(Tout-Tin)` term is absent. Therefore:
 
 This implementation is active through `build_cit_feature_matrix()` and is consumed by:
 
-- `notebooks/10_cit_model_benchmark.ipynb`;
-- `notebooks/11_cit_shap_importance.ipynb`;
+- `notebooks/production/14_cit_model_feature_matrix.ipynb` Part 2 (was `15_cit_model_benchmark.ipynb`);
+- `notebooks/production/14_cit_model_feature_matrix.ipynb` Part 3 (was `16_cit_shap_importance.ipynb`);
 - `notebooks/12_economic_delta_cit.ipynb`;
 - `pipeline/gen_honest_metrics.py`;
 - saved CIT model and feature-column artifacts.
@@ -171,7 +171,7 @@ For plausible `rho*Cp` near 1,800–2,500 kJ/(m3.K), a terminal `dT` of 100–15
 
 ### 4.2 E113A/E112C duplication and topology conflict
 
-In `notebooks/cpht_config.py`, E113A and E112C have exactly the same:
+In `src/domain/config.py` (was `notebooks/cpht_config.py`), E113A and E112C have exactly the same:
 
 - cold flow: `1fi005.pv`;
 - cold inlet: `1TI115.pv`;
@@ -185,7 +185,7 @@ Consequently their raw calculated Q and raw Q_norm are identical. The executed S
 
 They differ only after separate operating-state masks and campaign segmentation are applied.
 
-`notebooks/cpht_features.py` contains a conflicting E112C configuration using `1FI017.pv`, `1TI123.pv`, and `1TI114.pv`. Therefore the CIT-model E112C feature is not the same physical signal as the fouling-pipeline E112C signal.
+`src/features/heat_duty.py` (was `notebooks/cpht_features.py`) contains a conflicting E112C configuration using `1FI017.pv`, `1TI123.pv`, and `1TI114.pv`. Therefore the CIT-model E112C feature is not the same physical signal as the fouling-pipeline E112C signal.
 
 Engineering review must resolve whether E112C is:
 

@@ -153,7 +153,7 @@ except FileNotFoundError:    # xlsx missing on another machine (e.g. anonymized 
 # Pure relabeling over `online_mode`/`duty_fraction` computed above -- does NOT change how
 # either is computed. Vocabulary matches the TAM_ONLY/ONLINE_FULL/ONLINE_PARTIAL/SWAP_CAPABLE
 # split requested for the cleaning-feasibility taxonomy (see
-# docs/UNRESOLVED_ENGINEERING_DECISIONS.md and docs/MIGRATION_MAP.md).
+# docs/UNRESOLVED_ENGINEERING_DECISIONS.md and docs/archive/MIGRATION_MAP.md).
 FEASIBILITY_LABELS = {'full': 'ONLINE_FULL', 'partial': 'ONLINE_PARTIAL', 'none': 'TAM_ONLY'}
 
 # HX with a known interchangeable spare shell (from cpht_config.PARALLEL_SHELL_GROUPS, e.g.

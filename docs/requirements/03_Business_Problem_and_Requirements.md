@@ -11,7 +11,7 @@ Status: **DRAFT v2 — รวมเนื้อหาจาก `Business Problem
   Matrix และ Open Issues — **ไฟล์นี้ไม่ก็อปทุกบรรทัดมาซ้ำ** แต่สรุปโครงสร้าง + เติม "สถานะการพัฒนาจริง" กำกับแต่ละหัวข้อ
   ว่าโค้ดปัจจุบันทำถึงไหนแล้วเทียบกับ spec นี้ — **เปิด docx ควบคู่เวลาอ่านไฟล์นี้**
 - `docs/02_Requirement_v2_SSOT.md` — engineering spec (HX layout, canonical Q/fouling method) ไม่ทับซ้อนกับไฟล์นี้
-- `docs/ANALYSIS_PIPELINE_GUIDE.md` — pipeline ที่รันจริงตอนนี้ (27 ขั้นตอน)
+- `docs/CURRENT_PIPELINE_MAP.md` — pipeline ที่รันจริงตอนนี้
 
 ---
 

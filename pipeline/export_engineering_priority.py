@@ -10,10 +10,11 @@ stay unambiguous.
 
 CORRECTION (Phase 2, 2026-07-17): a previous version of this docstring claimed
 hx_ranking.json's probability_score/consequence_score are "computed by a different
-method" -- checked against the actual code (11_cit_shap_importance.ipynb cell 17) and
-that's wrong: `priority_v2['probability_score'] = eng_priority['probability_score']`
+method" -- checked against the actual code (production/14_cit_model_feature_matrix.ipynb
+Part 3, formerly 16_cit_shap_importance.ipynb cell 17) and that's wrong:
+`priority_v2['probability_score'] = eng_priority['probability_score']`
 (same for consequence_score, priority_score) -- hx_ranking.json is a direct passthrough
-of THIS script's own source file, two hops downstream (08 -> 11 -> 13 -> hx_ranking.json).
+of THIS script's own source file, two hops downstream (08 -> 14(Part 3) -> 12 -> hx_ranking.json).
 It should always carry identical values to engineering_priority.json for a HX that was
 part of the same pipeline run. See the consistency check below, added after this
 discrepancy was found live during testing (hx_ranking.json served stale numbers because
@@ -70,10 +71,11 @@ def _check_hx_ranking_consistency():
               f'({V2_PRIORITY_CSV.relative_to(REPO)}) -- hx_ranking.json (built from the '
               f'latter, via notebook 11 -> 13) will show different engineering_priority_score '
               f'values than this script writes to engineering_priority.json for the same HX. '
-              f'This happens when 08_cleaning_priority_ranking.ipynb was re-run without also '
-              f're-running 09_cit_model_feature_matrix.ipynb through 13_cit_forecast_export.ipynb '
-              f'(e.g. `run_all.py --only 13` or `--from 09` without `--from 08`). Re-run the full '
-              f'chain, or notebooks 08 through 13 together, before trusting hx_ranking.json.')
+              f'This happens when production/08_cleaning_priority.ipynb was re-run without also '
+              f're-running production/14_cit_model_feature_matrix.ipynb through '
+              f'production/12_cit_forecast_export.ipynb (e.g. `run_all.py --only 12` or '
+              f'`--from 14` without `--from 08`). Re-run the full chain, or notebooks 08 through '
+              f'12 together, before trusting hx_ranking.json.')
 
 
 def main():

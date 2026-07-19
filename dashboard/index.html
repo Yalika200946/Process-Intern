@@ -339,7 +339,7 @@ function FurnacePanel({topo,params,setParams,ranking,economics,engPriorityByHX,f
   // computed once by pipeline/export_economics.py using the exact same plant formula this
   // panel used to duplicate client-side. Reading those fields directly (instead of
   // recomputing them here) closes the two-independent-implementations gap flagged in
-  // docs/CURRENT_PIPELINE_MAP.md/docs/MIGRATION_PLAN.md Phase 1 item B3: the JS side no
+  // docs/CURRENT_PIPELINE_MAP.md/docs/archive/MIGRATION_PLAN.md Phase 1 item B3: the JS side no
   // longer has its own copy of the economics formula to silently drift from the pipeline's.
   const feedKBD=charge*24/params.M3_PER_BBL/1000;
   const plantYr=(dC)=>dC*params.STD_ENERGY*feedKBD*params.NG_PRICE*360*params.CIT_DECAY;
@@ -810,7 +810,7 @@ function SlideChart({tamA}){
 // spare shell and pulling the fouled one, not by dosing chemical online -- the "ล้าง online
 // (chemical)" option doesn't apply to them (TAM_ONLY HX never reach this editor at all: they're
 // online=false, so they never appear in the table this formula editor lives in). online_mode
-// comes from per_hx (real bypass data, see notebooks/bypass_config.py), not a guess.
+// comes from per_hx (real bypass data, see src/domain/bypass.py), not a guess.
 const CLEANING_METHOD_DEFAULTS=(onlineMode)=>({methods:[
   ...(onlineMode==='SWAP_CAPABLE'?[]:[{label:'ล้าง online (chemical)',base_cost:150000,variable_cost_per_day:5000,downtime_cost_per_day:20000,duration_days:2}]),
   {label:'สลับเชลล์ / bundle pull',base_cost:300000,variable_cost_per_day:0,downtime_cost_per_day:0,duration_days:0},
@@ -1115,7 +1115,7 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
 }
 
 /* cleaning / bypass / TAM logistics list moved below; SchedulePanel/NetworkSchedulePanel/PlanTable
-   removed 2026-07-12 (dead code superseded by CleaningPlanPanel — see docs/ANALYSIS_PIPELINE_GUIDE.md §5.3) */
+   removed 2026-07-12 (dead code superseded by CleaningPlanPanel — see docs/CURRENT_PIPELINE_MAP.md) */
 
 /* cleaning / bypass / TAM logistics list (ข้อ 4) — centralises what still needs engineer input */
 function LogisticsTable({logi}){

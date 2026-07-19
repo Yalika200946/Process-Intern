@@ -22,7 +22,7 @@ Status `REQUIRES_ENGINEERING_CONFIRMATION` means one or more of the formula, tag
 
 ### Crude density and Cp
 
-The strongest legacy candidate is `notebooks/crude_properties.py`:
+The strongest legacy candidate is `src/features/crude_properties.py` (was `notebooks/crude_properties.py`):
 
 ```text
 Cp = (1.685 + 0.00339 T) / sqrt(SG)
@@ -130,7 +130,7 @@ duty_shortfall = clean_equivalent_duty - actual_duty
 Rf_proxy = 1 / UA_actual - 1 / UA_clean
 ```
 
-`Q_norm` is not approved as a fouling indicator.
+`Q_norm` is not approved as a fouling indicator. See `Q_NORM_AUDIT.md` for the full breakdown of its (at least) three conflicting formulas across the codebase.
 
 ### Fouling rate
 
@@ -220,6 +220,31 @@ The target score must expose condition, consequence, urgency, feasibility, confi
 The canonical structure will combine approved physical savings, dated prices, cleaning/downtime costs, and uncertainty. Measured event gains should be preferred when attributable; modeled values require calibration and provenance.
 
 Independent HX gains cannot be added without an approved network-interaction treatment.
+
+## Appendix: duplicated-logic register
+
+*(Merged in from the former `DUPLICATED_LOGIC_REGISTER.csv` — the full column set, including exact tags/formulas/filters per implementation, is preserved in git history if a row needs deeper inspection.)*
+
+Every row below is a calculation family with more than one competing implementation in the active codebase. `Target owner section` is the section above that should become the single source of truth once the conflict is resolved; all rows carry status `REQUIRES_REVIEW`.
+
+| ID | Family | Competing implementations | Core conflict | Target owner section |
+|---|---|---|---|---|
+| DL01 | Crude properties | 00 crude assay; `crude_properties.py`; `cpht_features.py`; NB02; NB08/schedulers/dashboard constants | Variable-property correlation vs. fixed `CP_CRUDE=2.2`/`RHO_CRUDE=850` shortcuts | Physical-property calculations |
+| DL02 | Heat duty | NB02; NB04; NB09; `cpht_features.compute_q_features`; dashboard displays | E112C tag conflict; E101G unavailable; fixed vs. temperature/SG-dependent properties | HX thermal calculations → Heat duty |
+| DL03 | Q_norm | NB02; NB04; `cpht_features`; cleaning-history CIT estimate; figures/dashboard | Denominator/interpretation differs by context; **not approved as a fouling indicator** | HX thermal calculations → Heat duty |
+| DL04 | LMTD | Legacy feature/model code, incomplete current usage | Hot-side reconfiguration and missing sensors make many HX calculations invalid; no consistent mode filter | HX thermal calculations → LMTD and UA |
+| DL05 | UA | NB02 U/UA proxy; `cpht_features`; scheduler comments; Rf calculations | Proxy called "U" may not be true overall U; design area/UA not incorporated | HX thermal calculations → LMTD and UA |
+| DL06 | Fouling index | NB02/NB04 U_relative and Rf_run; Q deviation; Q_norm; NB12 delta_CIT | No single indicator — different indicators answer different questions but get mixed in rankings | Baseline and fouling calculations → Fouling indicators |
+| DL07 | Fouling rate | NB02 rough rates; `nb_audit.robust_fouling_rate`; `compute_fouling_rate`; NB04 summaries; PHM | Tail-slope vs. whole-run/recent-slope selection differs downstream; only the robust version has reliability gates | Baseline and fouling calculations → Fouling rate |
+| DL08 | Clean baseline | NB02 P90 run baseline; `compute_fouling_rate` state-aware P90; NB06 clean-duty model; NB12 post-TAM CIT model | Post-TAM cannot automatically mean clean; baseline levels answer HX-level and furnace-level questions separately | Baseline and fouling calculations → Clean-equivalent performance |
+| DL09 | Cleaning-event detection | NB02 event_type/run reset; NB03 modes; `export_cleaning_history`; NB14; `cpht_features.get_tam_dates` | No full historical cleaning log; TAM whole-train attribution vs. switch-vs-clean ambiguity | Cleaning-event calculation |
+| DL10 | CIT prediction | NB05 sensitivity; NB09/NB10 XGB/RF/LSTM; `gen_honest_metrics`; NB12 Ridge clean CIT | Targets/horizons not uniform; honest walk-forward shows **persistence wins**, SHAP models are attribution-only | Forecasting |
+| DL11 | CIT deficit | NB12 delta_CIT; NB13 forecast deviation; scheduler network; NB16; dashboard | Clean-performance deficit, target deficit, and summed-HX deficit are not interchangeable | CIT and furnace calculations → CIT deficit |
+| DL12 | Fuel-gas penalty | `export_economics` plant formula; legacy first-principles formula; scheduler FG conversion; NB16; dashboard JS | Two conflicting formulas with different prices/constants; dashboard duplicates the core calculation | CIT and furnace calculations → Furnace-duty and fuel-gas penalties |
+| DL13 | Furnace headroom | `build_dashboard_topology`; `cleaning_scheduler_network`; tests; dashboard | Only FG_FLOW constrains the optimizer; other limits are mainly advisory and marked assumed | CIT and furnace calculations → Constraint headroom |
+| DL14 | Forecasting | NB06; NB07; NB13; `add_forecast_intervals`; PHM; EOR | Multiple targets and experimental models mixed with operational forecasts; no unified baseline/horizon registry | Forecasting |
+| DL15 | HX ranking | NB04; NB08; NB09; NB11; `export_engineering_priority`; NB13; NB16; schedulers | Different business questions presented as competing rankings; weights assumed, not approved | Priority and economics → Priority |
+| DL16 | Economic benefit | NB12 gains; `export_economics`; NB16; schedulers; dashboard | Independent HX gains may over-add; price/cost dates and approved formulas unresolved | Priority and economics → Economic benefit |
 
 ## Dashboard contract
 

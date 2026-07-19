@@ -15,8 +15,8 @@ Reason: no active production callers; superseded or prototype logic; stale confi
 
 ### Notebook builders
 
-- `notebooks/_build_cleaning_plan_notebook.py`
-- `notebooks/_build_solver_comparison_notebook.py`
+- `scripts/_build_cleaning_plan_notebook.py` (moved from `notebooks/` 2026-07-19 so `notebooks/` holds only `.ipynb` files)
+- `scripts/_build_solver_comparison_notebook.py` (moved from `notebooks/` 2026-07-19)
 
 Reason: duplicate editable sources for generated notebooks. Preserve temporarily for provenance only.
 
@@ -40,7 +40,7 @@ Reason: no active CPHT downstream users; hidden/global conventions; old model pe
 |---|---|
 | `notebooks/eda/process_control_exploration.ipynb` (moved 2026-07-17, was `_eda_process_control.ipynb`, originally `00_data_prep_process_control.ipynb`, Phase 1) | Inventory/DQ representative plots |
 | `notebooks/eda/correlation_and_pca.ipynb` (moved 2026-07-17, was `_eda_correlation_and_pca.ipynb`, originally `02b_correlation_and_pca.ipynb`) | Selected exploratory diagnostics |
-| `09_cit_model_feature_matrix.ipynb` | Any useful plotting/reference only; calculations should be rebuilt |
+| `14_cit_model_feature_matrix.ipynb` | Any useful plotting/reference only; calculations should be rebuilt |
 | `src/models/phm_config.py` (moved 2026-07-17, was `notebooks/phm_config.py`) | Approved horizon/scenario settings |
 | `src/archive/utils/analysis.py` (already archived 2026-07-17, extraction still pending) | Any desired PCA/report plotting patterns |
 | `src/archive/utils/metrics.py` (already archived 2026-07-17, extraction still pending) | None if direct sklearn metrics are adopted |
@@ -49,9 +49,8 @@ Reason: no active CPHT downstream users; hidden/global conventions; old model pe
 
 ## Keep as reference, not canonical
 
-- `10_cit_model_benchmark.ipynb`
-- `11_cit_shap_importance.ipynb`
-- `14_tam_constraint_analysis.ipynb`
+- `notebooks/production/14_cit_model_feature_matrix.ipynb` Parts 2-3 (merged 2026-07-19 from the former `15_cit_model_benchmark.ipynb` + `16_cit_shap_importance.ipynb`)
+- `notebooks/production/17_tam_constraint_analysis.ipynb`
 - `notebooks/diagnostics/solver_comparison.ipynb` (moved 2026-07-17, was `_diagnostic_solver_comparison.ipynb`)
 - `pipeline/solver_comparison.py`
 - Existing generated figures and model artifacts

@@ -52,7 +52,7 @@ python pipeline/run_all.py --from 06           # รันตั้งแต่ 
 - **เทียบโมเดลการเสื่อม** (linear/asymptotic/power/GP) + backtest out-of-sample
 - **Degradation drivers** — SHAP ตัวแปรที่มีผล (film temp/flow/asphaltene/API) + lever ลดอัตราเสื่อม
 - หมายเหตุ honesty: driver CV R²<0 (n น้อย) → เป็น associative ไม่ใช่ causation; per-HX Weibull n<4 ใช้ pooled shape
-ปรับพารามิเตอร์ PHM ได้ที่ `src/models/phm_config.py` (มี compatibility shim ที่ `notebooks/phm_config.py`)
+ปรับพารามิเตอร์ PHM ได้ที่ `src/models/phm_config.py` (เดิมมี compatibility shim ที่ `notebooks/phm_config.py`, ลบแล้ว 2026-07-19 หลังแก้ import ใน notebook ให้ชี้ตรงไป `src.*`)
 
 ## หมายเหตุสำคัญ (ผลวิเคราะห์ ML)
 โมเดล CIT ผ่าน **walk-forward CV** แล้ว **แพ้ persistence** (CIT วันนี้=เมื่อวาน) ทุก fold — R²=0.82 ที่เคยโชว์เป็น artifact ของ single-split. ใช้ tree models เพื่อ **SHAP attribution เท่านั้น** และจัดอันดับล้างโดยอิงสัญญาณฟิสิกส์ (Q-duty/fouling rate) เป็นหลัก ดูรายละเอียดในแท็บ *โมเดล & Optimization* และ notebook `6a`.

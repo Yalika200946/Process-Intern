@@ -119,7 +119,7 @@ def main():
     register = [
         dict(quantity='U_relative / fouling rate', status='measured',
              basis='U/U_clean ต่อรอบจากข้อมูลจริง (Feature_calculated.csv) + linregress ต่อรอบ',
-             source='production/03_hx_performance.ipynb (was 02_feature_engineering.ipynb)'),
+             source='production/02_hx_performance_operating_modes.ipynb (was 03_hx_performance.ipynb / 02_feature_engineering.ipynb)'),
         dict(quantity='Q duty shortfall (ค่าเบี่ยงเบน)', status='measured',
              basis='clean-baseline model refit บน 30 วันแรกหลังล้างของ HX นั้นเอง แล้ววัด deviation',
              source='production/04_clean_baseline.ipynb (was 06_fouling_rate_forecast.ipynb)'),
@@ -168,7 +168,7 @@ def main():
         principle='จัดลำดับล้างอิงสัญญาณกายภาพที่วัดได้เป็นหลัก — ไม่พึ่งโมเดลที่ยัง validate ไม่ผ่าน · ทุกโมเดลมี baseline เทียบ + CV ที่ hold out จริง + ธงความเชื่อมั่น',
         data=data_block, validation=validation,
         quantity_register=register, caveats=caveats, live_flags=live_flags,
-        methodology_ref='notebooks/METHODOLOGY.md')
+        methodology_ref='docs/METHODOLOGY.md')
     OUT.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding='utf-8')
     print(f'Wrote {OUT.name}: {n_hx} HX, {n_runs} runs ({n_flagged} flagged), '
           f'{n_events} cleaning events, {len(tams)} TAMs, {len(stale)} stale-rate flag(s)')
