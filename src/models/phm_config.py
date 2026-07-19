@@ -22,8 +22,9 @@ RATE_REL_SD_FALLBACK = 0.35
 WEIBULL_MIN_N = 4
 SURVIVAL_CURVE_DAYS = 400   # x-range for R(t)/hazard curves
 
-# Driver analysis (C4) — target is per-run fouling rate dUrel_per_day
-DRIVER_TARGET = 'dUrel_per_day'
+# Driver analysis (C4) — target is per-run fouling rate dRf_per_day (primary metric, changed
+# 2026-07-19 to match the mechanistic literature's Rf formulation; see nb_audit.robust_fouling_rate)
+DRIVER_TARGET = 'dRf_per_day'
 # built from the deviation-signal columns (film-temp proxy, flow) + crude assay
 CRUDE_FEATURES = ['API', 'Asphaltenes_pct', 'MCRT_pct', 'Visc_100C_cSt']
 DRIVER_CV_FOLDS = 5

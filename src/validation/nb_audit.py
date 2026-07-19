@@ -184,23 +184,39 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
                         min_r2_gate=0.30, max_sign_change_rate=0.35):
     """Physically-grounded, robust per-run fouling-rate estimate for ONE run's on-duty window.
 
-    Fixes the failure modes of a plain OLS-per-run on U_relative (see METHODOLOGY §3.5):
+    PRIMARY metric is Rf (fouling resistance, m^2*K/W), not U_relative (changed 2026-07-19).
+    Rf is the quantity the mechanistic fouling literature actually works in -- Kern & Seaton
+    (1959)'s asymptotic model, TEMA design fouling factors, and every Rf-based paper this
+    project reviewed (Hosseini et al. 2022's sqrt(Rf) transform, Biyanto et al. 2014's
+    Kern-Seaton scheduling model) are all formulated in Rf(t), because Rf is the physically
+    additive resistance (1/U = 1/U_clean + Rf) that grows with deposit thickness. U_relative
+    (=U/U_clean, dimensionless, cross-HX comparable) is a real practical/industrial monitoring
+    convention (a "cleanliness factor"), but it is a NONLINEAR, saturating transform of Rf
+    (U_relative = 1/(1 + Rf*U_clean) -- see production/02_hx_performance_operating_modes.ipynb
+    Section 3.5b for the empirical check) -- not an independent signal, and not the metric the
+    literature treats as fundamental. It is now the SECONDARY sign-consistency cross-check.
+
+    Fixes the failure modes of a plain OLS-per-run on U_relative (see METHODOLOGY §3.5), now
+    mirrored in Rf-space:
       * NORMAL-state mask   — drop points where the HX is SUBSTITUTED/BYPASS/OFFLINE
                               (not the active shell) so its trend reflects real service only.
-      * winsorize high-side — clip U_relative to `winsor_ceil` (~1.10); values above are
-                              baseline-too-low / throughput artifacts, not "cleaner than clean".
-      * Theil-Sen slope     — median-of-pairwise-slopes (breakdown ~29%), robust to the
-                              U_relative spikes OLS chokes on; returns a 95% CI. Kept as the
-                              robust linear baseline used for the sign/CI reliability gate.
-      * asymptotic refit    — U_relative rarely declines as one straight line for an entire
-                              run: a fast initial decline (film formation) typically flattens
-                              toward a mature-fouling floor (Kern-Seaton form). An AIC race
-                              between a straight line and a falling-exponential-asymptote curve
-                              (see curve_models.py, shared with the PHM engine) picks whichever
-                              shape actually fits, so a short/still-linear run isn't force-fit to
-                              a curve it doesn't need, and a genuinely two-phase run isn't
-                              mis-summarized by a single biased slope.
-      * tail-slope rate     — the reported `dUrel_per_day` is the CURRENT rate: the analytic
+      * winsorize            — floor Rf at 0 wherever U_relative's own winsorize trigger
+                              (U_relative > winsor_ceil, ~10% "cleaner than clean") fires --
+                              those points are baseline-too-low/throughput artifacts in EITHER
+                              unit, not genuine negative fouling resistance.
+      * Theil-Sen slope     — median-of-pairwise-slopes (breakdown ~29%) on Rf, robust to
+                              spikes OLS chokes on; returns a 95% CI. The robust linear
+                              baseline used for the sign/CI reliability gate.
+      * asymptotic refit    — Rf rarely grows as one straight line for an entire run: a fast
+                              initial rise (film formation) typically flattens toward a mature
+                              fouling-resistance ceiling Rf_inf (Kern-Seaton form, literally
+                              the textbook Rf(t)=Rf_inf*(1-exp(-t/tau)) shape -- MODELS_RISING's
+                              'asymptotic'). An AIC race between a straight line and this rising
+                              asymptote (see curve_models.py, shared with the PHM engine) picks
+                              whichever shape actually fits, so a short/still-linear run isn't
+                              force-fit to a curve it doesn't need, and a genuinely two-phase
+                              run isn't mis-summarized by a single biased slope.
+      * tail-slope rate     — the reported `dRf_per_day` is the CURRENT rate: the analytic
                               derivative of the winning curve at the run's most recent point
                               (equals the Theil-Sen slope when linear wins). This is what "how
                               fast is this HX fouling right now" should mean for ranking/RUL —
@@ -209,58 +225,96 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
       * oscillation gate     — sign-change frequency of the smoothed derivative + a model-fit R²
                               floor catch runs dominated by operational noise (e.g. repeated
                               shell-switch cycling) that a sign-of-slope-only check can miss,
-                              regardless of whether the noisy segment nets a negative slope.
-      * Rf cross-check      — slope of fouling resistance Rf (must be ≥0 physically) for a
-                              sign-consistency gate (dU_rel<0 ⇄ dRf>0).
+                              regardless of whether the noisy segment nets a positive Rf slope.
+      * U_relative cross-check — Theil-Sen slope of U_relative (must be <=0 physically) for a
+                              sign-consistency gate (dRf>0 <-> dU_rel<0).
       * recent-window rate  — Theil-Sen over the last `recent_days` on-duty days, kept as a
                               secondary diagnostic cross-check against the tail-slope estimate.
-      * reliability gate    — a fouling rate is only `reliable` if the whole-run trend is
-                              significantly NEGATIVE (CI upper < slope_tol), the selected-model
-                              fit is not noise-dominated (R² floor, sign-change-rate ceiling),
-                              span/points/NORMAL-fraction suffice, and Rf agrees; else
-                              `rate_flag` says why and it is EXCLUDED downstream rather than
-                              emitting an unphysical number.
+      * reliability gate    — a fouling rate is only `reliable` if the whole-run Rf trend is
+                              significantly POSITIVE (CI lower bound > -slope_tol), the
+                              selected-model fit is not noise-dominated (R² floor,
+                              sign-change-rate ceiling), span/points/NORMAL-fraction suffice,
+                              and U_relative agrees; else `rate_flag` says why and it is
+                              EXCLUDED downstream rather than emitting an unphysical number.
 
-    Inputs are array-likes for a single run (same length/order). `state`/`rf_run` optional.
+    Inputs are array-likes for a single run (same length/order). `state` optional; `rf_run`
+    is REQUIRED for a reliable result (returns `rate_flag='no_rf_data'` if omitted, since Rf
+    is now the primary fitted quantity -- U_relative alone can no longer establish reliability).
     Returns a dict of the CSV columns (values None when not computable)."""
     from scipy import stats
     d = np.asarray(days_on_duty, float)
     u = np.asarray(u_relative, float)
+    rf = np.asarray(rf_run, float) if rf_run is not None else None
+
     fin = np.isfinite(d) & np.isfinite(u) & (d >= lag_days)
+    if rf is not None:
+        fin = fin & np.isfinite(rf)
     st = np.asarray(state) if state is not None else None
     in_service = np.isin(st, list(inservice_states)) if st is not None else None
     normal_frac = float(in_service[fin].mean()) if (st is not None and fin.sum()) else 1.0
     keep = fin & in_service if st is not None else fin
 
     d1, u1 = d[keep], u[keep]
-    rf1 = np.asarray(rf_run, float)[keep] if rf_run is not None else None
+    rf1 = rf[keep] if rf is not None else None
 
-    # isolated single-day spike guard: a raw U_relative value far above BOTH its temporal
-    # neighbors (not a sustained step -- that's the recovery-jump guard below) is a sensor
-    # glitch, not a physical value -- a fouling film doesn't dissolve and reform within a
-    # day. Reject it outright rather than winsorize-clip it to winsor_ceil: clipping still
-    # injects a point AT winsor_ceil into the regression, which for a spike deep into an
-    # already-fouled run drags the fit far off the surrounding data (confirmed: E113A Run6
-    # 2021-10-24, raw U_relative=1.93 mid-run while the local trend was ~0.25, inflated that
-    # run's fit RMSE ~4x even though R2_model looked fine overall).
-    if len(u1) >= 8:
-        order0 = np.argsort(d1)
-        roll_med = pd.Series(u1[order0]).rolling(7, min_periods=3, center=True).median().to_numpy()
-        dev = u1[order0] - roll_med
-        spike_sorted = np.isfinite(dev) & (dev > 0.3) & (u1[order0] > winsor_ceil)
-        spike = np.zeros(len(u1), dtype=bool)
-        spike[order0[spike_sorted]] = True
-        if spike.any():
-            d1, u1 = d1[~spike], u1[~spike]
-            if rf1 is not None:
-                rf1 = rf1[~spike]
+    out = dict(dRf_per_day=None, intercept=None, dRf_ci_lo=None, dRf_ci_hi=None,
+               dRf_per_day_recent=None, dUrel_per_day=None, R2=None,
+               N_regression_pts=int(len(d1)), span_days=round(float(d1.max() - d1.min()), 1) if len(d1) else 0.0,
+               normal_frac=round(normal_frac, 3), n_winsorized=0,
+               split_after_day=None,
+               model_selected=None, dRf_per_day_tail=None, dRf_per_day_wholerun=None,
+               tau_days=None, A_asymp=None, Rf_inf_asymp=None, asymp_aic=None, linear_aic=None,
+               R2_model=None, sign_change_rate=None, last_day_on_duty=None,
+               reliable=False, rate_flag=None,
+               # back-compat aliases: dUrel_per_day no longer gets its own curve fit (U_relative
+               # is now the secondary check, always a plain Theil-Sen slope), so "tail" and
+               # "wholerun" collapse to the same number -- kept as separate columns only because
+               # existing consumers (compute_fouling_rate.py's column list) already read them.
+               dUrel_per_day_tail=None, dUrel_per_day_wholerun=None)
 
-    n_wins = int((u1 > winsor_ceil).sum()) if len(u1) else 0
+    if rf1 is None:
+        out['rate_flag'] = 'no_rf_data'
+        return out
+
+    # data-sufficiency gate (physical trend can't be read from too little in-service data);
+    # span/point-count gates are applied further below, AFTER spike/winsor/split filtering,
+    # against the actual thresholds (min_span_days/min_pts) rather than a hardcoded minimum --
+    # an empty/near-empty `d1` here (e.g. a run shorter than lag_days) falls through safely
+    # since every block below is itself guarded by `if len(...) >= 8`.
+    if normal_frac < min_normal_frac:
+        out['rate_flag'] = 'substituted_dominated'; return out
+
+    # isolated single-day spike guard: a raw Rf value far BELOW both temporal neighbors (the
+    # mirror image of a U_relative spike far ABOVE its neighbors -- same underlying sensor
+    # glitch, viewed in the other unit) is not physical -- a fouling film doesn't dissolve and
+    # reform within a day. Reject it outright rather than winsorize-clip: clipping still injects
+    # a point at the floor into the regression, which for a spike deep into an already-fouled
+    # run drags the fit far off the surrounding data (same failure mode previously confirmed on
+    # E113A Run6 2021-10-24 in U_relative terms).
+    order0 = np.argsort(d1)
+    roll_med_rf = pd.Series(rf1[order0]).rolling(7, min_periods=3, center=True).median().to_numpy()
+    dev_rf = rf1[order0] - roll_med_rf
+    u_winsor_trigger_sorted = u1[order0] > winsor_ceil
+    spike_sorted = np.isfinite(dev_rf) & (dev_rf < -0.3 * np.nanmedian(np.abs(roll_med_rf[np.isfinite(roll_med_rf)]))
+                                          if np.isfinite(roll_med_rf).any() else False) & u_winsor_trigger_sorted
+    spike = np.zeros(len(d1), dtype=bool)
+    spike[order0[spike_sorted]] = True
+    if spike.any():
+        d1, u1, rf1 = d1[~spike], u1[~spike], rf1[~spike]
+
+    # winsorize: wherever U_relative's own calibrated trigger (>winsor_ceil, ~10% "cleaner
+    # than clean") fires, floor Rf at 0 -- reuses the existing dimensionless-calibrated
+    # threshold rather than re-deriving an Rf-specific one (which would need U_clean, not
+    # available in this function's signature).
+    winsor_mask = u1 > winsor_ceil
+    n_wins = int(winsor_mask.sum())
+    rf1 = np.where(winsor_mask, np.minimum(rf1, 0.0), rf1)
     u1 = np.clip(u1, None, winsor_ceil)
 
-    # intra-run cleaning guard: if U_relative jumps UP mid-run (an undetected clean/recovery),
-    # never regress across it — keep only the segment AFTER the last such jump (the current
-    # sub-run). Directly prevents a trend line spanning a recovery (complaint #3).
+    # intra-run cleaning guard: if U_relative jumps UP mid-run (an undetected clean/recovery,
+    # detected on U_relative since its dimensionless [0,1] scale is already calibrated across
+    # HX of very different Rf magnitude), never regress across it in EITHER unit -- keep only
+    # the segment AFTER the last such jump (the current sub-run).
     split_at = None
     if len(u1) >= 8:
         order = np.argsort(d1)
@@ -270,118 +324,101 @@ def robust_fouling_rate(days_on_duty, u_relative, rf_run=None, state=None,
             cut = d1[order][jumps[-1] + 1]
             split_at = float(cut)
             seg = d1 >= cut
-            d1, u1 = d1[seg], u1[seg]
-            if rf1 is not None:
-                rf1 = rf1[seg]
+            d1, u1, rf1 = d1[seg], u1[seg], rf1[seg]
     span = float(d1.max() - d1.min()) if len(d1) else 0.0
+    out['span_days'] = round(span, 1)
+    out['n_winsorized'] = n_wins
+    out['split_after_day'] = round(split_at, 1) if split_at is not None else None
 
-    out = dict(dUrel_per_day=None, intercept=None, dUrel_ci_lo=None, dUrel_ci_hi=None,
-               dUrel_per_day_recent=None, dRf_per_day=None, R2=None,
-               N_regression_pts=int(len(d1)), span_days=round(span, 1),
-               normal_frac=round(normal_frac, 3), n_winsorized=n_wins,
-               split_after_day=(round(split_at, 1) if split_at is not None else None),
-               model_selected=None, dUrel_per_day_tail=None, dUrel_per_day_wholerun=None,
-               tau_days=None, A_asymp=None, Rf_inf_asymp=None, asymp_aic=None, linear_aic=None,
-               R2_model=None, sign_change_rate=None, last_day_on_duty=None,
-               reliable=False, rate_flag=None)
-
-    # data-sufficiency gates (physical trend can't be read from too little in-service data)
-    if normal_frac < min_normal_frac:
-        out['rate_flag'] = 'substituted_dominated'; return out
     if span < min_span_days:
         out['rate_flag'] = 'insufficient_span'; return out
     if len(d1) < min_pts:
         out['rate_flag'] = 'few_points'; return out
 
     order = np.argsort(d1)
-    d1s, u1s = d1[order], u1[order]
+    d1s, rf1s = d1[order], rf1[order]
 
-    slope, intercept, lo, hi = stats.theilslopes(u1, d1)
+    slope, intercept, lo, hi = stats.theilslopes(rf1, d1)
     pred = intercept + slope * d1
-    ss_tot = float(np.sum((u1 - u1.mean()) ** 2))
-    r2 = 1 - float(np.sum((u1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
+    ss_tot = float(np.sum((rf1 - rf1.mean()) ** 2))
+    r2 = 1 - float(np.sum((rf1 - pred) ** 2)) / ss_tot if ss_tot > 0 else 0.0
 
-    # AIC race: linear vs falling-asymptote (Kern-Seaton), on the same sorted (d1s, u1s)
+    # AIC race: linear vs rising-asymptote (Kern-Seaton), on the same sorted (d1s, rf1s)
     # window the Theil-Sen fit used. Deliberately NOT racing the 3rd 'power' shape here
     # (unlike phm_analysis.py's deviation-signal race): power has no established physical
     # basis for fouling resistance (linear and asymptotic are the two textbook models), and
     # there is no downstream support for extrapolating/plotting a power-law winner (no
-    # amplitude/tau-equivalent parameters) -- a run where power fits best would otherwise
-    # silently fall back to 'linear' below, which is wrong (confirmed: E101AB Run2's power
-    # fit has AIC -7684 vs asymptotic -7217 vs linear -6733; letting power win the race but
-    # then discarding it kept selecting 'linear' even though asymptotic clearly fits far
-    # better than linear too). `curve_models.fit_model` returns None (excluded from the
-    # race) on a non-converging fit rather than raising, so a run where the curve fit fails
-    # simply falls back to the linear/Theil-Sen result below.
-    fit_lin = cm.fit_model('linear', d1s, u1s, models=cm.MODELS_FALLING)
-    fit_asy = cm.fit_model('asymptotic', d1s, u1s, models=cm.MODELS_FALLING)
+    # amplitude/tau-equivalent parameters). `curve_models.fit_model` returns None (excluded
+    # from the race) on a non-converging fit rather than raising, so a run where the curve
+    # fit fails simply falls back to the linear/Theil-Sen result below.
+    fit_lin = cm.fit_model('linear', d1s, rf1s, models=cm.MODELS_RISING)
+    fit_asy = cm.fit_model('asymptotic', d1s, rf1s, models=cm.MODELS_RISING)
     fits = [f for f in (fit_lin, fit_asy) if f]
     best = min(fits, key=lambda f: f['aic']) if fits else None
 
     if best is not None and best['name'] == 'asymptotic':
         model_selected = 'asymptotic'
-        dUrel_tail = cm.tail_slope('asymptotic', best['params'], d1s[-1], models=cm.MODELS_FALLING)
-        A_amp, tau, c_floor = best['params']
+        dRf_tail = cm.tail_slope('asymptotic', best['params'], d1s[-1], models=cm.MODELS_RISING)
+        A_amp, tau, c_ceiling = best['params']
         tau_days = float(tau)
-        rf_inf_asymp = float(c_floor)   # asymptotic U_relative floor this run trends toward
-        a_asymp = float(A_amp)          # amplitude — with tau/c_floor, fully reconstructs the
-                                         # fitted curve y(t)=A*exp(-t/tau)+c for downstream projection
-        pred_sel = cm.MODELS_FALLING['asymptotic'][0](d1s, *best['params'])
+        rf_inf_asymp = float(c_ceiling)  # asymptotic Rf ceiling this run trends toward
+        a_asymp = float(A_amp)           # amplitude — with tau/c, fully reconstructs the
+                                          # fitted curve y(t)=A*(1-exp(-t/tau))+c for projection
+        pred_sel = cm.MODELS_RISING['asymptotic'][0](d1s, *best['params'])
     else:
         model_selected = 'linear'
-        dUrel_tail = float(slope)
+        dRf_tail = float(slope)
         tau_days = None
         rf_inf_asymp = None
         a_asymp = None
         pred_sel = intercept + slope * d1s
-    ss_tot_sel = float(np.sum((u1s - u1s.mean()) ** 2))
-    r2_model = 1 - float(np.sum((u1s - pred_sel) ** 2)) / ss_tot_sel if ss_tot_sel > 0 else 0.0
+    ss_tot_sel = float(np.sum((rf1s - rf1s.mean()) ** 2))
+    r2_model = 1 - float(np.sum((rf1s - pred_sel) ** 2)) / ss_tot_sel if ss_tot_sel > 0 else 0.0
 
     # oscillation / operational-noise detector: sign-change frequency of the smoothed
-    # derivative. A genuine fouling trend (linear or asymptotic-decay) is mostly one-signed;
+    # derivative. A genuine fouling trend (linear or asymptotic-rise) is mostly one-signed;
     # an operational sawtooth (e.g. repeated shell-switch cycling) flips sign often regardless
     # of its net slope, which a sign-of-net-slope-only check can miss.
-    roll = pd.Series(u1s).rolling(7, min_periods=3, center=True).mean().to_numpy()
+    roll = pd.Series(rf1s).rolling(7, min_periods=3, center=True).mean().to_numpy()
     dsig = np.sign(np.diff(roll))
     dsig = dsig[np.isfinite(dsig) & (dsig != 0)]
     sign_change_rate = float(np.mean(np.diff(dsig) != 0)) if len(dsig) > 1 else 0.0
 
     rec = d1 >= (d1.max() - recent_days)
-    slope_recent = stats.theilslopes(u1[rec], d1[rec])[0] if rec.sum() >= max(8, min_pts // 2) else None
-    slope_rf = None
-    if rf1 is not None and np.isfinite(rf1).sum() >= min_pts:
-        mrf = np.isfinite(rf1)
-        slope_rf = float(stats.theilslopes(rf1[mrf], d1[mrf])[0])
+    slope_recent = stats.theilslopes(rf1[rec], d1[rec])[0] if rec.sum() >= max(8, min_pts // 2) else None
+    slope_urel = float(stats.theilslopes(u1, d1)[0])   # secondary cross-check, always simple Theil-Sen
 
-    out.update(dUrel_per_day=round(float(dUrel_tail), 6),
-               intercept=round(float(intercept), 6),
-               dUrel_ci_lo=round(float(lo), 6), dUrel_ci_hi=round(float(hi), 6),
-               dUrel_per_day_recent=(round(float(slope_recent), 6) if slope_recent is not None else None),
-               dRf_per_day=(round(slope_rf, 8) if slope_rf is not None else None),
+    out.update(dRf_per_day=round(float(dRf_tail), 8),
+               intercept=round(float(intercept), 8),
+               dRf_ci_lo=round(float(lo), 8), dRf_ci_hi=round(float(hi), 8),
+               dRf_per_day_recent=(round(float(slope_recent), 8) if slope_recent is not None else None),
+               dUrel_per_day=round(slope_urel, 6),
+               dUrel_per_day_tail=round(slope_urel, 6),
+               dUrel_per_day_wholerun=round(slope_urel, 6),
                R2=round(float(r2), 3),
                model_selected=model_selected,
-               dUrel_per_day_tail=round(float(dUrel_tail), 6),
-               dUrel_per_day_wholerun=round(float(slope), 6),
+               dRf_per_day_tail=round(float(dRf_tail), 8),
+               dRf_per_day_wholerun=round(float(slope), 8),
                tau_days=(round(tau_days, 2) if tau_days is not None else None),
-               A_asymp=(round(a_asymp, 6) if a_asymp is not None else None),
-               Rf_inf_asymp=(round(rf_inf_asymp, 4) if rf_inf_asymp is not None else None),
+               A_asymp=(round(a_asymp, 8) if a_asymp is not None else None),
+               Rf_inf_asymp=(round(rf_inf_asymp, 6) if rf_inf_asymp is not None else None),
                asymp_aic=(round(fit_asy['aic'], 2) if fit_asy else None),
                linear_aic=(round(fit_lin['aic'], 2) if fit_lin else None),
                R2_model=round(float(r2_model), 3),
                sign_change_rate=round(sign_change_rate, 3),
                last_day_on_duty=round(float(d1s[-1]), 2))
 
-    # physical + reliability constraint: a genuine fouling run has U_relative STRICTLY declining
-    # (slope<0) with a CI whose upper bound is still essentially negative (< slope_tol).
-    if slope >= 0 or hi >= slope_tol:
-        out['rate_flag'] = 'positive_slope_throughput' if slope > slope_tol else 'flat_no_signal'
+    # physical + reliability constraint: a genuine fouling run has Rf STRICTLY increasing
+    # (slope>0) with a CI whose lower bound is still essentially positive (> -slope_tol).
+    if slope <= 0 or lo <= -slope_tol:
+        out['rate_flag'] = 'negative_slope_recovery' if slope < -slope_tol else 'flat_no_signal'
         return out
     if r2_model < min_r2_gate:
         out['rate_flag'] = 'noisy_low_r2'; return out
     if sign_change_rate > max_sign_change_rate:
         out['rate_flag'] = 'oscillating'; return out
-    if slope_rf is not None and slope_rf < -slope_tol:   # U falling but Rf also falling → inconsistent
-        out['rate_flag'] = 'rf_inconsistent'; return out
+    if slope_urel > slope_tol:   # Rf rising but U_relative also rising -> inconsistent
+        out['rate_flag'] = 'urel_inconsistent'; return out
     out['reliable'] = True; out['rate_flag'] = 'ok'
     return out
 

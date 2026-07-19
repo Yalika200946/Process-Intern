@@ -1,6 +1,6 @@
 """
 Regression tests for nb_audit.robust_fouling_rate's physical-constraint checks and
-label_fouling_phase -- previously the "reliable run never has slope>=0" invariant was only
+label_fouling_phase -- previously the "reliable run never has dRf/dt<=0" invariant was only
 an assert inside pipeline/compute_fouling_rate.py, which only fires when someone runs the
 full pipeline against the real ~500K-row dataset. These run fast against small synthetic
 runs so the invariant is checked on every code change, not just a full pipeline run.
@@ -8,6 +8,11 @@ runs so the invariant is checked on every code change, not just a full pipeline 
 docs/requirements/03_Business_Problem_and_Requirements.md flags zero automated tests anywhere in the
 repo as a gap -- this is a starting point (highest-risk, already-fragile logic), not full
 coverage of the pipeline.
+
+Rf is now the PRIMARY fitted metric (changed 2026-07-19, to match the mechanistic fouling
+literature -- see nb_audit.robust_fouling_rate's docstring), so every synthetic run below
+carries a `rf` array alongside `u`, built as the physical inverse Rf = (1/U_relative - 1)
+(U_clean=1 for these unitless synthetic tests) so the two stay mutually consistent.
 """
 import numpy as np
 
@@ -17,40 +22,43 @@ from src.validation import nb_audit as A
 def _synthetic_run(n=60, true_slope=-0.002, noise=0.01, start=1.0, seed=0):
     """A clean, monotonically-fouling synthetic run: U_relative starts near 1.0 and decays
     linearly (plus noise) over `n` in-service days -- enough points/span to clear
-    robust_fouling_rate's data-sufficiency gates (min_span_days=30, min_pts=20)."""
+    robust_fouling_rate's data-sufficiency gates (min_span_days=30, min_pts=20). `rf` is the
+    physically consistent fouling resistance (U_clean=1), which rises as U_relative falls."""
     rng = np.random.default_rng(seed)
     days = np.arange(n, dtype=float)
     u = start + true_slope * days + rng.normal(0, noise, n)
+    rf = 1.0 / np.clip(u, 1e-3, None) - 1.0
     state = np.array(["NORMAL"] * n)
-    return days, u, state
+    return days, u, rf, state
 
 
 class TestRobustFoulingRatePhysicalInvariant:
-    def test_reliable_run_never_has_nonnegative_slope(self):
+    def test_reliable_run_never_has_nonpositive_rf_slope(self):
         """The core physical invariant compute_fouling_rate.py asserts on the real dataset
-        (fouling can't reverse itself -- U_relative can't trend upward while marked
-        `reliable`)."""
-        days, u, state = _synthetic_run()
-        res = A.robust_fouling_rate(days, u, state=state)
+        (fouling can't reverse itself -- Rf can't trend downward while marked `reliable`)."""
+        days, u, rf, state = _synthetic_run()
+        res = A.robust_fouling_rate(days, u, rf_run=rf, state=state)
         if res["reliable"]:
-            assert res["dUrel_per_day"] < 0
+            assert res["dRf_per_day"] > 0
 
     def test_flat_run_is_not_reliable(self):
         """A run with no real trend (pure noise around a constant) must not be marked
-        reliable -- reliability requires the CI upper bound to be significantly negative."""
+        reliable -- reliability requires the CI lower bound to be significantly positive."""
         days = np.arange(60, dtype=float)
         rng = np.random.default_rng(1)
         u = 0.9 + rng.normal(0, 0.02, 60)  # flat, no slope
+        rf = 1.0 / np.clip(u, 1e-3, None) - 1.0
         state = np.array(["NORMAL"] * 60)
-        res = A.robust_fouling_rate(days, u, state=state)
+        res = A.robust_fouling_rate(days, u, rf_run=rf, state=state)
         assert not res["reliable"]
 
     def test_insufficient_span_is_flagged_not_silently_accepted(self):
         """A run shorter than min_span_days must be flagged, not fitted anyway."""
         days = np.arange(10, dtype=float)  # well under min_span_days=30
         u = 1.0 - 0.01 * days
+        rf = 1.0 / np.clip(u, 1e-3, None) - 1.0
         state = np.array(["NORMAL"] * 10)
-        res = A.robust_fouling_rate(days, u, state=state)
+        res = A.robust_fouling_rate(days, u, rf_run=rf, state=state)
         assert not res["reliable"]
         assert res["rate_flag"] == "insufficient_span"
 
@@ -58,11 +66,19 @@ class TestRobustFoulingRatePhysicalInvariant:
         """A run where the HX spends most of its time NOT actually in service (e.g.
         SUBSTITUTED) must not produce a rate at all -- the trend wouldn't reflect this
         HX's own fouling."""
-        days, u, _ = _synthetic_run()
+        days, u, rf, _ = _synthetic_run()
         state = np.array(["SUBSTITUTED"] * len(days))  # never actually in service
-        res = A.robust_fouling_rate(days, u, state=state)
+        res = A.robust_fouling_rate(days, u, rf_run=rf, state=state)
         assert not res["reliable"]
         assert res["rate_flag"] == "substituted_dominated"
+
+    def test_missing_rf_data_is_flagged(self):
+        """Rf is now the primary fitted quantity -- omitting it entirely must not silently
+        fall back to a U_relative-only reliable result."""
+        days, u, _, state = _synthetic_run()
+        res = A.robust_fouling_rate(days, u, state=state)
+        assert not res["reliable"]
+        assert res["rate_flag"] == "no_rf_data"
 
 
 class TestLabelFoulingPhase:

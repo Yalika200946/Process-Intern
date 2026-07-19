@@ -109,7 +109,7 @@ def run_c1():
 
 # ---------------- C2: Monte-Carlo RUL ----------------
 def rate_rel_sd(hx):
-    sub = fr[fr.HX == hx]['dUrel_per_day'].dropna()
+    sub = fr[fr.HX == hx]['dRf_per_day'].dropna()
     if len(sub) >= 2 and sub.mean() != 0:
         return float(min(abs(sub.std() / sub.mean()), 1.5))
     return C.RATE_REL_SD_FALLBACK
@@ -196,7 +196,7 @@ def run_c4():
             fr_row = fr[(fr.HX == hx) & (fr.Run == r)]
             if fr_row.empty:
                 continue
-            rate = float(fr_row['dUrel_per_day'].iloc[0])
+            rate = float(fr_row['dRf_per_day'].iloc[0])
             if not np.isfinite(rate):
                 continue
             dr = rr['Timestamp']

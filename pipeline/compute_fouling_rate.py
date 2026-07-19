@@ -11,10 +11,16 @@ exports) run after this and read the robust file.
 
 Method — `nb_audit.robust_fouling_rate` per HX per run (see METHODOLOGY §3.5):
   in-service mask (NORMAL/SUBSTITUTE_ACTIVE/PARALLEL) · winsorize U_relative to 1.10 ·
-  Theil-Sen slope + 95% CI · Rf cross-check (dRf/dt≥0) · recent-60d "current" rate ·
+  AIC-race curve fit (linear vs Kern-Seaton asymptote) directly on Rf, Theil-Sen slope
+  + 95% CI · U_relative cross-check (dU_rel/dt≤0) · recent-60d "current" rate ·
   intra-run recovery split · reliability gate → `reliable` + `rate_flag`.
 
-Physical invariant enforced & asserted: no `reliable` run has slope ≥ 0.
+PRIMARY metric is Rf (fouling resistance), not U_relative — changed 2026-07-19 to match
+the mechanistic fouling literature (Kern-Seaton, Ebert-Panchal), which is formulated in
+Rf(t), not the U_relative "cleanliness factor" convention. See nb_audit.robust_fouling_rate's
+docstring for the full rationale.
+
+Physical invariant enforced & asserted: no `reliable` run has dRf_per_day ≤ 0.
 
 BEFORE the rate regression, this also fixes the same in-service blind spot in the
 baseline itself: notebook 02's `U_clean_run` (P90 of the first CLEAN_WINDOW_DAYS of a
@@ -153,11 +159,17 @@ def main():
                 start_evt = str(evt[m].dropna().iloc[0])
             # keep the raw robust slope for transparency, but NULL the primary rate columns
             # for runs that fail the physics/reliability gate — so every downstream consumer
-            # that does `dropna(subset=['dUrel_per_month'])` (e.g. 2d) auto-excludes them
+            # that does `dropna(subset=['dRf_per_month'])` (e.g. 2d) auto-excludes them
             # without any notebook edit, and no unphysical number ever reaches ranking.
-            raw = res['dUrel_per_day']
+            raw_rf = res['dRf_per_day']
             reliable = bool(res['reliable'])
-            primary = raw if reliable else None
+            primary_rf = raw_rf if reliable else None
+            # dUrel_per_month: kept for consumers not yet migrated off the old primary metric
+            # (export_cleaning_history.py, export_hx_timeseries.py, _build_cleaning_plan_notebook.py,
+            # the dashboard) — now derived from the SECONDARY Theil-Sen U_relative cross-check
+            # (res['dUrel_per_day']), gated by the same Rf-based `reliable` flag, not its own fit.
+            raw_urel = res['dUrel_per_day']
+            primary_urel = raw_urel if reliable else None
             res.update(
                 HX=hx, Run=int(run),
                 Start_event=start_evt,
@@ -165,22 +177,26 @@ def main():
                 Duration_days=dur,
                 U_clean_run=(round(float(ucr[m].dropna().iloc[0]), 2)
                              if ucr is not None and ucr[m].notna().any() else None),
-                dUrel_per_day_raw=raw,
-                dUrel_per_day=primary,
-                dUrel_per_month=(round(primary * 30, 4) if primary is not None else None),
-                p_value=None,  # Theil-Sen: use CI (dUrel_ci_lo/hi) instead of a p-value
+                dRf_per_day_raw=raw_rf,
+                dRf_per_day=primary_rf,
+                dRf_per_month=(round(primary_rf * 30, 6) if primary_rf is not None else None),
+                dUrel_per_day=primary_urel,
+                dUrel_per_month=(round(primary_urel * 30, 4) if primary_urel is not None else None),
+                p_value=None,  # Theil-Sen: use CI (dRf_ci_lo/hi) instead of a p-value
             )
             rows.append(res)
 
     cols = ['HX', 'Run', 'Start_event', 'Run_start', 'Duration_days', 'U_clean_run',
-            'dUrel_per_day', 'intercept', 'dUrel_per_month', 'dUrel_per_day_raw', 'dUrel_ci_lo', 'dUrel_ci_hi',
-            'dUrel_per_day_recent', 'dRf_per_day', 'R2', 'p_value', 'N_regression_pts',
+            'dRf_per_day', 'intercept', 'dRf_per_month', 'dRf_per_day_raw', 'dRf_ci_lo', 'dRf_ci_hi',
+            'dRf_per_day_recent', 'dUrel_per_day', 'dUrel_per_month', 'R2', 'p_value', 'N_regression_pts',
             'span_days', 'normal_frac', 'n_winsorized', 'split_after_day',
-            # asymptotic-fit diagnostics (curve_models.py AIC race, see nb_audit.robust_fouling_rate):
-            # dUrel_per_day (above) IS dUrel_per_day_tail — kept as one column so existing
-            # consumers don't need to change; dUrel_per_day_wholerun is the old single-line
-            # Theil-Sen estimate, kept as a secondary cross-check now that it's no longer primary.
-            'model_selected', 'dUrel_per_day_tail', 'dUrel_per_day_wholerun',
+            # asymptotic-fit diagnostics (curve_models.py AIC race on Rf, see nb_audit.robust_fouling_rate):
+            # dRf_per_day (above) IS dRf_per_day_tail — kept as one column so existing
+            # consumers don't need to change; dRf_per_day_wholerun is the whole-run single-line
+            # Theil-Sen estimate, kept as a secondary cross-check. dUrel_per_day_tail/_wholerun
+            # are now just the plain Theil-Sen U_relative slope (secondary sign cross-check only).
+            'model_selected', 'dRf_per_day_tail', 'dRf_per_day_wholerun',
+            'dUrel_per_day_tail', 'dUrel_per_day_wholerun',
             'tau_days', 'A_asymp', 'Rf_inf_asymp', 'asymp_aic', 'linear_aic', 'R2_model',
             'sign_change_rate', 'last_day_on_duty',
             'reliable', 'rate_flag']
@@ -188,15 +204,15 @@ def main():
     df.to_csv(OUT, index=False)
 
     rel = df[df['reliable'] == True]  # noqa: E712
-    n_bad = int((rel['dUrel_per_day'] >= 0).sum())
-    assert n_bad == 0, f'PHYSICAL INVARIANT VIOLATED: {n_bad} reliable run(s) with slope >= 0'
+    n_bad = int((rel['dRf_per_day'] <= 0).sum())
+    assert n_bad == 0, f'PHYSICAL INVARIANT VIOLATED: {n_bad} reliable run(s) with dRf_per_day <= 0'
     miss = sorted(set(df['HX']) - set(rel['HX']))
-    print(f'Wrote {OUT.name}: {len(df)} runs, {len(rel)} reliable (slope<0, physical), '
+    print(f'Wrote {OUT.name}: {len(df)} runs, {len(rel)} reliable (dRf/dt>0, physical), '
           f'{len(df) - len(rel)} flagged')
     print('  flags:', df['rate_flag'].value_counts().to_dict())
     if miss:
         print(f'  HX with no reliable run (rate falls back to partner/None downstream): {miss}')
-    print('  physical invariant OK: 0 reliable runs with slope >= 0')
+    print('  physical invariant OK: 0 reliable runs with dRf_per_day <= 0')
 
     try:
         _hot_cold_balance_diagnostic()

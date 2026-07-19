@@ -6,9 +6,14 @@ HX, how far it is from the "must-clean" point and how many days remain — plus 
 Q -> CIT consequence when it gets there.
 
 Engineering basis (both views the UI toggles between):
-  * TRIGGER (fouling view): U_relative — throughput-independent fouling indicator
-    (U/U_clean). Clean = 1.0. Trigger = 1 - TRIGGER_DROP_FRAC (12.5% loss of clean
-    U), the same criterion notebook 5 / METHODOLOGY §4 use.
+  * TRIGGER (fouling view): the UI still displays U_relative — throughput-independent
+    fouling indicator (U/U_clean), clean = 1.0, trigger = 1 - TRIGGER_DROP_FRAC (12.5%
+    loss of clean U), the same criterion notebook 5 / METHODOLOGY §4 use. But the
+    underlying curve fit/extrapolation (Fouling_Rate_By_Run.csv, since 2026-07-19) is now
+    done in Rf (fouling resistance) space, the metric the mechanistic literature actually
+    formulates (Kern-Seaton). This module converts Rf<->U_relative via
+    Rf = (1/U_relative - 1)/U_clean (see `_rf_to_urel`/`_urel_to_rf`/`_durel_dt_from_drf_dt`)
+    so the dashboard's user-facing numbers/chart stay in the familiar U_relative units.
   * CONSEQUENCE (duty view): actual duty Q [kW] declining vs the clean-model Q, with
     a q_trigger line = clean_Q - threshold_shortfall. "Duty shortfall" (kW below
     clean) is exactly the `deviation` signal (predicted_clean_Q - actual_Q).
@@ -44,6 +49,27 @@ def _num(v, nd=3):
     return None if v is None or (isinstance(v, float) and not np.isfinite(v)) else round(float(v), nd)
 
 
+def _rf_to_urel(rf, u_clean):
+    """Rf = (1/U_relative - 1)/U_clean  <=>  U_relative = 1/(1 + Rf*U_clean)."""
+    if rf is None or u_clean is None or not np.isfinite(rf) or not np.isfinite(u_clean) or u_clean <= 0:
+        return None
+    return 1.0 / (1.0 + rf * u_clean)
+
+
+def _urel_to_rf(urel, u_clean):
+    if urel is None or u_clean is None or not np.isfinite(urel) or not np.isfinite(u_clean) or urel <= 0 or u_clean <= 0:
+        return None
+    return (1.0 / urel - 1.0) / u_clean
+
+
+def _durel_dt_from_drf_dt(rf_now, drf_dt, u_clean):
+    """Chain rule on U_relative = 1/(1+Rf*U_clean): dU_rel/dt = -U_clean*dRf/dt / (1+Rf*U_clean)^2."""
+    if any(v is None or not np.isfinite(v) for v in (rf_now, drf_dt, u_clean)) or u_clean <= 0:
+        return None
+    denom = (1.0 + rf_now * u_clean) ** 2
+    return -u_clean * drf_dt / denom if denom > 0 else None
+
+
 def _load_json(name):
     p = REPO / 'dashboard' / 'data' / name
     return json.loads(p.read_text(encoding='utf-8')) if p.exists() else None
@@ -77,35 +103,45 @@ def main():
         cur_dod = _num(feat[dod_col].dropna().iloc[-1]) if dod_col in feat else None
         cur_urel = float(ur.iloc[-1])
 
-        # ---- current-run fouling rate (dU_relative/day), from the ROBUST Fouling_Rate_By_Run ----
-        # Only trust a rate the physics-gate marked `reliable` (slope<0, in-service, enough span).
+        # ---- current-run fouling rate, from the ROBUST Fouling_Rate_By_Run ----
+        # Only trust a rate the physics-gate marked `reliable` (dRf/dt>0, in-service, enough span).
         # Priority: current run if reliable → most recent OTHER reliable run of this HX (flagged) →
-        # current-run tail fit → none. `dUrel_per_day` is now itself the curve-aware TAIL slope
-        # (nb_audit.robust_fouling_rate's linear-vs-asymptotic AIC race — see curve_models.py),
-        # so it is preferred directly rather than falling back to a raw noisy recent-60d window
-        # (that window is only used as a secondary cross-check if the tail slope is unavailable).
-        # This supersedes the old "last row in file" logic that mixed a finished run's rate into
-        # the current card (the E112C contradiction).
-        def _rate_of(row):
-            tail = _num(row.get('dUrel_per_day'), 6)
-            rec = _num(row.get('dUrel_per_day_recent'), 6)
-            return tail if tail is not None else rec
+        # current-run tail fit → none. `dRf_per_day` is now itself the curve-aware TAIL slope
+        # (nb_audit.robust_fouling_rate's linear-vs-asymptotic AIC race, fit directly on Rf per
+        # the mechanistic literature — see curve_models.py), so it is preferred directly rather
+        # than falling back to a raw noisy recent-60d window (that window is only used as a
+        # secondary cross-check if the tail slope is unavailable). The result is converted to a
+        # U_relative-space rate (`_durel_dt_from_drf_dt`) so the dashboard's user-facing number
+        # stays in the familiar unit. This supersedes the old "last row in file" logic that mixed
+        # a finished run's rate into the current card (the E112C contradiction).
+        def _rate_of(row, urel_now):
+            tail = _num(row.get('dRf_per_day'), 8)
+            rec = _num(row.get('dRf_per_day_recent'), 8)
+            rf_rate = tail if tail is not None else rec
+            if rf_rate is None:
+                return None
+            u_clean = row.get('U_clean_run')
+            rf_now = _urel_to_rf(urel_now, u_clean)
+            return _num(_durel_dt_from_drf_dt(rf_now, rf_rate, u_clean), 6)
 
         def _curve_of(row):
-            """Reconstruct the fitted falling-asymptote curve (A, tau, c, anchor day) for
-            extrapolation, but only when the run's own data actually spans enough of the fitted
-            time constant to trust the asymptote (span >= 0.5*tau) — otherwise a short run's
-            curve fit is too uncertain to extrapolate and callers should fall back to a linear
-            projection from the tail slope instead."""
+            """Reconstruct the fitted rising-asymptote Rf(t) curve (A, tau, c, anchor day,
+            U_clean of this run) for extrapolation, but only when the run's own data actually
+            spans enough of the fitted time constant to trust the asymptote (span >= 0.5*tau)
+            — otherwise a short run's curve fit is too uncertain to extrapolate and callers
+            should fall back to a linear projection from the tail slope instead. The curve
+            itself is fit in Rf-space (A_asymp/tau_days/Rf_inf_asymp now describe the Rf
+            ceiling, not a U_relative floor); U_clean_run is carried alongside so callers can
+            convert projected Rf(t) back to U_relative for display."""
             if row.get('model_selected') != 'asymptotic':
                 return None
-            A, tau, c, t0, span = (row.get('A_asymp'), row.get('tau_days'), row.get('Rf_inf_asymp'),
-                                    row.get('last_day_on_duty'), row.get('span_days'))
-            if any(v is None or (isinstance(v, float) and not np.isfinite(v)) for v in (A, tau, c, t0, span)):
+            A, tau, c, t0, span, u_clean = (row.get('A_asymp'), row.get('tau_days'), row.get('Rf_inf_asymp'),
+                                             row.get('last_day_on_duty'), row.get('span_days'), row.get('U_clean_run'))
+            if any(v is None or (isinstance(v, float) and not np.isfinite(v)) for v in (A, tau, c, t0, span, u_clean)):
                 return None
-            if tau <= 0 or span < 0.5 * tau:
+            if tau <= 0 or span < 0.5 * tau or u_clean <= 0:
                 return None
-            return dict(A=float(A), tau=float(tau), c=float(c), t0=float(t0))
+            return dict(A=float(A), tau=float(tau), c=float(c), t0=float(t0), u_clean=float(u_clean))
 
         frx_all = fr[fr.HX == hx]
         frx_rel = frx_all[frx_all.get('reliable') == True] if 'reliable' in frx_all else frx_all  # noqa: E712
@@ -113,12 +149,12 @@ def main():
         rate_urel, r2, run_dur, rate_source, curve = None, None, None, None, None
         if not frx_cur.empty:
             last = frx_cur.iloc[-1]
-            rate_urel = _rate_of(last); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
+            rate_urel = _rate_of(last, cur_urel); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
             rate_source = 'current_run'
             curve = _curve_of(last)   # only meaningful for the CURRENT run's own days-on-duty axis
         if rate_urel is None and not frx_rel.empty:   # most recent OTHER reliable run of this HX
             last = frx_rel.sort_values('Run').iloc[-1]
-            rate_urel = _rate_of(last); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
+            rate_urel = _rate_of(last, cur_urel); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
             rate_source = 'previous_reliable_run'
         if rate_urel is None:   # last resort: fit current-run tail (no reliable history)
             if cur_rid is not None and dod_col in feat:
@@ -139,9 +175,11 @@ def main():
         if past_urel:
             days_urel = 0.0
         elif curve is not None:
+            # trigger, expressed in the Rf-space the curve was actually fit in
+            trigger_rf = _urel_to_rf(trigger_urel, curve['u_clean'])
             d_cross = cm.predict_cross('asymptotic', [curve['A'], curve['tau'], curve['c']],
-                                        curve['t0'], trigger_urel, models=cm.MODELS_FALLING,
-                                        tmax=PROJECT_HORIZON_DAYS * 3, direction='falling')
+                                        curve['t0'], trigger_rf, models=cm.MODELS_RISING,
+                                        tmax=PROJECT_HORIZON_DAYS * 3, direction='rising')
             if d_cross is not None:
                 days_urel = float(d_cross)
                 curve_used = True
@@ -151,11 +189,14 @@ def main():
         proj_urel_days, proj_urel_val = [], []
         if curve_used:
             horizon = min(PROJECT_HORIZON_DAYS, max(60.0, days_urel * 1.3))
-            f_asym = cm.MODELS_FALLING['asymptotic'][0]
+            f_asym = cm.MODELS_RISING['asymptotic'][0]
             for t in range(0, int(horizon) + 1, PROJECT_STEP_DAYS):
+                rf_t = float(f_asym(curve['t0'] + t, curve['A'], curve['tau'], curve['c']))
+                urel_t = _rf_to_urel(rf_t, curve['u_clean'])
+                if urel_t is None:
+                    continue
                 proj_urel_days.append(t)
-                proj_urel_val.append(round(max(0.0, float(
-                    f_asym(curve['t0'] + t, curve['A'], curve['tau'], curve['c']))), 3))
+                proj_urel_val.append(round(max(0.0, urel_t), 3))
         elif rate_urel is not None:
             horizon = min(PROJECT_HORIZON_DAYS, max(60.0, (days_urel or 0) * 1.3))
             for t in range(0, int(horizon) + 1, PROJECT_STEP_DAYS):
