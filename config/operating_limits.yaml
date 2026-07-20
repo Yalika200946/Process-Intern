@@ -11,7 +11,8 @@
     "tube_skin_temperature_pass_4": {"value": null, "unit": "degC", "direction": "maximum", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
     "stack_temperature": {"value": null, "unit": "degC", "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
     "flue_gas_o2": {"value": null, "unit": "percent", "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
-    "draft": {"value": null, "unit": null, "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"}
+    "draft": {"value": null, "unit": null, "direction": "REQUIRES_ENGINEERING_CONFIRMATION", "status": "REQUIRES_ENGINEERING_CONFIRMATION"},
+    "max_cleans_per_year_per_hx": {"value": 3, "unit": "count/year", "direction": "maximum", "status": "ENGINEER_CONFIRMED_2026-07-20", "note": "Tightened from the prior 4/yr emergency-only cap to a 2-3/yr normal-operation cadence. Read via the CPHT_MAX_CLEANS_PER_YEAR env var (default 3) by pipeline/cleaning_scheduler_network.py, pipeline/cleaning_scheduler.py, and scripts/_build_cleaning_plan_notebook.py -- this file documents the confirmed value, not a live config loader."}
   }
 }
 

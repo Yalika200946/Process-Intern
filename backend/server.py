@@ -91,6 +91,7 @@ from src.domain.config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
 sys.path.append(str(ROOT / 'pipeline'))
 import cleaning_scheduler_network as SCHED
 import export_economics as ECON
+import export_cit_simulation as CITSIM
 
 # tags a cleaned-process file MUST contain for the topology/furnace to rebuild
 REQUIRED_TAGS = {CIT_TAG, TOTAL_CHARGE_TAG}
@@ -191,6 +192,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._recompute_plan()
         if endpoint == '/api/recompute-tam-comparison':
             return self._recompute_tam_comparison()
+        if endpoint == '/api/recompute-cit-simulation':
+            return self._recompute_cit_simulation()
         if endpoint != '/api/run':
             return self._send(404, {'error': 'unknown endpoint'})
         try:
@@ -351,6 +354,44 @@ class Handler(BaseHTTPRequestHandler):
             (DASH / 'data' / 'tam_comparison.json').write_text(
                 json.dumps(comparison, ensure_ascii=False, indent=1), encoding='utf-8')
             self._send(200, {'ok': True, 'comparison': comparison})
+        except Exception as e:
+            self._send(500, {'error': f'{type(e).__name__}: {e}'})
+
+    def _recompute_cit_simulation(self):
+        """Cleaning-plan wizard Step 1 ("เลือกอุณหภูมิเป้าหมาย"): given a target CIT (°C),
+        recompute the absolute-CIT sawtooth via pipeline/export_cit_simulation.py, IN-PROCESS
+        (no nbconvert/notebook kernel, no full SLSQP window re-sweep beyond what
+        compute_schedule already does) so this responds fast enough for interactive use, unlike
+        _recompute_plan's ~10-30s notebook rerun. Does not write cost_overrides.json /
+        cit_floor_override.json — this is a read-only what-if for the wizard's chart, not a
+        change to the committed cleaning_plan.json (that still requires the wizard's later
+        "กรอกค่าใช้จ่าย" step + the existing recompute-plan flow)."""
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+            raw = self.rfile.read(n) if n else b'{}'
+            try:
+                body = json.loads(raw.decode('utf-8') or '{}')
+            except Exception:
+                body = {}
+            target_cit_C = body.get('target_cit_C')
+            if target_cit_C is not None:
+                try:
+                    target_cit_C = float(target_cit_C)
+                except (TypeError, ValueError):
+                    return self._send(422, {'error': 'target_cit_C ต้องเป็นตัวเลข'})
+            tam_years = body.get('tam_years')
+            if tam_years is not None:
+                try:
+                    tam_years = int(tam_years)
+                except (TypeError, ValueError):
+                    return self._send(422, {'error': 'tam_years ต้องเป็นจำนวนเต็ม'})
+
+            sim = CITSIM.build_simulation(target_cit_C=target_cit_C, tam_years=tam_years)
+            (DASH / 'data' / 'cit_simulation.json').write_text(
+                json.dumps(sim, ensure_ascii=False, indent=1), encoding='utf-8')
+            self._send(200, {'ok': True, 'simulation': sim})
+        except RuntimeError as e:
+            self._send(422, {'error': str(e)})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
 

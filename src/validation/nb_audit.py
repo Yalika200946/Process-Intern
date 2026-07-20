@@ -124,6 +124,41 @@ def naive_rate_baseline_cv(t, y, groups):
     return dict(r2=round(float(r2_score(actual, preds)), 3), note='per-run linear fit (in-sample floor)')
 
 
+# ────────────────────────────── rate-evidence classification (ข้อ 2) ──────────────────────────────
+def classify_rate_source(fr_df, hx, cur_run):
+    """4-state rate-evidence cascade shared by export_end_of_run.py and phm_analysis.py's
+    C1/C2 -- the SAME priority order export_end_of_run.py already used ad hoc
+    (current run's own reliable rate -> most recent OTHER reliable run -> caller's own
+    tail-fit fallback -> no forecast), now centralized so every consumer of a per-HX
+    forecast date agrees on which state justifies showing a single date.
+
+    Returns (state, row) where state is one of:
+      'current_reliable_run'   -- fr_df has a `reliable==True` row for (hx, cur_run); row returned.
+      'previous_reliable_run'  -- no reliable row for cur_run, but an earlier run of this HX
+                                   was reliable; row = the most recent such run.
+      None                     -- no reliable run at all (current or previous). Caller must
+                                   attempt its own raw tail-fit fallback: if that succeeds,
+                                   the caller's own state is 'unreliable_current_fit'; if it
+                                   also fails, 'no_forecast' (see phm_config.RATE_SOURCE_STATES
+                                   -- classify_rate_source only ever returns the first two of
+                                   those 4 states, since a "fit" that isn't in Fouling_Rate_By_Run.csv
+                                   at all is a caller-specific fallback, not something this
+                                   function can evaluate from fr_df alone).
+
+    A row (pandas Series) is returned alongside the state (not just the state) so callers pull
+    rate/R2/params from the SAME row that justified the classification -- no reimplementing the
+    current_run -> previous_reliable_run cascade a second time with its own filtering.
+    """
+    frx_all = fr_df[fr_df.HX == hx]
+    frx_rel = frx_all[frx_all['reliable'] == True] if 'reliable' in frx_all else frx_all  # noqa: E712
+    frx_cur = frx_rel[frx_rel.Run == cur_run] if cur_run is not None else frx_rel.iloc[0:0]
+    if not frx_cur.empty:
+        return 'current_reliable_run', frx_cur.iloc[-1]
+    if not frx_rel.empty:
+        return 'previous_reliable_run', frx_rel.sort_values('Run').iloc[-1]
+    return None, None
+
+
 # ────────────────────────────── physical plausibility ──────────────────────────────
 def plausibility_checks(checks, show=True):
     """checks = list of (name, boolean_mask_that_should_be_TRUE). Reports violation counts.

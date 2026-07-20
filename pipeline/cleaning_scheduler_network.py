@@ -98,8 +98,26 @@ PERIOD_DAYS = 30                       # one "month" period, same discretization
 MIN_RATE = 1e-4                        # degC/day below this -> HX excluded from the coupled model
 WINDOW_CANDIDATES = [2, 3, 4, 5, 6]    # moving-window sizes to sweep (paper Fig.3/Table 2)
 MAX_ONLINE_CLEANS_PER_PERIOD = int(os.environ.get('CPHT_MAX_CLEANS_PER_PERIOD', 2))  # ASSUMED — รอวิศวกร (crew capacity)
-MAX_CLEANS_PER_YEAR = 4                # hard cap per HX — real-world logistics ceiling (4/yr only in an emergency)
+# hard cap per HX — real-world logistics ceiling. Tightened 2026-07-20 per engineering
+# direction: 2-3/yr in normal operation (was 4/yr, "4 only in an emergency"). Configurable
+# via CPHT_MAX_CLEANS_PER_YEAR without a code change; default matches config/operating_limits.yaml.
+MAX_CLEANS_PER_YEAR = int(os.environ.get('CPHT_MAX_CLEANS_PER_YEAR', 3))
 PERIODS_PER_YEAR = round(365 / PERIOD_DAYS)
+# BUG FOUND 2026-07-20 (plant engineer flagged the Gantt chart looking "oddly clustered" --
+# e.g. E113A scheduled 2026-07-31, then again 2026-09-29, 2026-10-29, just 30 days apart,
+# then a 9-month gap): MAX_CLEANS_PER_YEAR above only ever capped the COUNT of cleans in any
+# rolling 12-month window -- nothing stopped the SLSQP window objective from bunching two of
+# those 3 allotted cleans back-to-back in adjacent 30-day periods, which is mathematically
+# valid under the annual cap but not a schedule any crew would actually run. Real-world
+# logistics floor for two online cleans of the SAME HX (v1's MIN_INTERVAL, matches crew
+# turnaround) is 60 days -- but that's a WEAKER constraint than each HX's own analytic
+# optimum T*=sqrt(2*cost/(k*r)) (already computed and shown to the engineer as a reference
+# value, ~120-180 days for the HX that were bunching), which is the point below which
+# cleaning again isn't even economically justified yet (fouling hasn't cost enough to offset
+# the next clean's price). Enforcing max(MIN_INTERVAL_DAYS_FLOOR, T*_hx) as a hard minimum
+# gap between consecutive cleans of the same HX (see min_interval_periods_from_state below)
+# uses each HX's own real measured rate/cost -- not a single arbitrary number for every HX.
+MIN_INTERVAL_DAYS_FLOOR = 60           # absolute logistics floor regardless of economics (matches v1)
 # ASSUMED, tunable — how strongly notebook 08's risk-based engineering_priority_score (a
 # Probability x Consequence / Effort score, rank-normalized 0-1] across all HX -- see
 # pipeline/export_engineering_priority.py) biases the optimizer's OWN crew-slot allocation
@@ -375,7 +393,19 @@ def solve_window(dev0, r, cost, k_per_day, n_t, max_deficit=None, risk_mult=None
     return res.x.reshape(n_hx, n_t)
 
 
-def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=(), max_deficit=None, risk_mult=None):
+def min_interval_periods_from_state(r, cost, k_per_day):
+    """Per-HX hard minimum gap (in periods) between consecutive online cleans of the SAME
+    HX -- max(MIN_INTERVAL_DAYS_FLOOR, T*_hx), T*=sqrt(2*cost/(k*r)) -- see MIN_INTERVAL_DAYS_FLOOR's
+    docstring for why this exists. r<=MIN_RATE (excluded HX shouldn't reach here, but guard
+    anyway) gets an effectively-infinite T* (never re-clean sooner than the whole horizon)."""
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t_star_days = np.where(r > MIN_RATE, np.sqrt(2.0 * cost / np.maximum(k_per_day * r, 1e-12)), np.inf)
+    min_days = np.maximum(MIN_INTERVAL_DAYS_FLOOR, t_star_days)
+    return np.ceil(min_days / PERIOD_DAYS).astype(int)
+
+
+def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_periods=(), max_deficit=None,
+                 risk_mult=None, min_interval_periods=None):
     """Full moving-window schedule: solve window, commit period 0, roll forward.
 
     `tam_reset_periods`: period indices at which a TAM turnaround happens (cleans
@@ -383,7 +413,14 @@ def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_
     when the horizon spans more than one TAM cycle. This is a MANDATORY reset applied
     after the period's online-cleaning decision, not something the SLSQP window
     objective chooses; it does NOT count against MAX_CLEANS_PER_YEAR (a TAM turnaround
-    is a different maintenance event from an online/crew-scheduled clean)."""
+    is a different maintenance event from an online/crew-scheduled clean).
+
+    `min_interval_periods`: per-HX array (see min_interval_periods_from_state) -- blocks a
+    clean this period for any HX cleaned more recently than its own T*-derived minimum gap,
+    same enforcement style as the annual cap below but checking "periods since last clean"
+    instead of "count in trailing 12 months". Without this the annual cap alone permits (and
+    the SLSQP objective doesn't discourage) two of a HX's allotted yearly cleans landing in
+    adjacent periods -- valid under the count cap, not a schedule any crew would run."""
     n_hx = len(hx_ids)
     dev = np.array(dev0, dtype=float).copy()
     y_committed = np.zeros((n_hx, n_periods))
@@ -401,6 +438,18 @@ def run_schedule(hx_ids, dev0, r, cost, k_per_day, n_periods, window, tam_reset_
             trailing_count = y_committed[:, lookback:p].sum(axis=1)
             over_cap = trailing_count >= MAX_CLEANS_PER_YEAR
             y0[over_cap] = 0
+
+        # per-HX minimum re-clean interval (T*-derived, see docstring above)
+        if min_interval_periods is not None and p > 0:
+            last_cleaned = np.full(n_hx, -1)
+            cleaned_mask = y_committed[:, :p] > 0.5
+            for i in range(n_hx):
+                idx = np.nonzero(cleaned_mask[i])[0]
+                if len(idx):
+                    last_cleaned[i] = idx[-1]
+            periods_since = np.where(last_cleaned >= 0, p - last_cleaned, np.iinfo(np.int64).max)
+            too_soon = periods_since < min_interval_periods
+            y0[too_soon] = 0
 
         # hard safety clamp: SLSQP's bang-bang convergence isn't exact, so independent
         # per-HX rounding can occasionally push the committed count 1 over the crew-
@@ -551,6 +600,7 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     if eng_priority is None:
         eng_priority = _load('engineering_priority.json', [])
     risk_mult = build_risk_mult(online_ids, eng_priority)
+    min_interval_periods = min_interval_periods_from_state(r, cost, k_per_day)
 
     # --- window-size sweep (paper Fig. 3 / Table 2 methodology): pick SMW minimizing realized cost ---
     # When effective_max_deficit_C is set (CIT floor and/or furnace FG-limit-derived ceiling,
@@ -568,7 +618,8 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
     candidates = []
     for w in WINDOW_CANDIDATES:
         y = run_schedule(online_ids, dev0, r, cost, k_per_day, n_periods, w, tam_reset_periods,
-                          max_deficit=effective_max_deficit_C, risk_mult=risk_mult)
+                          max_deficit=effective_max_deficit_C, risk_mult=risk_mult,
+                          min_interval_periods=min_interval_periods)
         total, fuel, clean = realized_cost(dev0, r, cost, k_per_day, y, tam_reset_periods)
         n_clean_actions = int(y.sum())
         traj_w = realized_deficit_trajectory(dev0, r, y, tam_reset_periods)
@@ -644,6 +695,7 @@ def compute_schedule(econ, chist, logi, sched_v1=None, tam_dates=None, max_cit_d
         for d in tam_dates:
             timeline.append(dict(HX=hx, date=str(d.date()), kind='TAM'))
         per_hx.append(dict(HX=hx, online=True, r_C_per_day=round(float(r[i]), 5),
+                           min_interval_days_applied=int(min_interval_periods[i] * PERIOD_DAYS),
                            cleaning_cost=int(cost[i]), n_cleans_to_tam=len(dates),
                            next_dates=dates, scheduler_risk_mult=round(float(risk_mult[i]), 3)))
     for hx in tam_only_ids:

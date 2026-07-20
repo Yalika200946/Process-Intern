@@ -111,10 +111,16 @@ POST = [
     # complete schema from the start -- add_forecast_intervals.py is superseded, not deleted
     # (see its own module docstring), and no longer invoked here.
     ('P&ID topology + furnace',   [sys.executable, str(SRC / 'reporting' / 'dashboard_topology.py')]),
-    ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),
     ('per-HX time-series',           [sys.executable, str(REPO / 'pipeline' / 'export_hx_timeseries.py')]),
     ('End-of-Run duty forecast',     [sys.executable, str(REPO / 'pipeline' / 'export_end_of_run.py')]),
     ('cleaning audit history',       [sys.executable, str(REPO / 'pipeline' / 'export_cleaning_history.py')]),
+    ('event table (censoring taxonomy)', [sys.executable, str(REPO / 'pipeline' / 'build_event_table.py')]),
+    # PHM (C3's censored-survival refit, ข้อ 12) MUST run AFTER build_event_table.py so
+    # Data/Event_Table.csv exists -- moved here from right after "P&ID topology" (2026-07-20).
+    # Confirmed safe: nothing between the OLD and NEW position reads phm_analysis.py's own
+    # outputs (rul/propagation_models/reliability/drivers .json) -- only export_evidence.py
+    # does, and it already runs later in this list.
+    ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),
     ('economics (CIT->฿)',           [sys.executable, str(REPO / 'pipeline' / 'export_economics.py')]),
     ('cleaning/bypass/TAM list',     [sys.executable, str(SRC / 'optimization' / 'cleaning_logistics.py')]),
     ('TAM deep analysis (production/17)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
@@ -126,6 +132,10 @@ POST = [
     ('integrated cleaning plan (production/13)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                           f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=600',
                                           str(NB / 'production' / '13_cleaning_plan_optimization.ipynb')]),
+    ('CIT sawtooth simulation (default, unconstrained)', [sys.executable, str(REPO / 'pipeline' / 'export_cit_simulation.py')]),
+    # last: needs forecast_6mo.json (notebook 10, CHAIN) + end_of_run/rul/propagation_models.json
+    # (phm_analysis.py/export_end_of_run.py, earlier in POST) to already exist (ข้อ 4).
+    ('canonical forecast consolidation', [sys.executable, str(REPO / 'pipeline' / 'build_canonical_forecast.py')]),
 ]
 
 BACKUP_CSVS = ['Process_information_cleaned.csv', 'Process_information_with_crude.csv',
@@ -159,7 +169,7 @@ def run_nb(nb_name, timeout):
         [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
          f'--output-dir={EXECUTED_NB}',
          f'--ExecutePreprocessor.timeout={timeout}', str(NB / nb_name)],
-        capture_output=True, text=True, env=env)
+        capture_output=True, text=True, encoding='utf-8', errors='replace', env=env)
     return r.returncode == 0, time.time() - t0, (r.stderr or '')[-1200:]
 
 
@@ -244,7 +254,7 @@ def main():
         if 'operating_modes' in nb:
             env = subprocess_env()
             r = subprocess.run([sys.executable, str(REPO / 'pipeline' / 'compute_fouling_rate.py')],
-                               capture_output=True, text=True, env=env)
+                               capture_output=True, text=True, encoding='utf-8', errors='replace', env=env)
             print(f'  [{"OK " if r.returncode == 0 else "FAIL"}] {"robust fouling rate (post-03)":48s}')
             log.info(f'compute_fouling_rate.py: {"OK" if r.returncode == 0 else "FAIL"}')
             if r.returncode != 0:
@@ -258,17 +268,28 @@ def main():
         for f in dash_bk.glob('*'): shutil.copy2(f, DASH_DATA / f.name)
         print('rolled back.'); sys.exit(1)
 
-    # Post-processing is valid only after the terminal cit_forecast_export notebook completed
-    # in this same successful chain. Running it after an upstream failure would publish a
-    # mixture of fresh and stale artifacts from different snapshots.
-    ran_terminal = any('cit_forecast_export' in n and ok for n, ok, _ in results)
+    # Post-processing is valid only after the terminal notebook of the SELECTED chain
+    # completed in this same successful run. Running it after an upstream failure would
+    # publish a mixture of fresh and stale artifacts from different snapshots.
+    #
+    # BUG (found 2026-07-20): this used to check for the substring 'cit_forecast_export',
+    # left over from before notebooks/production/12_cit_forecast_export.ipynb was merged into
+    # 10_economic_evaluation_forecast_export.ipynb on 2026-07-19 (see CHAIN's own comment
+    # above). That substring no longer matches ANY entry in CHAIN, so `ran_terminal` was
+    # silently always False -- every POST export step (engineering priority, economics,
+    # cleaning plan, evidence, etc.) was skipped on every run since the rename, even though
+    # the run printed "done: N/N notebooks OK" and exited 0, looking like a clean success.
+    # Checking the actual last element of `results` instead is robust to future renames --
+    # it doesn't need to know any notebook's name, just whether the chain that was actually
+    # selected for this run (respecting --only/--from) finished its last step successfully.
+    ran_terminal = bool(results) and results[-1][1]
     post_failed = []   # (label,) of every POST step that failed -- previously untracked, so a
                         # failure here silently didn't affect the final exit code (see below).
     if not failed and ran_terminal:
         print('post-processing (honest metrics / bands / topology):')
         for label, cmd in POST:
             env = subprocess_env()
-            r = subprocess.run(cmd, capture_output=True, text=True, env=env)
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', env=env)
             print(f'  [{"OK " if r.returncode==0 else "FAIL"}] {label}')
             log.info(f'POST step "{label}": {"OK" if r.returncode == 0 else "FAIL"}')
             if r.returncode != 0:

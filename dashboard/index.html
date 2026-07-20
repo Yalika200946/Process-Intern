@@ -96,6 +96,34 @@ function tempColor(t){if(t==null)return '#BBBCBC';const f=Math.max(0,Math.min(1,
 function statusOf(u){if(!u||u.priority_rank==null)return 'none';const a=u.recommended_action||'';if(a.startsWith('Clean now'))return 'critical';if(/^\d{4}-\d{2}-\d{2}$/.test(a))return 'scheduled';if(a.startsWith('Stable'))return 'stable';return 'ok';}
 const ST={critical:{c:BCP.orange,label:'Clean-Now',th:'ต้องล้างด่วน'},scheduled:{c:BCP.lime,label:'Scheduled',th:'มีกำหนดล้าง'},ok:{c:BCP.green,label:'Healthy',th:'ปกติ'},stable:{c:BCP.green,label:'Stable',th:'เสถียร'},none:{c:BCP.gray,label:'No Data',th:'ไม่มีข้อมูล'}};
 const effortTH={'ONLINE_CLEAN_DEMONSTRATED':'ล้างออนไลน์ได้','SWAP_CAPABLE':'สลับเชลล์ได้','ONLINE_FULL':'ล้างออนไลน์ได้ (เต็ม)','ONLINE_PARTIAL':'ล้างออนไลน์ได้ (บางส่วน)','TAM_ONLY':'รอ TAM'};
+/* ═════════ COPY (ข้อ 1: label ให้สื่อความไม่แน่นอนของการพยากรณ์ ไม่ overclaim ความแม่นยำ) ═════════ */
+const COPY={
+  forecast_date:'Baseline projected date', forecast_date_th:'วันที่คาดการณ์เบื้องต้น (ยังไม่ยืนยัน)',
+  rul:'Estimated days to threshold', rul_th:'จำนวนวันโดยประมาณถึงเกณฑ์ล้าง',
+  prob_cleaning:'Scenario probability under current-rate assumption', prob_cleaning_th:'ความน่าจะเป็นของสถานการณ์ ภายใต้สมมติฐานอัตราปัจจุบันคงที่',
+  weibull:'Historical run-duration risk', weibull_th:'ความเสี่ยงจากสถิติอายุการเดินเครื่องในอดีต (Weibull)',
+  shap_driver:'Exploratory association', shap_driver_th:'ความสัมพันธ์เชิงสำรวจ (ไม่ใช่สาเหตุที่พิสูจน์แล้ว)',
+};
+
+/* ═════════ RATE-SOURCE 4-state gating (ข้อ 2) ═════════
+   ที่มาของ 'อัตรา' ที่ใช้คำนวณวันที่คาดการณ์ — ถ้าไม่ใช่ current_reliable_run ต้องไม่โชว์วันที่เดี่ยว
+   ให้โชว์ "หลักฐานปัจจุบันไม่เพียงพอ" แทน พร้อม badge อธิบายเหตุผล (ตัวเลขยังดูได้ในโหมด cross-check) */
+const RATE_SOURCE_META={
+  current_reliable_run:{c:BCP.green,label:'Current reliable run',th:'รอบปัจจุบัน (ผ่านเกณฑ์เชื่อถือ)',
+    tip:'อัตรา fouling ของรอบปัจจุบันผ่าน physics gate — ใช้แสดงวันที่คาดการณ์ได้'},
+  previous_reliable_run:{c:BCP.orange,label:'Previous reliable run',th:'รอบก่อนหน้า (ผ่านเกณฑ์)',
+    tip:'รอบปัจจุบันยังไม่มีอัตราที่ผ่านเกณฑ์เชื่อถือได้ — ใช้อัตราจากรอบก่อนหน้าแทน ระวังอาจไม่ตรงสภาพปัจจุบัน'},
+  unreliable_current_fit:{c:BCP.orange,label:'Unreliable current fit',th:'Fit ปัจจุบัน (ยังไม่ผ่านเกณฑ์)',
+    tip:'ไม่มีรอบใดผ่าน physics gate — ใช้ fit ดิบจากรอบปัจจุบัน ความเชื่อมั่นต่ำ'},
+  no_forecast:{c:BCP.gray,label:'No forecast',th:'ไม่มีข้อมูลเพียงพอ',
+    tip:'ไม่มีอัตราที่ใช้คำนวณได้เลย ทั้งจากรอบปัจจุบันและรอบก่อนหน้า'},
+};
+function RateSourceGate({state,children}){
+  const meta=RATE_SOURCE_META[state];
+  const badge=meta&&<span className="text-white text-[8.5px] font-semibold px-1.5 py-0.5 rounded-full ml-1" style={{background:meta.c}} title={meta.tip}>{meta.th}</span>;
+  if(state==='current_reliable_run')return <>{children}{badge}</>;
+  return <span className="text-bcp-dgray italic" title={meta?.tip}>Insufficient current evidence · หลักฐานปัจจุบันไม่เพียงพอ{badge}</span>;
+}
 
 /* ═════════════════════════ P&ID DIAGRAM (vibrant node-network) ═════════════════════════ */
 /* palette taken from the user's own E101AB.svg design */
@@ -600,9 +628,24 @@ function HXSchematic({hx,node}){
    </div>);
 }
 
-function DetailPanel({hx,unit,onSim,simActive,fc,node}){
+function DetailPanel({hx,unit,onSim,simActive,fc,node,plan}){
   if(!hx)return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-6 text-center text-bcp-dgray grid place-items-center h-full"><div><div className="text-3xl mb-2">👆</div>เลือก HX จากแผนผัง</div></div>;
   const st=statusOf(unit),meta=ST[st],hasRank=unit&&unit.priority_rank!=null;
+  // measured-first CIT gain (same number as the "แผนล้าง HX" tab, pipeline/export_economics.py::
+  // measured_cit_gain) takes priority over notebook 08's early-stage Q_shortfall x CIT_sensitivity
+  // proxy (unit.expected_CIT_gain_C) -- that proxy is deliberately downweighted 0.25 in the
+  // ranking score itself because the CIT point model doesn't beat a persistence baseline (see
+  // notebook 08 cell 25/26), so it shouldn't be the headline number shown here either. Falls back
+  // to the proxy, clearly labeled, only when economics.json has no measured/calibrated value yet.
+  const planRow=plan&&plan.per_hx&&plan.per_hx.find(p=>p.HX===hx);
+  // BUG FIXED 2026-07-20: this used to check only "is there a value", which showed
+  // "(วัดจริง)" even for model_calibrated HX (11/16 HX have ZERO measured events and are
+  // 100% calibrated-model numbers) -- check the actual cit_gain_source instead.
+  const isMeasured=planRow&&planRow.cit_gain_source==='measured';
+  const measuredGain=planRow&&(planRow.cit_gain_C_online!=null?planRow.cit_gain_C_online:planRow.cit_gain_C_full);
+  const citGain=measuredGain!=null?measuredGain:unit&&unit.expected_CIT_gain_C;
+  const citGainIsProxy=measuredGain==null;
+  const citGainN=planRow&&planRow.cit_gain_n_events;
   return(
    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 h-full">
     <div className="flex items-center gap-3 mb-4">
@@ -614,7 +657,9 @@ function DetailPanel({hx,unit,onSim,simActive,fc,node}){
     {hasRank?(<div className="space-y-3">
       <Metric label="Fouling Rate" v={fmt(unit.Q_fouling_rate_abs,2)} u="/100d"/>
       <Metric label="ΔQ Duty Drop" v={unit['Q_drop_%']!=null?fmt(unit['Q_drop_%'],1):'—'} u="%" warn={unit['Q_drop_%']>30}/>
-      <Metric label="CIT คืนถ้าล้าง" v={unit.expected_CIT_gain_C!=null?'+'+fmt(unit.expected_CIT_gain_C,1):'—'} u="°C" good={unit.expected_CIT_gain_C>3}/>
+      <Metric label={isMeasured?`CIT คืนถ้าล้าง (วัดจริง n=${citGainN})`:'CIT คืนถ้าล้าง (ประมาณการ — ไม่มีข้อมูลวัดจริง)'} v={citGain!=null?'+'+fmt(citGain,1):'—'} u="°C" good={citGain>3}/>
+      {isMeasured&&planRow.cit_gain_min_C!=null&&planRow.cit_gain_max_C!=null&&planRow.cit_gain_min_C!==planRow.cit_gain_max_C&&
+        <div className="text-[10px] text-bcp-dgray text-right -mt-2">ช่วงที่วัดได้จริง: +{fmt(planRow.cit_gain_min_C,1)} ถึง +{fmt(planRow.cit_gain_max_C,1)}°C</div>}
       <Metric label="วิธีล้าง" v={effortTH[unit.online_mode||unit.effort_tier]||'—'}/>
       {/* sub-scores (A4) */}
       <div className="pt-2 border-t border-black/[.05]">
@@ -669,7 +714,7 @@ function ForecastChart({hx,fc,simActive,unit}){
     <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11px] text-bcp-dgray">
       <span>เกณฑ์: <b className="text-bcp-black">{fmt(fc.threshold,2)}</b></span>
       <span>ปัจจุบัน: <b className="text-bcp-black">{fmt(fc.current_deviation,2)}</b></span>
-      {breach&&<span className="text-bcp-orange font-semibold">⚠ คาดข้ามเกณฑ์ ~{thaiDate(breach.date)}</span>}
+      {breach&&<span className="text-bcp-orange font-semibold" title={COPY.forecast_date}>⚠ {COPY.forecast_date_th} ~{thaiDate(breach.date)}</span>}
       {unit&&unit.days_to_threshold_6mo!=null&&<span>ถึงจุดใน ~<b className="text-bcp-black">{Math.round(unit.days_to_threshold_6mo)}</b> วัน</span>}
     </div>
    </div>);
@@ -829,7 +874,100 @@ const resolveCostOverride=(override,fallback)=>{
   return {cost:fallback,meta:null};
 };
 
-function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
+/* Wizard Step 1: target CIT -> absolute-CIT sawtooth (ข้อ 1 ของแผนล้างเตาใหม่) */
+function CitSawtoothChart({sim}){
+  if(!sim||!sim.dates) return <div className="text-[12px] text-bcp-dgray py-10 text-center">ยังไม่มีข้อมูลจำลอง — กด "จำลอง" ด้านล่าง</div>;
+  const rows=sim.dates.map((d,i)=>({date:d,cit:sim.cit_trajectory_C[i]}));
+  const events=(sim.clean_events||[]).map(e=>({date:e.date,type:'SWITCH'}));
+  const refs=[
+    sim.target_cit_C!=null&&{y:sim.target_cit_C,c:BCP.turq,label:'เป้าหมาย'},
+    sim.post_tam_ceiling_C!=null&&{y:sim.post_tam_ceiling_C,c:BCP.black,label:'เพดานหลัง TAM'},
+    sim.current_cit_C!=null&&{y:sim.current_cit_C,c:BCP.gray,label:'ปัจจุบัน'},
+  ].filter(Boolean);
+  return <TsChart data={rows} events={events} refs={refs} height={260}
+    lines={[{key:'cit',name:'CIT จำลอง (°C)',c:BCP.blue,w:2}]}/>;
+}
+function Step1TargetCit({sim,onSimUpdated}){
+  const [target,setTarget]=useState(()=>sim?.target_cit_C??sim?.current_cit_C??'');
+  const [tamYears,setTamYears]=useState(()=>sim?.tam_years_applied??3);
+  const [state,setState]=useState({busy:false,msg:null,err:false});
+  const doCompute=async()=>{
+    setState({busy:true,msg:null,err:false});
+    try{
+      const body={tam_years:tamYears}; if(target!==''&&target!=null) body.target_cit_C=+target;
+      const r=await fetch('/api/recompute-cit-simulation',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+      onSimUpdated(j.simulation);
+      setState({busy:false,err:false,
+        msg:'✓ จำลองแล้ว'+(j.simulation.constraint_satisfied===false?' — ⚠ เป้านี้รักษาไม่ได้เต็มที่ตลอดรอบ TAM ที่เลือกด้วยข้อจำกัดปัจจุบัน (ดูกราฟ/คำเตือนด้านล่าง)':'')});
+    }catch(e){
+      setState({busy:false,err:true,msg:'ไม่สำเร็จ: '+e.message+' — ต้องเปิด backend: python backend/server.py'});
+    }
+  };
+  return (<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up">
+    <h3 className="text-[15px] font-bold text-bcp-black mb-1">ขั้นที่ 1 · เลือก CIT ต่ำสุดที่ยอมรับได้ + ความยาวรอบ TAM</h3>
+    <p className="text-[11px] text-bcp-dgray mb-3">เลือก CIT ต่ำสุดที่ต้องการรักษาไว้ตลอดรอบ (เช่น ไม่ให้ต่ำกว่า 240°C) และความยาวรอบ TAM ที่จะพิจารณา (3 หรือ 4 ปี) — เหมือนที่เห็นในข้อมูลจริง 2021-2026: CIT จะมี slope ลดลงเรื่อยๆ ระหว่างรอบ แต่การล้าง online เล็กๆ หลายครั้งจะดึงกลับขึ้นเป็นฟันปลา ไม่ใช่ลดยาวทางเดียวจนถึง TAM แล้วเด้งกลับทีเดียว — และจะไม่สูงเท่าช่วงหลัง TAM เพราะการล้าง online คืนสภาพได้แค่บางส่วน</p>
+    <div className="flex flex-wrap items-end gap-3 mb-3">
+      <label className="text-[12px]"><span className="text-bcp-dgray block text-[11px] mb-0.5">CIT ต่ำสุดที่ยอมรับได้ (°C)</span>
+        <input type="number" step="0.5" value={target} onChange={e=>setTarget(e.target.value)}
+          className="w-28 text-[15px] font-bold rounded-lg border border-black/15 px-2 py-1 focus:border-bcp-green outline-none"/></label>
+      <label className="text-[12px]"><span className="text-bcp-dgray block text-[11px] mb-0.5">ความยาวรอบ TAM</span>
+        <div className="flex rounded-lg overflow-hidden border border-black/10 text-[12px]">
+          {[3,4].map(y=>(<button key={y} onClick={()=>setTamYears(y)}
+            className={`px-3 py-1.5 font-semibold ${tamYears===y?'bg-bcp-green text-white':'text-bcp-dgray bg-white hover:bg-black/[.03]'}`}>{y} ปี</button>))}
+        </div></label>
+      {sim?.current_cit_C!=null&&<div className="text-[12px] text-bcp-dgray">CIT ปัจจุบัน <b className="text-bcp-black">{fmt(sim.current_cit_C,1)}°C</b></div>}
+      {sim?.post_tam_ceiling_C!=null&&<div className="text-[12px] text-bcp-dgray">เพดานหลัง TAM <b className="text-bcp-black">{fmt(sim.post_tam_ceiling_C,1)}°C</b></div>}
+      <button onClick={doCompute} disabled={state.busy}
+        className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-bcp-turq text-white hover:bg-bcp-turq/90 disabled:opacity-50 flex items-center gap-1.5">
+        {state.busy&&<span className="h-3 w-3 rounded-full border-2 border-white/40 border-t-white animate-spin"/>}
+        {state.busy?'กำลังจำลอง… (รัน optimizer เต็มรูปแบบ อาจใช้เวลาถึง ~2 นาที โดยเฉพาะเป้าที่ตึงหรือรอบ TAM 4 ปี)':'▶ จำลอง'}</button>
+    </div>
+    {state.msg&&<div className={`mb-2 text-[11px] px-3 py-1.5 rounded-lg ${state.err?'bg-bcp-red/10 text-bcp-red':'bg-bcp-green/10 text-bcp-green'}`}>{state.msg}</div>}
+    <CitSawtoothChart sim={sim}/>
+    {sim&&<Basis title="ที่มากราฟจำลอง CIT">
+      <div>• จำลองจาก <code>pipeline/cleaning_scheduler_network.compute_schedule()</code> ตัวเดียวกับที่คำนวณแผนล้างจริง (ไม่ใช่โมเดลแยก) — เป้า CIT ถูกแปลงเป็นเพดาน deficit (CIT ปัจจุบัน − เป้า) ที่ optimizer ต้องรักษาไว้ตลอดรอบ TAM ที่เลือก (ไม่ใช่แค่วันสุดท้าย) แล้วส่งเข้า optimizer ตรงๆ ดังนั้นกราฟนี้คือแผนที่จะถูกใช้จริงถ้าเลือกเป้าและความยาวรอบนี้ — ใช้กลไกเดียวกับปุ่ม "เทียบ TAM 3 ปี vs 4 ปี" ในขั้นที่ 3/4.</div>
+      <div>• เส้นต่อ HX คำนวณจากวันที่ล้างจริงที่ optimizer เลือก + อัตรา fouling ที่วัดได้ (r_C_per_day) ผ่านสูตรเดียวกับที่ optimizer ใช้ภายใน ไม่ใช่การประมาณซ้ำ.</div>
+      {sim.constraint_satisfied===false&&<div className="text-bcp-red">⚠ เป้านี้เกินขีดความสามารถของแผน (ทีมล้าง/ความถี่ที่จำกัดไว้) — CIT ต่ำสุดจริงจะแตะ ~{fmt(sim.current_cit_C-sim.max_realized_deficit_C,1)}°C</div>}
+    </Basis>}
+  </div>);
+}
+
+/* Wizard Step 2: per-HX CIT/Q impact ranking, energy-first (ข้อ 2) */
+function Step2HxImpact({plan,eor}){
+  if(!plan||!plan.per_hx) return <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">ยังไม่มี cleaning_plan.json</div>;
+  const rows=plan.per_hx.filter(p=>p.online).map(p=>{
+    const citGain=p.cit_gain_C_online!=null?p.cit_gain_C_online:p.cit_gain_C_full;
+    const qLoss=eor?.hx?.[p.HX]?.consequence?.q_loss_now_kW;
+    return {...p,citGain,qLoss};
+  }).sort((a,b)=>(b.citGain||0)-(a.citGain||0));
+  return (<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up">
+    <h3 className="text-[15px] font-bold text-bcp-black mb-1">ขั้นที่ 2 · HX ไหนสำคัญกับ CIT มากที่สุด (เรียงตามพลังงานก่อน)</h3>
+    <p className="text-[11px] text-bcp-dgray mb-3">เรียงตาม CIT ที่จะได้คืนถ้าล้าง (พลังงานเป็นหลัก) — ค่าใช้จ่ายจะกรอกแยกในขั้นที่ 4 ไม่ปนกับการจัดลำดับนี้</p>
+    <div className="overflow-x-auto"><table className="w-full text-[12px]">
+      <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
+        <th className="py-2">#</th><th className="py-2">HX</th><th className="py-2 text-right">CIT คืนได้ถ้าล้าง</th>
+        <th className="py-2 text-center" title="วัดจริง = มีเหตุการณ์สลับเชลล์ที่วัด CIT ได้จริง (n=จำนวนครั้ง) · ประมาณการ = ไม่มีข้อมูลวัดจริง ใช้โมเดล+ตัวคูณปรับเทียบแทน">ที่มา</th>
+        <th className="py-2 text-right">Q ที่หายไปตอนนี้</th><th className="py-2 text-right" title="engineering_priority_score จาก notebook 08 — อันดับเดียวกับแท็บภาพรวม">คะแนนความเสี่ยง (NB08)</th></tr></thead>
+      <tbody className="divide-y divide-black/[.03]">
+        {rows.map((p,i)=>(<tr key={p.HX}>
+          <td className="py-2 text-bcp-dgray">{i+1}</td>
+          <td className="py-2 font-bold text-bcp-black">{p.HX}</td>
+          <td className="py-2 text-right tabular-nums text-bcp-green font-semibold">{p.citGain>0?'+'+p.citGain.toFixed(1)+'°C':'—'}</td>
+          <td className="py-2 text-center">{p.cit_gain_source==='measured'
+            ?<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-bcp-green/10 text-bcp-green" title={p.cit_gain_min_C!=null?`ช่วง +${fmt(p.cit_gain_min_C,1)} ถึง +${fmt(p.cit_gain_max_C,1)}°C`:''}>วัดจริง n={p.cit_gain_n_events}</span>
+            :<span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-bcp-orange/10 text-bcp-orange" title="ไม่มีเหตุการณ์สลับเชลล์ที่วัด CIT ได้ — ใช้โมเดลประมาณการ+ตัวคูณปรับเทียบจาก HX อื่นที่วัดได้">ประมาณการ</span>}</td>
+          <td className="py-2 text-right tabular-nums">{p.qLoss!=null?fmt(p.qLoss,0)+' kW':'—'}</td>
+          <td className="py-2 text-right tabular-nums text-bcp-dgray">{p.engineering_priority_score!=null?fmt(p.engineering_priority_score,2):'—'}</td>
+        </tr>))}
+      </tbody></table></div>
+  </div>);
+}
+
+function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv,citSim,onCitSimUpdated,eor}){
+  const [step,setStep]=useState(1);
+  const STEPS=[{n:1,label:'อุณหภูมิเป้าหมาย'},{n:2,label:'HX สำคัญกับ CIT'},{n:3,label:'แผนประสิทธิภาพ'},{n:4,label:'ค่าใช้จ่าย'}];
   const [costOv,setCostOv]=useState(()=>{try{return JSON.parse(localStorage.getItem('cpht_cleaning_cost_overrides')||'{}');}catch(e){return {};}});
   const [recompute,setRecompute]=useState({busy:false,msg:null,err:false});
   const [formulaHX,setFormulaHX]=useState(null);   // HX whose formula editor is open, or null
@@ -919,9 +1057,22 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
     }
   };
   return(
-   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5 fade-up">
+   <div className="space-y-4 fade-up">
+    <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        {STEPS.map(s=>(
+          <button key={s.n} onClick={()=>setStep(s.n)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11.5px] font-semibold border transition-colors ${step===s.n?'bg-bcp-green text-white border-bcp-green':'text-bcp-black bg-white border-black/10 hover:bg-black/[.03]'}`}>
+            <span className={`h-4 w-4 rounded-full grid place-items-center text-[9px] ${step===s.n?'bg-white/25':'bg-black/[.06]'}`}>{s.n}</span>{s.label}
+          </button>))}
+      </div>
+    </div>
+    {step===1&&<Step1TargetCit sim={citSim} onSimUpdated={onCitSimUpdated}/>}
+    {step===2&&<Step2HxImpact plan={plan} eor={eor}/>}
+    {(step===3||step===4)&&
+   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
     <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h3 className="text-[15px] font-bold text-bcp-black">แผนล้าง HX ที่แนะนำ · ถึง TAM {tam.getFullYear()+543}</h3>
+      <h3 className="text-[15px] font-bold text-bcp-black">ขั้นที่ {step} · {step===3?'แผนประสิทธิภาพ':'ค่าใช้จ่าย'} · แผนล้าง HX ถึง TAM {tam.getFullYear()+543}</h3>
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-[10px] text-bcp-dgray flex items-center gap-1">CIT ต้องไม่ต่ำกว่าเป้าเกิน
           <input type="number" step="0.1" value={citFloor} onChange={e=>setCitFloor(e.target.value===''?0:+e.target.value)}
@@ -952,6 +1103,7 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
     {plan.tube_skin_risk_advisory&&
       <div className="mb-2 text-[11px] px-3 py-1.5 rounded-lg bg-bcp-red/10 text-bcp-red">⚠ {plan.tube_skin_risk_note}</div>}
 
+    {step===3&&<>
     {/* TAM 3-vs-4-year scenario comparison -- answers "extend TAM to 4yr, still feasible?" */}
     <div className="rounded-xl border border-black/[.06] bg-black/[.015] px-4 py-3 mb-3">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -1022,6 +1174,8 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
         {yearMarks.map((d,i)=><div key={i} className="absolute text-[8.5px] text-bcp-dgray -translate-x-1/2" style={{left:((d-asOf)/span*100)+'%'}}>{d.getFullYear()+543}</div>)}
       </div>}
     </div>
+    </>}
+    {step===4&&<>
     <div className="text-[11px] font-bold text-bcp-black mb-1">ล้างได้ online ({online.length}) — เรียงตามความสำคัญ</div>
     <div className="overflow-x-auto mb-4"><table className="w-full text-[12px]">
       <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
@@ -1050,7 +1204,9 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
           <td className="py-2 text-[11px]">{p.next_clean?thaiDate(p.next_clean):'—'}</td>
           <td className="py-2 text-right tabular-nums text-bcp-green font-semibold">{p.net_saving_thb_yr!=null?(p.net_saving_thb_yr/1e6).toFixed(1)+'M':'—'}</td>
           <td className="py-2 text-right text-[11px]">
-            <div className="tabular-nums" title="ประมาณจาก economics.json — ค่าเดียวต่อรอบล้าง ไม่ใช่ต่อครั้งสะสม">{citGain>0?'+'+citGain.toFixed(1)+'°C':'—'}</div>
+            <div className="tabular-nums" title="ประมาณจาก economics.json — ค่าเดียวต่อรอบล้าง ไม่ใช่ต่อครั้งสะสม">{citGain>0?'+'+citGain.toFixed(1)+'°C':'—'}
+              {p.cit_gain_source==='measured'?<span className="text-bcp-green" title={p.cit_gain_min_C!=null?`วัดจริง n=${p.cit_gain_n_events} ครั้ง ช่วง +${fmt(p.cit_gain_min_C,1)}..+${fmt(p.cit_gain_max_C,1)}°C`:''}> ✓{p.cit_gain_n_events}</span>
+                :<span className="text-bcp-orange" title="ไม่มีข้อมูลวัดจริง — ประมาณการจากโมเดล"> (ประมาณ)</span>}</div>
             {p.fuel_value_per_clean_thb!=null&&
               <div className="text-[9px] text-bcp-dgray tabular-nums">มูลค่าเชื้อเพลิง {(p.fuel_value_per_clean_thb/1000).toFixed(0)}k฿/ครั้ง</div>}
             {liveWorthIt(p)!=null?
@@ -1111,6 +1267,21 @@ function CleaningPlanPanel({plan,onPlanUpdated,fgLimitOv}){
       <div>• กด 🧮 ข้างค่าล้างเพื่อใส่ <b>สมการต้นทุนแยกตามวิธีล้าง</b> (base_cost + (variable_cost+downtime_cost)×ระยะเวลา) แทนตัวเลขเดียว —
         optimizer จะเลือกวิธีที่ถูกที่สุดให้อัตโนมัติต่อ HX (ดู <code>export_economics.resolve_cost_override</code>).</div>
     </Basis>
+    <div className="rounded-xl border border-black/[.06] bg-bcp-green/[.04] px-4 py-3 mt-3 flex items-center justify-between flex-wrap gap-2">
+      <div className="text-[12px] font-bold text-bcp-black">รวมค่าใช้จ่ายทั้งแผน (ถึง TAM แรก)</div>
+      <div className="text-[20px] font-bold text-bcp-green tabular-nums">
+        {online.reduce((s,p)=>s+liveCost(p)*(p.n_cleans_to_tam||0),0).toLocaleString()} ฿
+        <span className="text-[11px] font-normal text-bcp-dgray ml-1.5">({online.reduce((s,p)=>s+(p.n_cleans_to_tam||0),0)} ครั้ง online รวมทุก HX)</span>
+      </div>
+    </div>
+    </>}
+   </div>}
+    <div className="flex justify-between">
+      <button disabled={step===1} onClick={()=>setStep(s=>Math.max(1,s-1))}
+        className="text-[11px] font-semibold px-3 py-1.5 rounded-lg border border-black/10 text-bcp-black disabled:opacity-30 hover:bg-black/[.03]">← ก่อนหน้า</button>
+      <button disabled={step===4} onClick={()=>setStep(s=>Math.min(4,s+1))}
+        className="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-bcp-black text-white disabled:opacity-30 hover:bg-bcp-black/90">ถัดไป →</button>
+    </div>
    </div>);
 }
 
@@ -1301,6 +1472,43 @@ function Basis({title='ที่มาการคำนวณ (Basis)',children
 const AssumedTag=()=><span className="text-[9px] text-bcp-orange bg-bcp-orange/10 px-1.5 py-0.5 rounded-full ml-1 align-middle">ค่าสมมติ</span>;
 const addDaysISO=(iso,n)=>{const d=new Date(iso+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().slice(0,10);};
 
+/* Generic "plot X vs Y" series picker — lets the engineer overlay any combination of the
+   per-HX series already loaded in `rows` (not just the fixed U/Q/temp/flow chart set above).
+   Generalizes EndOfRunChart's urel<->duty toggle pattern into an N-way multi-select. */
+const SERIES_FIELDS=[
+  {key:'U',label:'U_relative (ตะกรัน)',c:BCP.blue},
+  {key:'Q',label:'Q duty จริง (kW)',c:'#e6550d'},
+  {key:'pred',label:'Q ทำนาย (สภาพสะอาด)',c:BCP.turq},
+  {key:'dev',label:'Deviation (Q ทำนาย−จริง)',c:'#8c52ff'},
+  {key:'cin',label:'Cold in (°C)',c:BCP.blue},
+  {key:'cout',label:'Cold out (°C)',c:'#17becf'},
+  {key:'hin',label:'Hot in (°C)',c:'#C0392B'},
+  {key:'hout',label:'Hot out (°C)',c:'#EA7600'},
+  {key:'cflow',label:'Crude flow (m³/h)',c:BCP.blue},
+  {key:'hflow',label:'Hot flow (m³/h)',c:'#C0392B'},
+];
+function SeriesPicker({rows,events,defaultKeys=['U','Q']}){
+  const [picked,setPicked]=useState(defaultKeys);
+  const toggle=k=>setPicked(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
+  const lines=SERIES_FIELDS.filter(f=>picked.includes(f.key)).map(f=>({key:f.key,name:f.label,c:f.c}));
+  return(
+   <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
+    <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h3 className="text-[14px] font-bold text-bcp-black">6) กราฟกำหนดเอง — เลือกตัวแปรมาเทียบกัน</h3>
+      <span className="text-[10px] text-bcp-dgray">เลือกได้หลายตัวแปร ซ้อนกันบนแกนเวลาเดียว</span>
+    </div>
+    <div className="flex flex-wrap gap-1.5 mb-3">
+      {SERIES_FIELDS.map(f=>{const on=picked.includes(f.key);return(
+        <button key={f.key} onClick={()=>toggle(f.key)}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors ${on?'text-white':'text-bcp-black bg-white hover:bg-black/[.03]'}`}
+          style={on?{background:f.c,borderColor:f.c}:{borderColor:'#e5e7eb'}}>{f.label}</button>);})}
+    </div>
+    {lines.length===0?
+      <div className="text-[12px] text-bcp-dgray py-8 text-center">เลือกตัวแปรอย่างน้อย 1 ตัวเพื่อแสดงกราฟ</div>
+      :<TsChart data={rows} events={events} eventLabels lines={lines}/>}
+   </div>);
+}
+
 /* End-of-Run duty/fouling forecast with U_relative ↔ duty(Q) toggle (ข้อ 1) */
 function EndOfRunChart({hx,eor,series}){
   const [mode,setMode]=useState('urel');
@@ -1341,7 +1549,7 @@ function EndOfRunChart({hx,eor,series}){
       </ComposedChart></ResponsiveContainer></div>
     <div className="mt-1.5 flex flex-wrap gap-x-5 gap-y-1 text-[11.5px]">
       {past?<span className="text-bcp-red font-semibold">⚠ เลยเกณฑ์ล้างแล้ว — ควรวางแผนล้าง</span>
-        :days!=null?<span className="text-bcp-black">เหลือถึงเกณฑ์: <b className="text-bcp-orange">~{Math.round(days)} วัน</b>{pdate&&<span className="text-bcp-dgray"> ({thaiDate(pdate)})</span>}
+        :days!=null?<span className="text-bcp-black">เหลือถึงเกณฑ์ ({COPY.rul}): <RateSourceGate state={h.urel.rate_source}><b className="text-bcp-orange">~{Math.round(days)} วัน</b>{pdate&&<span className="text-bcp-dgray" title={COPY.forecast_date}> ({COPY.forecast_date_th} {thaiDate(pdate)})</span>}</RateSourceGate>
           {isU&&blk.curve_projection&&<span className="text-bcp-dgray text-[10px]"> · ตามเส้นโค้ง asymptotic</span>}</span>
         :<span className="text-bcp-green">แนวโน้มยังไม่ถึงเกณฑ์ (ไม่แย่ลง)</span>}
       {c.q_loss_now_kW!=null&&<span className="text-bcp-dgray">Duty หาย <b className="text-bcp-black">{fmt(c.q_loss_now_kW,0)} kW</b>{c.q_loss_pct!=null&&` (${fmt(c.q_loss_pct,0)}%)`}</span>}
@@ -1412,7 +1620,7 @@ function CleaningSim({hx,eor,params}){
    </div>);
 }
 
-function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
+function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist,plan}){
   if(!hxts) return(
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
       <div className="text-3xl mb-2">📈</div>ยังไม่มีข้อมูล time-series — รัน <code className="text-bcp-black">python pipeline/export_hx_timeseries.py</code> ก่อน</div>);
@@ -1426,6 +1634,9 @@ function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
   const u=units[sel]||{}; const st=statusOf(u); const meta=ST[st];
   const mt=d.meta||{}; const eh=eor&&eor.hx&&eor.hx[sel];
   const HEALTH_C={critical:BCP.red,warn:BCP.orange,watch:'#D9A400',ok:BCP.green};
+  // แผนล้าง (จาก "แผนล้าง HX" ขั้นที่ 3) สำหรับ HX ที่เลือก -- ดึงตรงจาก cleaning_plan.json
+  // ตัวเดียวกับที่ขั้นที่ 3 ใช้ ไม่ recompute ใหม่ เพื่อให้ตัวเลขตรงกัน 100% ระหว่างสองหน้า
+  const planRow=plan&&plan.per_hx&&plan.per_hx.find(p=>p.HX===sel);
 
   return(
    <div className="space-y-5 fade-up">
@@ -1450,15 +1661,25 @@ function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
           <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white" style={{background:meta.c}}>{meta.th} · {meta.label}</span>
           {eh&&<span className="text-[9px] font-semibold px-2 py-0.5 rounded-full text-white ml-1" style={{background:HEALTH_C[eh.health]||BCP.gray}}>
             {eh.health==='critical'?'ประสิทธิภาพลดลงมาก':eh.health==='warn'?'เฝ้าระวัง':eh.health==='watch'?'ติดตาม':'ปกติ'}</span>}
-          {eh&&eh.urel&&eh.urel.rate_source&&eh.urel.rate_source!=='current_run'&&
-            <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-bcp-orange/10 text-bcp-orange ml-1" title="รอบปัจจุบันยังไม่มีอัตรา fouling ที่ผ่านเกณฑ์เชื่อถือได้ (physics gate) — ใช้รอบก่อนหน้า/การ fit ชั่วคราว จึงงดสรุปแนวโน้ม">
-            ⚠ rate ไม่ใช่รอบปัจจุบัน</span>}</div>
+          {eh&&eh.urel&&eh.urel.rate_source&&eh.urel.rate_source!=='current_reliable_run'&&(()=>{const rm=RATE_SOURCE_META[eh.urel.rate_source];return rm&&
+            <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-bcp-orange/10 text-bcp-orange ml-1" title={rm.tip}>
+            ⚠ {rm.th}</span>;})()}</div>
       </div>
       {/* degradation signals (ข้อ 6) */}
       {eh&&eh.signals&&eh.signals.length>0&&<div className="mb-2 rounded-lg bg-black/[.02] border border-black/[.05] px-3 py-2">
         <div className="text-[10px] font-bold uppercase tracking-wide text-bcp-dgray mb-1">สัญญาณประสิทธิภาพ</div>
         <ul className="text-[11.5px] text-bcp-black/80 space-y-0.5">
           {eh.signals.map((s,i)=><li key={i} className="flex gap-1.5"><span className="text-bcp-turq">•</span>{s}</li>)}</ul>
+      </div>}
+      {/* cross-reference กับแท็บ "แผนล้าง HX" ขั้นที่ 3 -- ตัวเลขเดียวกัน ไม่ recompute ใหม่ ให้เห็นตรงกันโดยไม่ต้องสลับแท็บ */}
+      {planRow&&<div className="mb-2 rounded-lg bg-bcp-turq/[.05] border border-bcp-turq/20 px-3 py-2">
+        <div className="text-[10px] font-bold uppercase tracking-wide text-bcp-turq mb-1">แผนล้าง (จากแท็บ "แผนล้าง HX" ขั้นที่ 3 · ตัวเลขเดียวกัน)</div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11.5px] text-bcp-black/80">
+          <span>อันดับความคุ้มค่า×ข้อจำกัด <b>#{planRow.priority_rank}</b></span>
+          <span>{planRow.online?<>ล้าง online <b className="text-bcp-green">{planRow.n_cleans_to_tam} ครั้ง</b>ถึง TAM{planRow.next_clean?<> · ครั้งถัดไป <b>{thaiDate(planRow.next_clean)}</b></>:null}</>
+            :<>ล้างได้เฉพาะ TAM (ไม่มี bypass)</>}</span>
+          {planRow.net_saving_thb_yr!=null&&<span>Net <b className="text-bcp-green">{(planRow.net_saving_thb_yr/1e6).toFixed(1)}M ฿/ปี</b></span>}
+        </div>
       </div>}
       <p className="text-[11px] text-bcp-dgray mb-2">เส้นตั้ง = เหตุการณ์ (<span style={{color:EVENT_COLOR.SWITCH}}>สลับเชลล์</span> / <span style={{color:BCP.black}}>TAM</span>)</p>
 
@@ -1500,6 +1721,8 @@ function HXDetailPanel({hxts,units,selected,onSelect,eor,params,chist}){
         <div>• <b>Effectiveness ε</b> = (T_cold_out − T_cold_in)/(T_hot_in − T_cold_in) · <b>U_relative</b> = U/U_clean (1.0 = สะอาด) — ตกลง = ตะกรันสะสม.</div>
       </Basis>
     </div>
+
+    <SeriesPicker rows={rows} events={d.events}/>
 
     {/* End-of-Run forecast + Cleaning simulation (ข้อ 1, 2) */}
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -1546,7 +1769,7 @@ function CleaningAuditTable({ch,criteria,hx}){
       <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
         <th className="py-2">วันที่</th><th className="py-2">ประเภท</th><th className="py-2 text-right">รอบก่อน dUrel/ด.</th><th className="py-2 text-center">R²</th>
         <th className="py-2 text-right">U ก่อน→หลัง</th><th className="py-2 text-right">Q คืน (kW)</th>
-        <th className="py-2 text-right">CIT คืน วัดจริง</th><th className="py-2 text-right">CIT โมเดล</th><th className="py-2">หมายเหตุ</th></tr></thead>
+        <th className="py-2 text-right">CIT คืน วัดจริง</th><th className="py-2 text-right" title="median ของคอลัมน์ซ้ายเอง (SWITCH ที่ประเมินได้และเป็นบวก) — ตัวเลขเดียวกับหน้าแผนล้าง HX">CIT อ้างอิง (median วัดจริง)</th><th className="py-2">หมายเหตุ</th></tr></thead>
       <tbody className="divide-y divide-black/[.03]">
         {cleans.map((c,i)=>{const re=c.run_ended;return(<tr key={i}>
           <td className="py-2 font-semibold text-bcp-black">{thaiDate(c.date)}</td>
@@ -1571,7 +1794,7 @@ function CleaningAuditTable({ch,criteria,hx}){
       <div>• <b>quality gate:</b> {criteria?.quality_gate}</div>
       <div>• <b>เกณฑ์ล้าง:</b> {criteria?.clean_trigger}</div>
       <div>• <b>CIT คืน (วัดจริง):</b> {criteria?.cit_recovery_measured}</div>
-      <div>• <b>CIT คืน (โมเดล):</b> {criteria?.cit_recovery_model}</div>
+      <div>• <b>CIT คืน (อ้างอิง):</b> {criteria?.cit_recovery_model}</div>
       <div className="text-bcp-dgray">* = sensitivity อ่อน/HX ปลายน้ำ → ค่า CIT วัดจริงไม่น่าเชื่อถือ · {criteria?.note}</div>
     </Basis>
    </div>);
@@ -1588,7 +1811,30 @@ function RangeBar({p10,p50,p90,max=180}){
 }
 function ProbCell({v}){const c=v>=66?BCP.red:v>=33?BCP.orange:BCP.green;return <span className="font-semibold tabular-nums" style={{color:v>0?c:BCP.dgray}}>{v!=null?Math.round(v)+'%':'—'}</span>;}
 
-function PrognosticsPanel({phm,units,selected,onSelect}){
+function CanonicalForecastCard({canon,hx}){
+  if(!canon||!canon.hx||!canon.hx[hx])return null;
+  const c=canon.hx[hx];
+  return(
+    <div className="rounded-2xl bg-white shadow-card border-2 border-bcp-green/30 p-5">
+      <div className="text-[10px] font-bold uppercase tracking-wide text-bcp-green mb-1">ตัวเลขหลัก (Canonical) · {hx}</div>
+      {c.canonical_projected_date?(<div className="text-[20px] font-bold text-bcp-black">{thaiDate(c.canonical_projected_date)}
+        {c.canonical_interval&&<span className="text-[12px] font-normal text-bcp-dgray ml-2">(P10 {c.canonical_interval.p10}d – P90 {c.canonical_interval.p90}d)</span>}</div>)
+       :c.canonical_message==='already past threshold'?(<div className="text-[18px] font-bold text-bcp-red">⚠ เลยเกณฑ์ล้างแล้ว</div>)
+       :(<div className="text-[15px] font-semibold text-bcp-dgray italic">Insufficient current evidence · หลักฐานปัจจุบันไม่เพียงพอ</div>)}
+      {c.sources_disagree&&<div className="mt-2 text-[10.5px] text-bcp-orange bg-bcp-orange/10 rounded px-2 py-1">⚠ 4 แหล่งข้อมูล (cross-check ด้านล่าง) ให้วันที่ต่างกันเกิน {TOLERANCE_DAYS_LABEL} วัน — ดูรายละเอียดก่อนตัดสินใจ</div>}
+      <details className="mt-2 text-[11px] text-bcp-dgray">
+        <summary className="cursor-pointer select-none">Cross-check (4 แหล่งเดิม, ไม่ recompute)</summary>
+        <div className="mt-1.5 space-y-0.5">
+          {Object.entries(c.cross_check||{}).map(([src,v])=>(
+            <div key={src}><b>{src}</b>: {v.projected_date||v.p50_date||v.breach_date||(v.best_proj_days!=null?`${v.best_proj_days}d (${v.best_model})`:'—')}</div>
+          ))}
+        </div>
+      </details>
+    </div>);
+}
+const TOLERANCE_DAYS_LABEL=30;
+
+function PrognosticsPanel({phm,units,selected,onSelect,canon}){
   if(!phm||!phm.rul)return(
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-8 text-center text-bcp-dgray fade-up">
       <div className="text-3xl mb-2">🔮</div>ยังไม่มีข้อมูล Prognostics — รัน <code className="text-bcp-black">python pipeline/phm_analysis.py</code> ก่อน</div>);
@@ -1600,16 +1846,18 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
 
   return(
    <div className="space-y-5 fade-up">
+    <CanonicalForecastCard canon={canon} hx={sel}/>
     {/* header */}
     <div className="rounded-2xl bg-gradient-to-br from-[#171733] to-[#241a38] text-white shadow-card p-5">
-      <h2 className="text-[16px] font-bold">Prognostics & Risk · พยากรณ์อายุคงเหลือ (RUL) และความเสี่ยง</h2>
-      <p className="text-[11.5px] text-white/55 mt-1">RUL = เวลาคงเหลือก่อนถึงเกณฑ์ล้าง (Monte-Carlo P10/P50/P90) · hazard rate จาก Weibull survival · หน่วยเชิงกายภาพ/ความน่าจะเป็นล้วน</p>
+      <h2 className="text-[16px] font-bold">Prognostics & Risk · {COPY.rul_th} ({COPY.rul})</h2>
+      <p className="text-[11.5px] text-white/55 mt-1">{COPY.rul_th} (Monte-Carlo P10/P50/P90) · {COPY.weibull_th} · หน่วยเชิงกายภาพ/ความน่าจะเป็นล้วน — ไม่ใช่วันนัดล้างที่ยืนยันแล้ว</p>
+      <p className="text-[10.5px] text-white/40 mt-1">ตารางและกล่องด้านล่างทั้งหมด = รายละเอียด cross-check (4 วิธีคำนวณเดิม, ไม่รวมกัน) — ตัวเลขหลักดูที่กล่องด้านบน</p>
     </div>
 
     {/* RUL risk table */}
     <div className="rounded-2xl bg-white shadow-card border border-black/[.04]">
-      <div className="px-5 pt-4 pb-2"><h3 className="text-[14px] font-bold text-bcp-black">อายุคงเหลือก่อนต้องล้าง (RUL) · เรียงตามความเสี่ยง</h3>
-        <p className="text-[11px] text-bcp-dgray mt-0.5">แถบ = ช่วง P10–P90 (วัน), ขีดดำ = ค่ากลาง P50 · P(30/60/90) = โอกาสถึงเกณฑ์ภายใน N วัน</p></div>
+      <div className="px-5 pt-4 pb-2"><h3 className="text-[14px] font-bold text-bcp-black">{COPY.rul_th} ({COPY.rul}) · เรียงตามความเสี่ยง</h3>
+        <p className="text-[11px] text-bcp-dgray mt-0.5">แถบ = ช่วง P10–P90 (วัน), ขีดดำ = ค่ากลาง P50 · P(30/60/90) = {COPY.prob_cleaning_th} ภายใน N วัน</p></div>
       <div className="overflow-x-auto"><table className="w-full text-[12px]">
         <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]">
           <th className="px-4 py-2">HX</th><th className="px-3 py-2">สถานะ</th><th className="px-3 py-2 text-right">P50 (วัน)</th>
@@ -1619,7 +1867,7 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
             <tr key={r.hx} onClick={()=>onSelect(r.hx)} className={`cursor-pointer hover:bg-bcp-green/[.03] ${active?'bg-bcp-green/[.06]':''}`}>
               <td className="px-4 py-2.5 font-bold text-bcp-black">{r.hx}</td>
               <td className="px-3 py-2.5"><span className="text-white text-[9px] font-semibold px-2 py-0.5 rounded-full" style={{background:meta.c}}>{meta.label}</span></td>
-              <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{r.past_threshold?'0 (เลยแล้ว)':r.p50!=null?Math.round(r.p50):'—'}</td>
+              <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{r.past_threshold?'0 (เลยแล้ว)':<RateSourceGate state={r.rate_source}>{r.p50!=null?Math.round(r.p50):'—'}</RateSourceGate>}</td>
               <td className="px-3 py-2.5"><RangeBar p10={r.past_threshold?0:r.p10} p50={r.past_threshold?0:r.p50} p90={r.past_threshold?0:r.p90}/></td>
               <td className="px-3 py-2.5 text-right"><ProbCell v={r.prob_30}/></td>
               <td className="px-3 py-2.5 text-right"><ProbCell v={r.prob_60}/></td>
@@ -1631,8 +1879,8 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
       {/* reliability / hazard */}
       <div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
-        <h3 className="text-[14px] font-bold text-bcp-black">Reliability & Hazard · <span className="text-bcp-green">{sel}</span></h3>
-        <p className="text-[11px] text-bcp-dgray mt-0.5 mb-2">Weibull survival จากประวัติรอบเดินเครื่อง · เส้น = โอกาสยัง "สะอาดพอ" R(t)</p>
+        <h3 className="text-[14px] font-bold text-bcp-black">{COPY.weibull} · <span className="text-bcp-green">{sel}</span></h3>
+        <p className="text-[11px] text-bcp-dgray mt-0.5 mb-2">{COPY.weibull_th} จากประวัติรอบเดินเครื่อง · เส้น = โอกาสยัง "สะอาดพอ" R(t)</p>
         {RL?(<>
           <div className="grid grid-cols-3 gap-2 mb-3 text-center">
             <div className="rounded-lg bg-black/[.03] p-2"><div className="text-[10px] text-bcp-dgray">Weibull shape</div><div className="text-[16px] font-bold">{fmt(RL.shape,2)}</div><div className="text-[8.5px] text-bcp-dgray">{RL.shape>1?'เสื่อมเร็วขึ้นตามเวลา':'สุ่ม'}</div></div>
@@ -1648,7 +1896,7 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
               <Area type="monotone" dataKey="R" stroke={BCP.turq} strokeWidth={2} fill={BCP.turq} fillOpacity=".12" name="R"/>
             </ComposedChart></ResponsiveContainer></div>
           <div className="flex items-center justify-between mt-2 text-[11px]">
-            <span className="text-bcp-dgray">P(ต้องล้างภายใน): </span>
+            <span className="text-bcp-dgray" title={COPY.prob_cleaning}>P(ต้องล้างภายใน) — {COPY.prob_cleaning_th}: </span>
             <span>30d <b style={{color:BCP.orange}}>{Math.round(RL.prob_30)}%</b> · 60d <b style={{color:BCP.orange}}>{Math.round(RL.prob_60)}%</b> · 90d <b style={{color:BCP.red}}>{Math.round(RL.prob_90)}%</b></span>
           </div>
           {RL.confidence!=='ok'&&<div className="mt-2 text-[10.5px] text-bcp-orange bg-bcp-orange/10 rounded px-2 py-1">⚠ n={RL.n_runs} รอบ (น้อย) — ใช้ค่า shape ร่วมจาก pool, ความเชื่อมั่นต่ำ</div>}
@@ -1661,7 +1909,7 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
         <p className="text-[11px] text-bcp-dgray mt-0.5 mb-3">เลือกโมเดลต่อ HX ด้วย AIC · backtest = ทำนายจาก 60% แรกของรอบเก่า เทียบวันล้างจริง (วัน)</p>
         {PR?(<>
           <div className="mb-3 text-[12px]">โมเดลที่เหมาะกับ {sel}: <span className="font-bold text-bcp-green">{PR.best_model||'—'}</span>
-            {PR.best_proj_days!=null?<span className="text-bcp-dgray"> · คาดถึงเกณฑ์อีก ~{PR.best_proj_days} วัน</span>:<span className="text-bcp-dgray"> · (เส้นอิ่มตัว — ไม่ถึงเกณฑ์ในกรอบ)</span>}</div>
+            {PR.best_proj_days!=null?<span className="text-bcp-dgray"> · คาดถึงเกณฑ์อีก ~<RateSourceGate state={PR.best_proj_rate_source}>{PR.best_proj_days} วัน</RateSourceGate></span>:<span className="text-bcp-dgray"> · (เส้นอิ่มตัว — ไม่ถึงเกณฑ์ในกรอบ)</span>}</div>
           <table className="w-full text-[12px] mb-3">
             <thead><tr className="text-left text-[10px] uppercase text-bcp-dgray border-b border-black/[.05]"><th className="py-1.5">Model</th><th className="py-1.5 text-right">AIC (ต่ำ=ดี)</th><th className="py-1.5 text-right">Backtest RMSE (วัน)</th></tr></thead>
             <tbody>{PR.models.map(m=>(<tr key={m.name} className="border-b border-black/[.03]">
@@ -1669,16 +1917,16 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
               <td className="py-1.5 text-right tabular-nums">{fmt(m.aic,1)}</td>
               <td className="py-1.5 text-right tabular-nums text-bcp-dgray">{prop.backtest_rmse_days?.[m.name]??'—'}</td></tr>))}</tbody>
           </table>
-          <div className="text-[10.5px] text-bcp-dgray bg-black/[.02] rounded px-2.5 py-2">โมเดลรวมที่ back-test ดีสุด: <b className="text-bcp-black">{prop.best_overall_model}</b> · {prop.note}</div>
+          <div className="text-[10.5px] text-bcp-dgray bg-black/[.02] rounded px-2.5 py-2">โมเดลรวมที่ back-test ดีสุด: <b className="text-bcp-black">{prop.best_overall_model}</b> · {prop.backtest?.note||prop.note}</div>
         </>):<div className="text-bcp-dgray text-[12px] py-6 text-center">ไม่มีข้อมูลโมเดล</div>}
       </div>
     </div>
 
-    {/* drivers */}
+    {/* drivers (ข้อ 3: gated on leave-HX-out CV beating the constant-mean baseline) */}
     {drv&&<div className="rounded-2xl bg-white shadow-card border border-black/[.04] p-5">
-      <h3 className="text-[14px] font-bold text-bcp-black">ตัวแปรที่มีผลต่ออัตราการเกิดตะกรัน (Degradation Drivers)</h3>
-      <p className="text-[11px] text-bcp-dgray mt-0.5 mb-3">SHAP importance จาก {drv.n} รอบเดินเครื่อง · ลูกศร = ทิศทาง (↑ ตัวแปร → ตะกรันเพิ่ม/ลด)</p>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <h3 className="text-[14px] font-bold text-bcp-black">ตัวแปรที่มีผลต่ออัตราการเกิดตะกรัน ({COPY.shap_driver})</h3>
+      <p className="text-[11px] text-bcp-dgray mt-0.5 mb-3">{COPY.shap_driver_th} (SHAP) จาก {drv.n} รอบเดินเครื่อง (CV: {drv.cv_method||'—'}) · ลูกศร = ทิศทาง (↑ ตัวแปร → ตะกรันเพิ่ม/ลด)</p>
+      {drv.show_in_dashboard?(<div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div style={{width:'100%',height:200}}><ResponsiveContainer>
           <BarChart data={drv.drivers.slice(0,7).map(d=>({name:d.label,v:+d.importance,dir:d.direction}))} layout="vertical" margin={{left:10,right:16,top:4,bottom:0}}>
             <CartesianGrid stroke="#EEF0ED" horizontal={false}/>
@@ -1692,10 +1940,15 @@ function PrognosticsPanel({phm,units,selected,onSelect}){
           {drv.levers.length?drv.levers.map((l,i)=><div key={i} className="text-[11.5px] text-bcp-black/80 mb-1.5 flex gap-1.5"><span className="text-bcp-green">▸</span>{l}</div>)
             :<div className="text-[11.5px] text-bcp-dgray">ไม่มี lever ที่ควบคุมได้ชัดเจนจากข้อมูลชุดนี้</div>}
           <div className="mt-3 text-[10.5px] text-bcp-orange bg-bcp-orange/10 rounded-lg px-3 py-2">
-            ⚠ <b>อ่านอย่างระวัง:</b> CV R² = {fmt(drv.cv_r2_mean,2)} (n={drv.n}) — โมเดลนี้ยัง<b>ทำนายไม่ได้ดี out-of-sample</b> ตัวแปรข้างต้นเป็น<b>ความสัมพันธ์เชิงสังเกต (associative)</b> ไม่ใช่สาเหตุที่พิสูจน์แล้ว ใช้เป็นสมมติฐานตั้งต้น
+            ⚠ <b>อ่านอย่างระวัง:</b> CV R² = {fmt(drv.cv_r2_mean,2)} (n={drv.n}, baseline R² = {fmt(drv.baseline_r2_mean,2)}) — โมเดลนี้ยัง<b>ทำนายไม่ได้ดี out-of-sample</b> ตัวแปรข้างต้นเป็น<b>ความสัมพันธ์เชิงสังเกต (associative)</b> ไม่ใช่สาเหตุที่พิสูจน์แล้ว ใช้เป็นสมมติฐานตั้งต้น
           </div>
         </div>
-      </div>
+      </div>):(
+        <div className="rounded-lg bg-black/[.02] border border-black/[.05] px-4 py-5 text-center text-[12px] text-bcp-dgray">
+          ยังไม่มี level ที่เชื่อถือพอจะแสดง — leave-HX-out CV R² ({fmt(drv.cv_r2_mean,2)}) ยังไม่ดีกว่า baseline ค่าเฉลี่ยคงที่ ({fmt(drv.baseline_r2_mean,2)})<br/>
+          <span className="text-[10.5px]">(n={drv.n} รอบเดินเครื่อง — ตัวอย่างน้อยเกินกว่าจะสรุป driver ที่ควบคุมได้อย่างน่าเชื่อถือ ยังติดตามอยู่)</span>
+        </div>
+      )}
     </div>}
    </div>);
 }
@@ -1769,7 +2022,7 @@ function EvidencePanel({ev,econ}){
         <div className="rounded-xl border border-black/[.06] bg-black/[.015] px-3.5 py-3">
           <div className="text-[10px] uppercase font-semibold text-bcp-dgray">Fouling-rate reliability</div>
           <div className="mt-1 text-[15px] font-bold text-bcp-black">{gate.n_reliable}/{gate.n_runs} <span className="text-[11px] font-normal text-bcp-green">ผ่านเกณฑ์ฟิสิกส์ (slope&lt;0)</span></div>
-          <div className="text-[10.5px] text-bcp-dgray mt-1">{gate.method||'robust Theil-Sen + in-service mask'} · ที่เหลือติดธง{gate.flag_breakdown?' ('+Object.entries(gate.flag_breakdown).filter(([k])=>k!=='ok').map(([k,v])=>`${k}:${v}`).join(', ')+')':''}</div></div>
+          <div className="text-[10.5px] text-bcp-dgray mt-1">{gate.method||'robust Theil-Sen tail slope + AIC race (linear vs asymptotic vs power) + in-service mask + R² floor'} · ที่เหลือติดธง{gate.flag_breakdown?' ('+Object.entries(gate.flag_breakdown).filter(([k])=>k!=='ok').map(([k,v])=>`${k}:${v}`).join(', ')+')':''}</div></div>
         {val.degradation_drivers&&<div className="rounded-xl border border-black/[.06] bg-black/[.015] px-3.5 py-3">
           <div className="text-[10px] uppercase font-semibold text-bcp-dgray">Degradation drivers</div>
           <div className="mt-1 text-[15px] font-bold text-bcp-black">CV R² = {val.degradation_drivers.value?.toFixed?.(1)??val.degradation_drivers.value}</div>
@@ -1844,12 +2097,14 @@ function App(){
   const [rerun,setRerun]=useState({busy:false,msg:null,err:false});
   const [hxts,setHxts]=useState(null);
   const [eor,setEor]=useState(null);      // end_of_run.json (ข้อ 1,6)
+  const [canon,setCanon]=useState(null);  // canonical_forecast.json (ข้อ 4: one number per HX, others = cross-check)
   const [econ,setEcon]=useState(null);    // economics.json (ข้อ 7)
   const [logi,setLogi]=useState(null);    // cleaning_logistics.json (ข้อ 4)
   const [chist,setChist]=useState(null);  // cleaning_history.json (audit ประวัติการล้าง)
   const [tamA,setTamA]=useState(null);    // tam_analysis.json (SOR/EOR 2021-2026)
   const [ev,setEv]=useState(null);        // evidence.json (หลักฐาน & ความเชื่อมั่น)
   const [plan,setPlan]=useState(null);    // cleaning_plan.json (แผนล้าง — notebook 16 cost/constraint optimizer)
+  const [citSim,setCitSim]=useState(null);  // cit_simulation.json (wizard Step 1 sawtooth)
   const [engPriority,setEngPriority]=useState([]);  // engineering_priority.json (notebook 08 risk-based ranking)
   // FG_FLOW limit override -- the ONE furnace-tab constraint field the real optimizer reads
   // (via furnace_fg_deficit_ceiling_C). Owned at App level (not per-component localStorage) so
@@ -1886,9 +2141,9 @@ function App(){
     Promise.all([loadJSON('hx_ranking.json'),loadJSON('cleaning_recommendations.json'),loadJSON('model_metrics.json'),loadJSON('forecast_6mo.json'),loadJSON('pfd_topology.json'),
       opt('rul.json'),opt('reliability.json'),opt('propagation_models.json'),opt('drivers.json'),opt('hx_timeseries.json'),
       opt('end_of_run.json'),opt('economics.json'),opt('cleaning_logistics.json'),opt('cleaning_history.json'),
-      opt('tam_analysis.json'),opt('evidence.json'),opt('cleaning_plan.json'),opt('engineering_priority.json')])
-      .then(([rk,rc,md,fc,tp,rul,rel,prop,drv,ts,eo,ec,lg,ch,ta,evd,pl,ep])=>{setRanking(rk);setRecs(rc);setModels(md);setForecast(fc);setTopo(tp);
-        setPhm({rul,rel,prop,drv});setHxts(ts);setEor(eo);setEcon(ec);setLogi(lg);setChist(ch);setTamA(ta);setEv(evd);setPlan(pl);setEngPriority(ep||[]);setLoading(false);})
+      opt('tam_analysis.json'),opt('evidence.json'),opt('cleaning_plan.json'),opt('engineering_priority.json'),opt('cit_simulation.json'),opt('canonical_forecast.json')])
+      .then(([rk,rc,md,fc,tp,rul,rel,prop,drv,ts,eo,ec,lg,ch,ta,evd,pl,ep,cs,cn])=>{setRanking(rk);setRecs(rc);setModels(md);setForecast(fc);setTopo(tp);
+        setPhm({rul,rel,prop,drv});setHxts(ts);setEor(eo);setEcon(ec);setLogi(lg);setChist(ch);setTamA(ta);setEv(evd);setPlan(pl);setEngPriority(ep||[]);setCitSim(cs);setCanon(cn);setLoading(false);})
       .catch(e=>{setErr(e.message);setLoading(false);});
   },[]);
   useEffect(load,[load]);
@@ -2016,14 +2271,14 @@ function App(){
         </section>
         <PID topo={topo} units={units} selected={selected} onSelect={onSelect}/>
         <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          <div className="lg:col-span-4"><DetailPanel hx={selected} unit={curUnit} onSim={onSim} simActive={simActive} fc={curFc} node={topo?.nodes?.[selected]}/></div>
+          <div className="lg:col-span-4"><DetailPanel hx={selected} unit={curUnit} onSim={onSim} simActive={simActive} fc={curFc} node={topo?.nodes?.[selected]} plan={plan}/></div>
           <div className="lg:col-span-8"><ForecastChart hx={selected} fc={curFc} simActive={simActive} unit={curUnit}/></div>
         </section>
-        <HXDetailPanel hxts={hxts} units={units} selected={selected} onSelect={onSelect} eor={eor} params={params} chist={chist}/>
+        <HXDetailPanel hxts={hxts} units={units} selected={selected} onSelect={onSelect} eor={eor} params={params} chist={chist} plan={plan}/>
       </>}
-      {tab==='phm'&&<PrognosticsPanel phm={phm} units={units} selected={selected} onSelect={onSelect}/>}
+      {tab==='phm'&&<PrognosticsPanel phm={phm} units={units} selected={selected} onSelect={onSelect} canon={canon}/>}
       {tab==='plan'&&<>
-        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan} fgLimitOv={fgLimitOv}/>
+        <CleaningPlanPanel plan={plan} onPlanUpdated={setPlan} fgLimitOv={fgLimitOv} citSim={citSim} onCitSimUpdated={setCitSim} eor={eor}/>
         <CitLimitWhatIf tamA={tamA} topo={topo} params={params} econ={econ}/>
         <SlideChart tamA={tamA}/>
         <LogisticsTable logi={logi}/>

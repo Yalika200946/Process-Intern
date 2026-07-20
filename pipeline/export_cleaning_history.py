@@ -14,7 +14,11 @@ sawtooth jump in the data) and the MODEL estimate, so the two can be compared:
       - terminal HX whose cold_out IS the CIT tag (E113A/E112C) → cold_out jump directly
       - otherwise → ΔQ_recovered / charge × CIT_sensitivity (2c);
         flagged not-estimable when Q_CIT_corr < 0.2 or sensitivity ≤ 0 (downstream pinch)
-  * CIT recovery (model)   = expected_CIT_gain_C from 2d/6d (one value per HX)
+  * CIT recovery (reference) = median of this HX's own measured, gain-estimable, non-TAM
+    events above (one value per HX, shown on every row for comparison) -- the exact same
+    calculation pipeline/export_economics.py::measured_cit_gain performs, computed here for
+    free since the measured values already exist. Falls back to notebook 08's early-stage
+    expected_CIT_gain_C proxy only when this HX has no gain-estimable SWITCH event yet.
   * fouling rate of the run that ENDED (run N−1): dUrel/month, R², N, reliable
 
 No physics is recomputed here — it reads the CSVs the pipeline already produced and
@@ -120,7 +124,7 @@ def main():
                'clean_trigger': 'U_relative < 0.875 (เสีย 12.5% จากสภาพสะอาด) หรือ duty shortfall > threshold (3b)',
                'cit_recovery_measured': 'จุดกระโดดจริงตอนล้าง: HX ปลายเทรน (cold_out=CIT) ใช้ cold_out jump ตรง; อื่น ๆ ใช้ ΔQ_recovered/charge × CIT_sensitivity (2c)',
                'bypass_correction': 'ก่อน/หลัง = median ของวัน [-12..-2] และ [+2..+12] รอบเหตุการณ์ (เว้นวัน transition 2 วันทั้งสองฝั่ง) — หน้าต่างเดียวกับ event-study ใน notebook 14, กันข้อมูล transient ตอนเริ่ม/TAM-recovery ที่หน้าต่างสั้นกว่านี้จะจับติดมาด้วย',
-               'cit_recovery_model': 'expected_CIT_gain_C จาก 2d/6d (single-TAM calibration → เชิงทิศทาง)',
+               'cit_recovery_model': 'median ของ CIT วัดจริง (คอลัมน์ซ้าย) เฉพาะ SWITCH ที่ประเมินได้และเป็นบวก — สูตรเดียวกับ export_economics.measured_cit_gain, ใช้ข้อมูลเดียวกับตารางนี้ ไม่ใช่ค่าประมาณการแยก · fallback เป็น expected_CIT_gain_C (2d/6d proxy) เฉพาะ HX ที่ยังไม่มีเหตุการณ์ SWITCH ที่ประเมินได้',
                'note': 'แสดง "วัดจริง" เทียบ "โมเดล" เพื่อให้วิศวกรตรวจว่าโมเดลตรงกับของจริงแค่ไหน',
            },
            'hx': {}}
@@ -228,6 +232,28 @@ def main():
                 gain_estimable=bool(estimable), cit_model_C=cit_model,
                 run_ended=(run_ended['run'] if run_ended else None)))
 
+        # BUG FOUND 2026-07-20 (plant engineer flagged the "CIT โมเดล" column looking wrong --
+        # it showed a CONSTANT +8.3 on every row for E113A regardless of what "CIT คืน วัดจริง"
+        # showed that same row, ranging -4.2..+8.8, median +4.3): that constant was
+        # expected_CIT_gain_C, notebook 08's early-stage Q_shortfall x CIT_sensitivity PROXY --
+        # the same proxy already found to disagree with the measured-first economics number the
+        # "แผนล้าง HX" tab shows (+4.3). Since this file already computed every row's
+        # cit_measured_C above, the medians of those SAME rows -- the identical calculation
+        # pipeline/export_economics.py::measured_cit_gain performs on this file's own output --
+        # is available for free right here, with no proxy needed at all. Use it instead so the
+        # audit table's reference column and the forecast row match the Plan tab exactly by
+        # construction, not by coincidence.
+        measured_vals = [c['cit_measured_C'] for c in cleans
+                         if c['type'] != 'TAM' and c['gain_estimable']
+                         and c['cit_measured_C'] is not None and c['cit_measured_C'] > 0]
+        cit_measured_median = round(float(np.median(measured_vals)), 2) if measured_vals else None
+        cit_reference = cit_measured_median if cit_measured_median is not None else cit_model
+        for c in cleans:
+            c['cit_model_C'] = cit_reference
+        for e in all_events:
+            if e['HX'] == hx:
+                e['cit_model_C'] = cit_reference
+
         # next-clean forecast row (from end_of_run.json)
         eh = eor['hx'].get(hx, {})
         duty, urel = eh.get('duty', {}), eh.get('urel', {})
@@ -237,7 +263,8 @@ def main():
         if pdate or (eh.get('flags', {}) or {}).get('past_trigger'):
             fc = dict(projected_date=pdate, days_remaining=days,
                       past_trigger=bool((eh.get('flags', {}) or {}).get('past_trigger')),
-                      cit_loss_now_C=(eh.get('consequence', {}) or {}).get('cit_loss_now_C'))
+                      cit_loss_now_C=(cit_reference if cit_reference is not None
+                                      else (eh.get('consequence', {}) or {}).get('cit_loss_now_C')))
 
         out['hx'][hx] = dict(
             sensitivity=dict(CIT_sensitivity_degC_per_Qnorm=sensi, Q_CIT_corr=corr, is_terminal_CIT=is_terminal),

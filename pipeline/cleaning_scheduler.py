@@ -42,7 +42,10 @@ NEXT_TAM = pd.Timestamp(os.environ.get('CPHT_NEXT_TAM', '2028-06-01'))   # place
 POST_CYCLE_YEARS = 4
 MIN_INTERVAL = 60      # don't schedule online cleans closer than this (logistics floor)
 MIN_RATE = 1e-4        # °C/day below this = effectively no CIT decay -> TAM only
-MAX_FREQ_PER_YEAR = 4  # hard cap — real-world crew/logistics ceiling (4/yr only in an emergency)
+# hard cap — real-world crew/logistics ceiling. Tightened 2026-07-20: 2-3/yr in normal
+# operation (was 4/yr, "4 only in an emergency"). Configurable via CPHT_MAX_CLEANS_PER_YEAR;
+# default matches config/operating_limits.yaml and pipeline/cleaning_scheduler_network.py.
+MAX_FREQ_PER_YEAR = int(os.environ.get('CPHT_MAX_CLEANS_PER_YEAR', 3))
 MIN_T_FROM_FREQ_CAP = 365.0 / MAX_FREQ_PER_YEAR
 
 

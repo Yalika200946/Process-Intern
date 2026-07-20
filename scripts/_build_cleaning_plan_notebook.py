@@ -35,7 +35,7 @@ cells.append(md_cell(r"""
 |---|---|---|
 | **ความคุ้มค่า** (economics) | net saving/ปี, payback[วัน] | สูตรพลังงานโรงงาน × ΔCIT วัดจริง ÷ ค่าล้างต่อ HX |
 | **ประสิทธิภาพ/ความรุนแรง** (efficiency) | fouling rate r [°C/วัน] (robust, reliable) | `Fouling_Rate_By_Run.csv` (§11 methodology) |
-| **ความเป็นไปได้ในการ operate** (feasibility) | bypass/spare, เพดาน 4 ครั้ง/ปี, ทีมล้าง ≤N/เดือน, TAM-only, ช่วงห่างขั้นต่ำ | `cleaning_logistics.json` + constraint |
+| **ความเป็นไปได้ในการ operate** (feasibility) | bypass/spare, เพดาน 2-3 ครั้ง/ปี (`CPHT_MAX_CLEANS_PER_YEAR`), ทีมล้าง ≤N/เดือน, TAM-only, ช่วงห่างขั้นต่ำ | `cleaning_logistics.json` + constraint |
 | **ความวิกฤต** (criticality) | safety, ตำแหน่งในเทรน (ยิ่งท้าย=ยิ่งร้อน=เสี่ยง), worsening | `hx_ranking.json` |
 
 **ตรรกะ:** แก้ตารางล้างทั้งเครือข่ายด้วย constrained moving-window optimizer (ต้นทุนพลังงานสะสม + ค่าล้าง ต่ำสุด
@@ -52,7 +52,26 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-REPO = Path.cwd().parent if Path.cwd().name == 'notebooks' else Path.cwd()
+def _find_repo_root(start=None):
+    # nbconvert runs the kernel with cwd = the notebook's OWN directory
+    # (notebooks/production/ since the 2026-07-17 move), not notebooks/ or the repo root --
+    # the old `Path.cwd().name == 'notebooks'` check silently resolved to
+    # notebooks/production/ itself under nbconvert (name=='production' matched neither
+    # branch), which broke every REPO-relative read/write for this notebook once run via
+    # pipeline/run_all.py's POST list (only ever exercised again after a since-fixed bug in
+    # run_all.py that had been skipping all POST steps -- see run_all.py's ran_terminal
+    # history). Walk upward instead so this works from notebooks/, notebooks/production/,
+    # or the repo root (interactive VSCode use) alike.
+    p = Path(start or Path.cwd()).resolve()
+    for _ in range(6):
+        if (p / 'dashboard').is_dir() and (p / 'pipeline').is_dir():
+            return p
+        if p.parent == p:
+            break
+        p = p.parent
+    raise RuntimeError(f'could not locate repo root (dashboard/ + pipeline/) upward from {start or Path.cwd()}')
+
+REPO = _find_repo_root()
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 DASH = REPO / 'dashboard' / 'data'
 sys.path.append(str(REPO))
@@ -181,6 +200,7 @@ for hx in sorted(set(list(logi_by) + list(econ_by) + list(rank))):
         fouling_dUrel_per_month=(round(r_month, 4) if r_month is not None else None),
         rate_source=src,
         cit_gain_C_full=dC_full, cit_gain_C_online=dC_online, cit_gain_source=e.get('cit_gain_source'),
+        cit_gain_n_events=e.get('cit_gain_n_events'), cit_gain_min_C=e.get('cit_gain_min_C'), cit_gain_max_C=e.get('cit_gain_max_C'),
         cleaning_cost=e.get('cleaning_cost'), cleaning_cost_overridden=(hx in COST_OVERRIDES),
         net_saving_thb_yr=e.get('saving_thb_yr'), payback_days=e.get('payback_days'),
         safety=bool(rk.get('safety_flag')), worsening=bool(rk.get('worsening')),
@@ -225,7 +245,10 @@ def cit_rate(hx, dC):
         return dC / float(dur)
     return None
 
-MIN_INTERVAL, MAX_FREQ = 60, 4
+# hard cap tightened 2026-07-20: 2-3/yr in normal operation (was 4/yr emergency-only) —
+# configurable via CPHT_MAX_CLEANS_PER_YEAR, default matches config/operating_limits.yaml
+# and pipeline/cleaning_scheduler_network.py / cleaning_scheduler.py.
+MIN_INTERVAL, MAX_FREQ = 60, int(os.environ.get('CPHT_MAX_CLEANS_PER_YEAR', 3))
 dec['r_cit_per_day'] = dec.apply(lambda row: cit_rate(row['HX'], row['cit_gain_C_online']), axis=1)
 def t_star(row):
     r = row['r_cit_per_day']; C = row['cleaning_cost']
@@ -293,7 +316,7 @@ cells.append(md_cell(r"""
 ## 5 · แผนเดียวที่แนะนำ — constrained network schedule
 
 แก้ตารางล้างทั้งเครือข่ายพร้อมกันด้วย moving-window optimizer (Dekebo, Oh & Lee 2023) ที่เคารพข้อจำกัด operate จริง:
-ล้าง online ได้เฉพาะ HX ที่มี bypass/spare (เต็มหรือบางส่วน) · ทีมล้าง ≤ 2 ตัว/เดือน · ≤ 4 ครั้ง/ปีต่อ HX · ที่เหลือรอ TAM.
+ล้าง online ได้เฉพาะ HX ที่มี bypass/spare (เต็มหรือบางส่วน) · ทีมล้าง ≤ 2 ตัว/เดือน · ≤ 2-3 ครั้ง/ปีต่อ HX (`CPHT_MAX_CLEANS_PER_YEAR`) · ที่เหลือรอ TAM.
 เรา **reuse** ตรรกะจาก `pipeline/cleaning_scheduler_network.compute_schedule()` (ฟังก์ชันเดียวกับที่ pipeline ใช้เขียน
 `cleaning_schedule_v2.json`) โดยรันสดในเซลล์นี้ด้วยค่าล้าง (รวม override ถ้ามี) จาก §1-2 — เพื่อให้แผนตอบสนองค่าล้างที่แก้จริง
 ไม่ใช่แค่โหลดไฟล์ static เก่า.
@@ -447,6 +470,9 @@ for _, r in dec.iterrows():
         cit_gain_C_full=(None if pd.isna(r['cit_gain_C_full']) else float(r['cit_gain_C_full'])),
         cit_gain_C_online=(None if pd.isna(r['cit_gain_C_online']) else float(r['cit_gain_C_online'])),
         cit_gain_source=r['cit_gain_source'],
+        cit_gain_n_events=(None if pd.isna(r['cit_gain_n_events']) else int(r['cit_gain_n_events'])),
+        cit_gain_min_C=(None if pd.isna(r['cit_gain_min_C']) else float(r['cit_gain_min_C'])),
+        cit_gain_max_C=(None if pd.isna(r['cit_gain_max_C']) else float(r['cit_gain_max_C'])),
         safety=bool(r['safety']), worsening=bool(r['worsening']),
         position_risk=float(r['position_risk']), risk_mult=float(r['risk_mult']),
         engineering_priority_score=(None if pd.isna(r['engineering_priority_score']) else float(r['engineering_priority_score'])),
@@ -487,7 +513,7 @@ out = dict(
     tube_skin_risk_note=schedV2.get('tube_skin_risk_note'),
     cost_overrides_applied=COST_OVERRIDES,
     method=('แผนเดียว: constrained network moving-window optimizer (Dekebo, Oh & Lee 2023) '
-            'เคารพ bypass/ทีมล้าง/เพดาน 4-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '
+            f'เคารพ bypass/ทีมล้าง/เพดาน {MAX_FREQ}-ครั้ง-ต่อปี/TAM (bypass จาก list โรงงานจริง รวมกรณีล้าง online ได้บางส่วน) '
             '· จัดลำดับด้วยความเสี่ยงแบบ notebook 08 เป็นหลัก (engineering_priority_score) เหมือนแท็บภาพรวม — '
             f'ถ่วงเข้า objective ของ optimizer ตรงๆ ด้วย (RISK_WEIGHT={schedV2.get("risk_weight_applied")}) '
             'ไม่ใช่แค่จัดเรียงตารางแสดงผล จึงเปลี่ยนได้จริงว่าตัวไหนได้คิวล้าง online ก่อนเมื่อทีมล้าง/งบจำกัด · '

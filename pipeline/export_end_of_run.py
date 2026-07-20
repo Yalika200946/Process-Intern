@@ -36,12 +36,15 @@ DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 202
 OUT  = REPO / 'dashboard' / 'data' / 'end_of_run.json'
 sys.path.append(str(REPO))
 from src.models import fouling_curves as cm
+from src.validation import nb_audit as A
+from src.models.phm_config import NEAR_THRESHOLD_DAYS
 
 # --- engineering constants (documented, tunable) ---
 TRIGGER_DROP_FRAC   = 0.125   # U_relative loss that defines "must clean" (12.5%), per notebook 5
 PROJECT_HORIZON_DAYS = 240    # cap the forward projection drawn on the chart
 PROJECT_STEP_DAYS    = 7      # weekly points on the projection line
-NEAR_THRESHOLD_DAYS  = 60     # "ใกล้เกณฑ์" flag
+# NEAR_THRESHOLD_DAYS ("ใกล้เกณฑ์" flag) now imported from phm_config -- single shared source
+# with threshold_backtest.py's false-alarm/missed-warning horizon (ข้อ 6), see phm_config.py.
 UNRELIABLE_R2        = 0.30   # current-run fit below this = low-confidence trend
 
 
@@ -85,6 +88,22 @@ def main():
     sens = pd.read_csv(DATA / 'Q_CIT_Sensitivity.csv').set_index('HX')
 
     ranking = {r['HX']: r for r in (_load_json('hx_ranking.json') or [])}
+
+    # BUG FOUND 2026-07-20 (plant engineer flagged the "signals" text and this panel's own
+    # "คืน CIT ได้" line showing +8.3 for E113A while the "แผนล้าง HX" tab showed +4.3): this
+    # used rk['expected_CIT_gain_C'], notebook 08's early-stage proxy, for cit_loss_now below --
+    # same root cause already fixed in export_cleaning_history.py (that file now reports the
+    # MEDIAN of E113A's own measured, gain-estimable, non-TAM events, +4.3, matching the Plan
+    # tab exactly). Prefer that same per-HX reference value here too, read from
+    # Cleaning_Events.csv (written by export_cleaning_history.py, one pipeline-run older at
+    # most since both run in the same POST list every time -- self-corrects every run, and
+    # falls back to the proxy only on a from-scratch first run before that file exists).
+    measured_ref_by_hx = {}
+    events_csv = DATA / 'Cleaning_Events.csv'
+    if events_csv.exists():
+        _ev = pd.read_csv(events_csv)
+        if 'cit_model_C' in _ev.columns:
+            measured_ref_by_hx = _ev.dropna(subset=['cit_model_C']).groupby('HX')['cit_model_C'].last().to_dict()
 
     as_of = feat.index.max()
     trigger_urel = 1.0 - TRIGGER_DROP_FRAC
@@ -143,27 +162,27 @@ def main():
                 return None
             return dict(A=float(A), tau=float(tau), c=float(c), t0=float(t0), u_clean=float(u_clean))
 
-        frx_all = fr[fr.HX == hx]
-        frx_rel = frx_all[frx_all.get('reliable') == True] if 'reliable' in frx_all else frx_all  # noqa: E712
-        frx_cur = frx_rel[frx_rel.Run == cur_rid] if cur_rid is not None else frx_rel.iloc[0:0]
+        # 4-state rate-evidence cascade (ข้อ 2), centralized in nb_audit.classify_rate_source so
+        # export_end_of_run.py / phm_analysis.py's C1/C2 all agree on the same state names.
+        cls_state, cls_row = A.classify_rate_source(fr, hx, cur_rid)
         rate_urel, r2, run_dur, rate_source, curve = None, None, None, None, None
-        if not frx_cur.empty:
-            last = frx_cur.iloc[-1]
-            rate_urel = _rate_of(last, cur_urel); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
-            rate_source = 'current_run'
-            curve = _curve_of(last)   # only meaningful for the CURRENT run's own days-on-duty axis
-        if rate_urel is None and not frx_rel.empty:   # most recent OTHER reliable run of this HX
-            last = frx_rel.sort_values('Run').iloc[-1]
-            rate_urel = _rate_of(last, cur_urel); r2 = _num(last.get('R2')); run_dur = _num(last.get('Duration_days'), 1)
+        if cls_state == 'current_reliable_run':
+            rate_urel = _rate_of(cls_row, cur_urel); r2 = _num(cls_row.get('R2')); run_dur = _num(cls_row.get('Duration_days'), 1)
+            rate_source = 'current_reliable_run'
+            curve = _curve_of(cls_row)   # only meaningful for the CURRENT run's own days-on-duty axis
+        elif cls_state == 'previous_reliable_run':
+            rate_urel = _rate_of(cls_row, cur_urel); r2 = _num(cls_row.get('R2')); run_dur = _num(cls_row.get('Duration_days'), 1)
             rate_source = 'previous_reliable_run'
-        if rate_urel is None:   # last resort: fit current-run tail (no reliable history)
+        if rate_urel is None:   # last resort: fit current-run tail (no reliable history at all)
             if cur_rid is not None and dod_col in feat:
                 run = feat[feat[rid_col] == cur_rid]
                 x, y = run[dod_col].values, run[f'{hx}_U_relative'].values
                 m = np.isfinite(x) & np.isfinite(y)
                 if m.sum() >= 5:
                     rate_urel = _num(np.polyfit(x[m], y[m], 1)[0], 6)
-                    rate_source = 'current_run_fit'
+                    rate_source = 'unreliable_current_fit'
+        if rate_urel is None:
+            rate_source = 'no_forecast'
 
         # ---- URel view: days to trigger ----
         # Prefer extrapolating along the fitted asymptotic curve (not linearly from the tail
@@ -239,7 +258,7 @@ def main():
         # ---- Q -> CIT consequence (2c sensitivity + ranking) ----
         rk = ranking.get(hx, {})
         cit_sens = _num(sens.loc[hx, 'CIT_sensitivity_degC_per_Qnorm']) if hx in sens.index else None
-        cit_loss_now = _num(rk.get('expected_CIT_gain_C'), 2)          # recoverable CIT by cleaning now
+        cit_loss_now = _num(measured_ref_by_hx.get(hx, rk.get('expected_CIT_gain_C')), 2)  # recoverable CIT by cleaning now
         q_loss_pct = _num(rk.get('Q_drop_%'), 1)
         q_loss_now_kW = cur_short
         cit_loss_trig = None
@@ -253,7 +272,7 @@ def main():
         # ---- degradation flags + Thai signal text (ข้อ 6) ----
         # trend is only asserted from the CURRENT reliable run; anything else (a prior
         # reliable run, or a raw tail fit) is surfaced as "current data insufficient".
-        stale_rate = rate_source is not None and rate_source != 'current_run'
+        stale_rate = rate_source is not None and rate_source != 'current_reliable_run'
         worsening = bool(rk.get('worsening')) and not stale_rate
         improving = (not stale_rate) and rate_urel is not None and rate_urel >= 0
         unreliable = r2 is not None and r2 < UNRELIABLE_R2
@@ -264,7 +283,8 @@ def main():
         elif near:
             signals.append(f'ใกล้เกณฑ์ล้าง ~{int(days_urel)} วัน')
         if stale_rate:
-            src_th = ('รอบก่อนหน้า' if rate_source == 'previous_reliable_run' else 'การ fit ปัจจุบัน (ยังไม่ผ่านเกณฑ์เชื่อถือ)')
+            src_th = {'previous_reliable_run': 'รอบก่อนหน้า', 'unreliable_current_fit': 'การ fit ปัจจุบัน (ยังไม่ผ่านเกณฑ์เชื่อถือ)',
+                      'no_forecast': 'ไม่มีข้อมูลเพียงพอ'}.get(rate_source, 'ไม่ทราบแหล่งที่มา')
             signals.append(f'⚠ อัตราปัจจุบันยังไม่มีรอบที่เชื่อถือได้ (ใช้{src_th}) — งดสรุปแนวโน้ม')
         else:
             if rate_urel is not None and rate_urel < 0:

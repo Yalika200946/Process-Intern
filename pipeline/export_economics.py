@@ -159,6 +159,40 @@ def measured_cit_gain(chist, hx):
     return round(float(np.median(vals)), 2) if vals else None
 
 
+def measured_cit_gain_stats(chist, hx):
+    """Sample size + range behind measured_cit_gain()'s point estimate -- 2026-07-20:
+    engineer feedback that a single median number gives no sense of how much data (or how
+    much spread) backs it. 11/16 HX have ZERO qualifying events (100% model_calibrated,
+    not measured at all) and even the 'measured' HX range from n=1 (E101CD, E105AB -- a
+    single data point) to n=11 (E113A). Surfacing n/min/max lets the dashboard show that
+    difference instead of presenting a single-point guess and an 11-point median identically."""
+    h = (chist or {}).get('hx', {}).get(hx)
+    vals = [c['cit_measured_C'] for c in (h or {}).get('cleans', [])
+            if c.get('type') != 'TAM' and c.get('gain_estimable')
+            and c.get('cit_measured_C') is not None and c['cit_measured_C'] > 0]
+    if not vals:
+        return dict(n=0, min=None, max=None)
+    return dict(n=len(vals), min=round(min(vals), 2), max=round(max(vals), 2))
+
+
+def estimate_cit_gain_early(q_shortfall, cit_sensitivity_degC_per_qnorm):
+    """Pre-economics CIT-gain proxy: expected_CIT_gain = Q_shortfall x CIT_sensitivity.
+
+    This is deliberately NOT `measured_cit_gain`/`calibrated_model_gain` above -- those need
+    `cleaning_history.json` (built by `export_cleaning_history.py`, a POST step that runs
+    AFTER notebook 08 in `pipeline/run_all.py`'s CHAIN), so they are not yet computable at the
+    point notebook 08 needs a CIT-gain number for its engineering_priority_score. This is the
+    ONE shared implementation of that necessarily-earlier estimate (previously duplicated
+    inline in notebook 08's cell computing `expected_CIT_gain_C`) -- notebook 08 already
+    downweights it to a 0.25 secondary/tie-breaker behind the measured Q_shortfall signal
+    (see its own cell 25/26 commentary: the CIT point model does not beat a persistence
+    baseline out-of-sample, see notebook 6a), so this proxy never drives the ranking alone.
+    Returns None for non-positive sensitivity (gain not estimable that way)."""
+    if cit_sensitivity_degC_per_qnorm is None or cit_sensitivity_degC_per_qnorm <= 0 or q_shortfall is None:
+        return None
+    return round(max(0.0, q_shortfall * cit_sensitivity_degC_per_qnorm), 3)
+
+
 CALIB_RATIO_CLIP = (0.15, 1.0)   # sane bounds on the correction factor: never inflate the
                                   # model estimate, never let a lone noisy event zero it out
 
@@ -347,9 +381,11 @@ def main():
         cum_cit += dC
         cum_yr += yr
         cum_co2 += co2_ton_day
+        gain_stats = measured_cit_gain_stats(chist, r['HX'])
         per_hx.append(dict(
             HX=r['HX'], rank=i,
             cit_gain_C=round(dC, 2), cit_gain_source=src,
+            cit_gain_n_events=gain_stats['n'], cit_gain_min_C=gain_stats['min'], cit_gain_max_C=gain_stats['max'],
             cit_gain_model_C=(round(float(r['expected_CIT_gain_C']), 2)
                               if r.get('expected_CIT_gain_C') else None),
             cit_gain_calibration_factor=calib_factor,
