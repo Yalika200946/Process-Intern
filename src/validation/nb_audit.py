@@ -243,6 +243,24 @@ def _fit_segment(d1, u1, rf1, min_span_days=30, min_pts=20, recent_days=60,
     fit_pow = cm.fit_model('power', d1s, rf1s, models=cm.MODELS_RISING)
     if fit_pow is not None and not (0.15 <= abs(fit_pow['params'][1]) <= 6.0):
         fit_pow = None
+    # Second, independent plausibility guard: even an exponent inside [0.15, 6] can still
+    # pair with a numerically-collapsed near-zero coefficient, producing a "hockey stick"
+    # curve that's visually flat for most of the run and only rises in the final stretch
+    # (confirmed empirically: E108AB Run4, a=2.4e-12/b=3.47 -- flat 0.0044 from day 20 to
+    # ~300, then rises to 0.018 by day 622; visually indistinguishable from a fitting bug).
+    # `growth_ratio` = (t_end/t_start)^b is the power term's own multiplicative growth
+    # across the fitted window -- a direct, unit-free measure of how "hockey-stick" shaped
+    # the curve is, independent of the coefficient's absolute scale. Calibrated empirically
+    # against every power-model reliable run in the production dataset: legitimate
+    # accelerating fits (E101AB b=1.73, E110ABC b=2.12, ...) topped out at ~9.5e3; the two
+    # confirmed-degenerate fits (E108AB Run4, E109AB Run2) were 1.5e5 and 7.2e7 -- orders of
+    # magnitude past every legitimate case, with a wide margin either side of this cutoff.
+    if fit_pow is not None:
+        t_start_pow, t_end_pow = d1s[0], d1s[-1]
+        b_pow = fit_pow['params'][1]
+        growth_ratio = (t_end_pow / max(t_start_pow, 1.0)) ** abs(b_pow)
+        if growth_ratio > 3e4:
+            fit_pow = None
     fits = [f for f in (fit_lin, fit_asy, fit_pow) if f]
     best = min(fits, key=lambda f: f['aic']) if fits else None
 
