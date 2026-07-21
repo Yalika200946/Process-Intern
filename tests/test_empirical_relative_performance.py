@@ -4,6 +4,7 @@ import pytest
 from pipeline.explore_empirical_relative_performance import (
     calculate_relative_performance,
     relationship_summary,
+    sensitivity,
 )
 
 
@@ -37,6 +38,15 @@ def test_relationship_summary_includes_time_and_valid_counts():
     result=relationship_summary(frame)
     assert set(result.x_variable) == {"cold_flow_m3_h","lmtd_value","hot_in_c","time_days"}
     assert (result.valid_sample_count == 6).all()
+
+
+def test_window_sensitivity_reports_reference_and_result_changes():
+    frame=pd.DataFrame({"timestamp":pd.date_range("2024-06-10",periods=20,tz="Asia/Bangkok"),"hx_id":"HX","ua_value":[float(x) for x in range(10,30)]})
+    result=sensitivity(frame,{"hx_id":"HX","start":"2024-06-15","end":"2024-06-24"},[0,1,3])
+    assert {"reference_ua_empirical","reference_ua_change_pct","median_absolute_relative_ua_change","max_absolute_relative_ua_change"}.issubset(result.columns)
+    base=result[(result.shift_start_days==0)&(result.shift_end_days==0)].iloc[0]
+    assert base.reference_ua_change_pct == pytest.approx(0.0)
+    assert base.max_absolute_relative_ua_change == pytest.approx(0.0)
 
 
 def test_output_names_do_not_claim_clean_or_confirmed_fouling():
