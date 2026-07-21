@@ -1,7 +1,10 @@
 import pandas as pd
 import pytest
 
-from src.events.cleaning_detection import detect_signal_recoveries, matched_condition_review
+from src.events.cleaning_detection import (
+    detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
+    review_hx_tam_recovery,
+)
 
 
 def fixture(*, flow_after=100.0, lmtd_after=30.0, ua_after=110.0):
@@ -80,3 +83,56 @@ def test_matched_condition_review_rejects_unstable_recovery_distribution():
         frame, pd.Timestamp("2024-01-21", tz="Asia/Bangkok"), recovery_iqr_max=0.15
     )
     assert result["matched_review_status"] == "MATCHED_RECOVERY_UNSTABLE"
+
+
+def test_total_charge_detects_two_tam_intervals_and_restart():
+    dates = pd.date_range("2021-01-01", periods=12, tz="Asia/Bangkok")
+    flow = [500, 500, 10, 5, 0, 500, 500, 40, 30, 20, 10, 500]
+    result = detect_plant_tam_windows(dates, flow, minimum_consecutive_records=3)
+    assert len(result) == 2
+    assert result.iloc[0].tam_start == dates[2]
+    assert result.iloc[0].tam_end == dates[4]
+    assert result.iloc[0].restart_from == dates[5]
+    assert not result.individual_hx_cleaning_confirmed.any()
+
+
+def test_short_low_flow_upset_is_not_tam():
+    dates = pd.date_range("2021-01-01", periods=5, tz="Asia/Bangkok")
+    result = detect_plant_tam_windows(dates, [500, 10, 10, 500, 500], minimum_consecutive_records=3)
+    assert result.empty
+
+
+def test_tam_hx_recovery_is_observed_but_cleaning_unconfirmed():
+    frame = fixture()
+    frame["hx_id"] = "HX"
+    event = {"tam_id": "TAM_2024", "tam_start": pd.Timestamp("2024-01-18", tz="Asia/Bangkok"),
+             "tam_end": pd.Timestamp("2024-01-20", tz="Asia/Bangkok"),
+             "restart_from": pd.Timestamp("2024-01-21", tz="Asia/Bangkok"),
+             "plant_tam_status": "SIGNAL_DERIVED_TAM"}
+    result = review_hx_tam_recovery(frame, event, comparison_window_days=20)
+    assert result["tam_recovery_status"] == "TAM_ASSOCIATED_RECOVERY"
+    assert result["apparent_ua_recovery_fraction"] == pytest.approx(0.10)
+    assert not result["individual_hx_cleaning_confirmed"]
+
+
+def test_tam_hx_review_flags_operating_condition_confounding():
+    frame = fixture(flow_after=130.0)
+    frame["hx_id"] = "HX"
+    event = {"tam_id": "TAM_2024", "tam_start": pd.Timestamp("2024-01-18", tz="Asia/Bangkok"),
+             "tam_end": pd.Timestamp("2024-01-20", tz="Asia/Bangkok"),
+             "restart_from": pd.Timestamp("2024-01-21", tz="Asia/Bangkok"),
+             "plant_tam_status": "SIGNAL_DERIVED_TAM"}
+    result = review_hx_tam_recovery(frame, event, comparison_window_days=20)
+    assert result["tam_recovery_status"] == "TAM_ASSOCIATED_CONDITION_CONFOUNDED"
+
+
+def test_tam_hx_review_reports_insufficient_valid_data():
+    frame = fixture()
+    frame["hx_id"] = "HX"
+    frame.loc[:34, "operating_valid"] = False
+    event = {"tam_id": "TAM_2024", "tam_start": pd.Timestamp("2024-01-18", tz="Asia/Bangkok"),
+             "tam_end": pd.Timestamp("2024-01-20", tz="Asia/Bangkok"),
+             "restart_from": pd.Timestamp("2024-01-21", tz="Asia/Bangkok"),
+             "plant_tam_status": "SIGNAL_DERIVED_TAM"}
+    result = review_hx_tam_recovery(frame, event, comparison_window_days=20)
+    assert result["tam_recovery_status"] == "TAM_ASSOCIATED_INSUFFICIENT_DATA"

@@ -12,8 +12,22 @@
     "frequency_scope": "PORTFOLIO_OF_SELECTED_IMPORTANT_HX",
     "frequency_interpretation": "Engineering frequency expectation used only as a sanity check; it is not a quota and must not create events."
   },
-  "major_shutdown_dates": ["2024-06-14"],
-  "major_shutdown_interpretation": "Shutdown proximity only; not evidence that an individual HX was cleaned.",
+  "tam_detection": {
+    "total_charge_tag": "1fi005.pv",
+    "total_charge_unit": "m3/h",
+    "flow_threshold_m3_h": 50.0,
+    "minimum_consecutive_records": 3,
+    "expected_windows_for_review": [
+      {"tam_id": "TAM_2021", "start": "2021-02-18", "end": "2021-03-13"},
+      {"tam_id": "TAM_2024", "start": "2024-05-05", "end": "2024-05-30"}
+    ],
+    "comparison_window_days": 30,
+    "minimum_valid_records": 7,
+    "recovery_threshold_fraction": 0.05,
+    "persistence_days": [30, 60, 90],
+    "source_status": "SIGNAL_DERIVED_TAM",
+    "interpretation": "Plant-level low-total-charge interval; not evidence that an individual HX was cleaned."
+  },
   "screening": {
     "pre_records": 14,
     "post_records": 14,

@@ -6,6 +6,130 @@ import numpy as np
 import pandas as pd
 
 
+def detect_plant_tam_windows(
+    timestamps,
+    total_charge_m3_h,
+    *,
+    flow_threshold_m3_h: float = 50.0,
+    minimum_consecutive_records: int = 3,
+    source_status: str = "SIGNAL_DERIVED_TAM",
+) -> pd.DataFrame:
+    """Detect plant-level low-total-charge intervals without inferring HX cleaning."""
+    frame = pd.DataFrame({
+        "timestamp": pd.to_datetime(timestamps),
+        "total_charge_m3_h": pd.to_numeric(total_charge_m3_h, errors="coerce"),
+    }).dropna(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
+    low = frame.total_charge_m3_h.notna() & (frame.total_charge_m3_h < flow_threshold_m3_h)
+    runs = low.ne(low.shift(fill_value=False)).cumsum()
+    rows = []
+    for _, group in frame[low].groupby(runs[low]):
+        if len(group) < minimum_consecutive_records:
+            continue
+        last_index = int(group.index[-1])
+        later = frame.loc[last_index + 1:]
+        restart = later.loc[
+            later.total_charge_m3_h.notna()
+            & (later.total_charge_m3_h >= flow_threshold_m3_h), "timestamp"
+        ]
+        number = len(rows) + 1
+        rows.append({
+            "tam_id": f"TAM_{group.timestamp.iloc[0].year}",
+            "tam_start": group.timestamp.iloc[0],
+            "tam_end": group.timestamp.iloc[-1],
+            "restart_from": restart.iloc[0] if not restart.empty else pd.NaT,
+            "low_flow_record_count": len(group),
+            "minimum_total_charge_m3_h": float(group.total_charge_m3_h.min()),
+            "median_total_charge_m3_h": float(group.total_charge_m3_h.median()),
+            "flow_threshold_m3_h": flow_threshold_m3_h,
+            "tam_sequence": number,
+            "plant_tam_status": source_status,
+            "plant_tam_confirmed_by_signal": True,
+            "individual_hx_cleaning_confirmed": False,
+            "interpretation": "Plant-level low-total-charge interval; individual HX cleaning is not confirmed.",
+        })
+    return pd.DataFrame(rows)
+
+
+def review_hx_tam_recovery(
+    records: pd.DataFrame,
+    tam_event: dict,
+    *,
+    comparison_window_days: int = 30,
+    minimum_valid_records: int = 7,
+    recovery_threshold_fraction: float = 0.05,
+    persistence_days: list[int] = (30, 60, 90),
+    flow_change_max_fraction: float = 0.10,
+    lmtd_change_max_fraction: float = 0.10,
+    hot_in_change_max_c: float = 5.0,
+    matched_review_config: dict | None = None,
+) -> dict:
+    """Review one HX around a plant TAM; never confirms an individual cleaning."""
+    hx_id = str(records.hx_id.iloc[0]) if not records.empty and "hx_id" in records else "UNKNOWN"
+    start = pd.Timestamp(tam_event["tam_start"])
+    restart = pd.Timestamp(tam_event["restart_from"])
+    valid = records.loc[
+        records.operating_valid.astype(bool)
+        & records.ua_valid.astype(bool)
+        & np.isfinite(records.ua_value)
+        & (records.ua_value > 0)
+    ].copy()
+    valid["timestamp"] = pd.to_datetime(valid.timestamp)
+    pre = valid[(valid.timestamp >= start - pd.Timedelta(days=comparison_window_days)) & (valid.timestamp < start)]
+    post = valid[(valid.timestamp >= restart) & (valid.timestamp < restart + pd.Timedelta(days=comparison_window_days))]
+
+    def median_change(column: str) -> float:
+        a, b = pre[column].median(), post[column].median()
+        return float(b / a - 1) if np.isfinite(a) and a != 0 and np.isfinite(b) else np.nan
+
+    pre_ua, post_ua = pre.ua_value.median(), post.ua_value.median()
+    recovery = float(post_ua / pre_ua - 1) if np.isfinite(pre_ua) and pre_ua > 0 and np.isfinite(post_ua) else np.nan
+    flow_change = median_change("cold_flow_m3_h")
+    lmtd_change = median_change("lmtd_value")
+    hot_change = float(post.hot_in_c.median() - pre.hot_in_c.median()) if len(pre) and len(post) else np.nan
+    confounded = bool(
+        (np.isfinite(flow_change) and abs(flow_change) > flow_change_max_fraction)
+        or (np.isfinite(lmtd_change) and abs(lmtd_change) > lmtd_change_max_fraction)
+        or (np.isfinite(hot_change) and abs(hot_change) > hot_in_change_max_c)
+    )
+    persistence = {}
+    for days in persistence_days:
+        window = valid[(valid.timestamp >= restart) & (valid.timestamp < restart + pd.Timedelta(days=days))]
+        value = window.ua_value.median()
+        persistence[f"post_{days}d_valid_records"] = len(window)
+        persistence[f"post_{days}d_ua_recovery_fraction"] = (
+            float(value / pre_ua - 1) if np.isfinite(pre_ua) and pre_ua > 0 and np.isfinite(value) else np.nan
+        )
+    matched = matched_condition_review(records, restart, **(matched_review_config or {}))
+    enough = len(pre) >= minimum_valid_records and len(post) >= minimum_valid_records
+    if not enough or pd.isna(restart):
+        status = "TAM_ASSOCIATED_INSUFFICIENT_DATA"
+    elif confounded:
+        status = "TAM_ASSOCIATED_CONDITION_CONFOUNDED"
+    elif recovery >= recovery_threshold_fraction and matched["matched_review_status"] == "MATCHED_RECOVERY_PLAUSIBLE":
+        status = "TAM_ASSOCIATED_RECOVERY"
+    else:
+        status = "TAM_ASSOCIATED_NO_CLEAR_RECOVERY"
+    return {
+        "tam_id": tam_event["tam_id"], "hx_id": hx_id,
+        "tam_start": start, "tam_end": pd.Timestamp(tam_event["tam_end"]), "restart_from": restart,
+        "pre_valid_records": len(pre), "post_valid_records": len(post),
+        "pre_median_ua_kw_k": pre_ua, "post_median_ua_kw_k": post_ua,
+        "apparent_ua_recovery_fraction": recovery,
+        "flow_change_fraction": flow_change, "lmtd_change_fraction": lmtd_change,
+        "hot_in_change_c": hot_change, "operating_condition_confounding": confounded,
+        "configuration_consistency_status": "UNAVAILABLE_NO_CONFIGURATION_TAG",
+        "tam_recovery_status": status,
+        **matched, **persistence,
+        "plant_tam_status": tam_event["plant_tam_status"],
+        "hx_exposed_to_tam": True,
+        "hx_performance_recovery_observed": status == "TAM_ASSOCIATED_RECOVERY",
+        "individual_hx_cleaning_confirmed": False,
+        "clean_condition_confirmed": False,
+        "warning_code": "NO_INDIVIDUAL_HX_MAINTENANCE_EVIDENCE",
+        "interpretation": "TAM-associated HX performance review; not a confirmed individual cleaning event.",
+    }
+
+
 def score_cleaning_event(*, tam_record=False, maintenance_record=False, stable_recovery=False,
                          configuration_change=False, process_change=False):
     score = 0

@@ -19,7 +19,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.domain.bypass import BYPASS_CONFIG, feasibility_label
-from src.events.cleaning_detection import detect_signal_recoveries, matched_condition_review
+from src.events.cleaning_detection import (
+    detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
+    review_hx_tam_recovery,
+)
+from src.validation.real_data import load_dcs_matrix, load_pilot_config, resolve_tag
 
 
 ANALYSIS_STATUS = "EXPLORATORY_SIGNAL_INFERRED"
@@ -58,6 +62,7 @@ def annual_frequency_check(events: pd.DataFrame, config: dict, data_end) -> pd.D
     priority = set(guidance["high_review_priority_hx"])
     eligible = events[
         events.hx_id.isin(priority)
+        & (events.event_status != "TAM_ASSOCIATED_RECOVERY")
         & (
             events.event_status.isin(["CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"])
             | (events.matched_review_status == "MATCHED_RECOVERY_PLAUSIBLE")
@@ -124,16 +129,43 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=ROOT / "config/signal_inferred_cleaning.json")
     parser.add_argument("--physics", type=Path, default=ROOT / "reports/tables/mvp_real_data/hx_physics_validation.csv")
+    parser.add_argument("--pilot-config", type=Path, default=ROOT / "config/mvp_real_data_pilot.json")
     args = parser.parse_args()
     config = json.loads(args.config.read_text(encoding="utf-8"))
     physics = pd.read_csv(args.physics)
     physics["timestamp"] = pd.to_datetime(physics.timestamp, utc=True).dt.tz_convert("Asia/Bangkok")
+    pilot_config = load_pilot_config(args.pilot_config)
+    raw, _ = load_dcs_matrix(pilot_config)
+    tam_config = config["tam_detection"]
+    total_charge_tag = resolve_tag(raw.columns, tam_config["total_charge_tag"], pilot_config.get("aliases", {}))
+    if total_charge_tag is None:
+        raise ValueError(f"TAM total-charge tag is unavailable: {tam_config['total_charge_tag']}")
+    plant_tam = detect_plant_tam_windows(
+        raw.timestamp, raw[total_charge_tag],
+        flow_threshold_m3_h=tam_config["flow_threshold_m3_h"],
+        minimum_consecutive_records=tam_config["minimum_consecutive_records"],
+        source_status=tam_config["source_status"],
+    )
+    expected = {row["tam_id"]: row for row in tam_config.get("expected_windows_for_review", [])}
+    if not plant_tam.empty:
+        plant_tam["source_tag"] = total_charge_tag
+        plant_tam["source_unit"] = tam_config["total_charge_unit"]
+        plant_tam["expected_window_start"] = plant_tam.tam_id.map(lambda value: expected.get(value, {}).get("start"))
+        plant_tam["expected_window_end"] = plant_tam.tam_id.map(lambda value: expected.get(value, {}).get("end"))
+        plant_tam["expected_window_match"] = plant_tam.apply(
+            lambda row: (
+                str(row.tam_start.date()) == row.expected_window_start
+                and str(row.tam_end.date()) == row.expected_window_end
+            ), axis=1,
+        )
+    tam_restart_dates = [str(value) for value in plant_tam.restart_from.dropna()]
     screening = config["screening"]
     priority_hx = set(config["engineering_guidance"]["high_review_priority_hx"])
 
     event_frames = []
     summary_rows = []
     feasibility_rows = []
+    tam_review_rows = []
     for hx_id, group in physics.groupby("hx_id"):
         feasibility = feasibility_label(hx_id)
         bypass = BYPASS_CONFIG.get(hx_id, {})
@@ -146,8 +178,20 @@ def main() -> None:
         })
         detected = detect_signal_recoveries(
             group, hx_id=hx_id, feasibility=feasibility,
-            tam_dates=config["major_shutdown_dates"], **screening,
+            tam_dates=tam_restart_dates, **screening,
         )
+        for tam_event in plant_tam.to_dict("records"):
+            tam_review_rows.append(review_hx_tam_recovery(
+                group, tam_event,
+                comparison_window_days=tam_config["comparison_window_days"],
+                minimum_valid_records=tam_config["minimum_valid_records"],
+                recovery_threshold_fraction=tam_config["recovery_threshold_fraction"],
+                persistence_days=tam_config["persistence_days"],
+                flow_change_max_fraction=screening["flow_change_max_fraction"],
+                lmtd_change_max_fraction=screening["lmtd_change_max_fraction"],
+                hot_in_change_max_c=screening["hot_in_change_max_c"],
+                matched_review_config=config["matched_condition_review"],
+            ))
         if not detected.empty:
             detected["engineering_review_priority"] = "HIGH" if hx_id in priority_hx else "STANDARD"
             if hx_id in priority_hx:
@@ -179,6 +223,34 @@ def main() -> None:
             "warning_code": "NO_MAINTENANCE_EVIDENCE",
         })
 
+    analyzed_hx = set(physics.hx_id.unique())
+    for hx_id, hx_config in pilot_config["heat_exchangers"].items():
+        if hx_id in analyzed_hx:
+            continue
+        reason = hx_config.get("unavailable_reason", hx_config.get("blocked_reason", "NO_PHYSICS_RECORDS"))
+        summary_rows.append({
+            "hx_id": hx_id, "feasibility_status": feasibility_label(hx_id),
+            "screened_valid_records": 0, "non_rejected_recovery_signals": 0,
+            "feasible_cleaning_or_switch_candidates": 0,
+            "tam_only_midrun_ineligible_signals": 0, "tam_associated_recoveries": 0,
+            "rejected_signal_events": 0, "analysis_status": "UNAVAILABLE_OR_BLOCKED",
+            "cleaning_event_confirmed": False, "clean_condition_confirmed": False,
+            "warning_code": reason,
+        })
+        for tam_event in plant_tam.to_dict("records"):
+            tam_review_rows.append({
+                "tam_id": tam_event["tam_id"], "hx_id": hx_id,
+                "tam_start": tam_event["tam_start"], "tam_end": tam_event["tam_end"],
+                "restart_from": tam_event["restart_from"],
+                "pre_valid_records": 0, "post_valid_records": 0,
+                "tam_recovery_status": "TAM_ASSOCIATED_INSUFFICIENT_DATA",
+                "plant_tam_status": tam_event["plant_tam_status"],
+                "hx_exposed_to_tam": True, "hx_performance_recovery_observed": False,
+                "individual_hx_cleaning_confirmed": False, "clean_condition_confirmed": False,
+                "warning_code": reason,
+                "interpretation": "HX performance is unavailable or blocked; individual cleaning is not confirmed.",
+            })
+
     event_columns = [
         "event_id", "hx_id", "event_timestamp", "event_status", "event_confidence",
         "feasibility_status", "cleaning_event_confirmed", "clean_condition_confirmed",
@@ -198,6 +270,8 @@ def main() -> None:
     figure_dir = ROOT / "reports/figures/mvp_real_data/signal_inferred_cleaning"
     table_dir.mkdir(parents=True, exist_ok=True)
     events.to_csv(table_dir / "signal_recovery_candidates.csv", index=False)
+    plant_tam.to_csv(table_dir / "plant_tam_events.csv", index=False)
+    pd.DataFrame(tam_review_rows).to_csv(table_dir / "hx_tam_event_study.csv", index=False)
     pd.DataFrame(summary_rows).to_csv(table_dir / "hx_signal_screening_summary.csv", index=False)
     pd.DataFrame(feasibility_rows).to_csv(table_dir / "bypass_cleaning_feasibility.csv", index=False)
     cycles.to_csv(table_dir / "exploratory_signal_cycles.csv", index=False)
