@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.domain.bypass import BYPASS_CONFIG, feasibility_label
-from src.events.cleaning_detection import detect_signal_recoveries
+from src.events.cleaning_detection import detect_signal_recoveries, matched_condition_review
 
 
 ANALYSIS_STATUS = "EXPLORATORY_SIGNAL_INFERRED"
@@ -27,7 +27,9 @@ ANALYSIS_STATUS = "EXPLORATORY_SIGNAL_INFERRED"
 
 def build_cycles(physics: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
     rows = []
-    accepted = events[events.event_status != "REJECTED_SIGNAL_EVENT"].copy()
+    accepted = events[events.event_status.isin([
+        "CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE", "TAM_ASSOCIATED_RECOVERY"
+    ])].copy()
     for hx_id, group in accepted.groupby("hx_id"):
         group = group.sort_values("event_timestamp")
         hx = physics[(physics.hx_id == hx_id) & physics.operating_valid & physics.ua_valid].copy()
@@ -51,6 +53,41 @@ def build_cycles(physics: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def annual_frequency_check(events: pd.DataFrame, config: dict, data_end) -> pd.DataFrame:
+    guidance = config["engineering_guidance"]
+    priority = set(guidance["high_review_priority_hx"])
+    eligible = events[
+        events.hx_id.isin(priority)
+        & (
+            events.event_status.isin(["CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"])
+            | (events.matched_review_status == "MATCHED_RECOVERY_PLAUSIBLE")
+        )
+    ].copy()
+    eligible["year"] = pd.to_datetime(eligible.event_timestamp).dt.year
+    start_year = int(pd.to_datetime(events.event_timestamp).dt.year.min()) if not events.empty else pd.Timestamp(data_end).year
+    end_year = pd.Timestamp(data_end).year
+    rows = []
+    for year in range(start_year, end_year + 1):
+        count = int((eligible.year == year).sum())
+        complete_year = year < end_year or (pd.Timestamp(data_end).month == 12 and pd.Timestamp(data_end).day == 31)
+        if not complete_year:
+            status = "PARTIAL_YEAR_NOT_ASSESSED"
+        elif count < guidance["expected_cleaning_actions_per_year_min"]:
+            status = "POSSIBLE_UNDER_DETECTION"
+        elif count > guidance["expected_cleaning_actions_per_year_max"]:
+            status = "POSSIBLE_OVER_DETECTION"
+        else:
+            status = "CONSISTENT_WITH_ENGINEERING_EXPECTATION"
+        rows.append({
+            "year": year, "detected_priority_hx_events": count,
+            "expected_min_actions": guidance["expected_cleaning_actions_per_year_min"],
+            "expected_max_actions": guidance["expected_cleaning_actions_per_year_max"],
+            "frequency_scope": guidance["frequency_scope"], "frequency_consistency_status": status,
+            "expectation_creates_events": False, "cleaning_events_confirmed": False,
+        })
+    return pd.DataFrame(rows)
+
+
 def plot_hx(physics: pd.DataFrame, events: pd.DataFrame, hx_id: str, output: Path) -> None:
     hx = physics[physics.hx_id == hx_id].copy().sort_values("timestamp")
     if hx.empty:
@@ -60,7 +97,7 @@ def plot_hx(physics: pd.DataFrame, events: pd.DataFrame, hx_id: str, output: Pat
         "CLEANING_CANDIDATE": "tab:green",
         "BYPASS_OR_SWITCH_CANDIDATE": "tab:blue",
         "TAM_ASSOCIATED_RECOVERY": "tab:orange",
-        "UNEXPLAINED_RECOVERY": "tab:purple",
+        "NOT_CLEANING_ELIGIBLE_MID_RUN": "tab:purple",
         "REJECTED_SIGNAL_EVENT": "tab:red",
     }
     fig, axes = plt.subplots(3, 1, figsize=(16, 10), sharex=True)
@@ -92,6 +129,7 @@ def main() -> None:
     physics = pd.read_csv(args.physics)
     physics["timestamp"] = pd.to_datetime(physics.timestamp, utc=True).dt.tz_convert("Asia/Bangkok")
     screening = config["screening"]
+    priority_hx = set(config["engineering_guidance"]["high_review_priority_hx"])
 
     event_frames = []
     summary_rows = []
@@ -111,6 +149,18 @@ def main() -> None:
             tam_dates=config["major_shutdown_dates"], **screening,
         )
         if not detected.empty:
+            detected["engineering_review_priority"] = "HIGH" if hx_id in priority_hx else "STANDARD"
+            if hx_id in priority_hx:
+                matched = [matched_condition_review(
+                    group, event.event_timestamp, **config["matched_condition_review"]
+                ) for event in detected.itertuples()]
+                detected = pd.concat([detected.reset_index(drop=True), pd.DataFrame(matched)], axis=1)
+            else:
+                detected["matched_review_status"] = "NOT_PRIORITY_SCREENED"
+                detected["matched_pair_count"] = None
+                detected["matched_median_recovery_fraction"] = None
+                detected["matched_recovery_iqr"] = None
+                detected["matched_condition_cleaning_confirmed"] = False
             detected["analysis_status"] = ANALYSIS_STATUS
             detected["interpretation"] = config["interpretation"]
             event_frames.append(detected)
@@ -121,7 +171,7 @@ def main() -> None:
             "feasible_cleaning_or_switch_candidates": int(detected.event_status.isin([
                 "CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"
             ]).sum()) if not detected.empty else 0,
-            "unexplained_recoveries": int((detected.event_status == "UNEXPLAINED_RECOVERY").sum()) if not detected.empty else 0,
+            "tam_only_midrun_ineligible_signals": int((detected.event_status == "NOT_CLEANING_ELIGIBLE_MID_RUN").sum()) if not detected.empty else 0,
             "tam_associated_recoveries": int((detected.event_status == "TAM_ASSOCIATED_RECOVERY").sum()) if not detected.empty else 0,
             "rejected_signal_events": int((detected.event_status == "REJECTED_SIGNAL_EVENT").sum()) if not detected.empty else 0,
             "analysis_status": ANALYSIS_STATUS, "cleaning_event_confirmed": False,
@@ -135,6 +185,15 @@ def main() -> None:
     ]
     events = pd.concat(event_frames, ignore_index=True) if event_frames else pd.DataFrame(columns=event_columns)
     cycles = build_cycles(physics, events) if not events.empty else pd.DataFrame()
+    frequency = annual_frequency_check(events, config, physics.timestamp.max())
+    review_queue = events[events.hx_id.isin(priority_hx)].copy()
+    review_queue["review_queue_rank"] = review_queue.apply(
+        lambda row: 1 if row.get("matched_review_status") == "MATCHED_RECOVERY_PLAUSIBLE"
+        else 2 if row.event_status in {"CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"}
+        else 3 if row.get("matched_review_status") == "INSUFFICIENT_MATCHED_DATA" else 4,
+        axis=1,
+    )
+    review_queue = review_queue.sort_values(["review_queue_rank", "hx_id", "event_timestamp"])
     table_dir = ROOT / "reports/tables/mvp_real_data/signal_inferred_cleaning"
     figure_dir = ROOT / "reports/figures/mvp_real_data/signal_inferred_cleaning"
     table_dir.mkdir(parents=True, exist_ok=True)
@@ -142,6 +201,8 @@ def main() -> None:
     pd.DataFrame(summary_rows).to_csv(table_dir / "hx_signal_screening_summary.csv", index=False)
     pd.DataFrame(feasibility_rows).to_csv(table_dir / "bypass_cleaning_feasibility.csv", index=False)
     cycles.to_csv(table_dir / "exploratory_signal_cycles.csv", index=False)
+    review_queue.to_csv(table_dir / "priority_hx_event_review_queue.csv", index=False)
+    frequency.to_csv(table_dir / "annual_frequency_sanity_check.csv", index=False)
     for hx_id in physics.hx_id.unique():
         plot_hx(physics, events, hx_id, figure_dir)
     print(pd.DataFrame(summary_rows).to_string(index=False))

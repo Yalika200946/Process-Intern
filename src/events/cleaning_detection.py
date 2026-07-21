@@ -116,7 +116,7 @@ def detect_signal_recoveries(
         elif feasibility in {"ONLINE_FULL", "ONLINE_PARTIAL"}:
             status = "CLEANING_CANDIDATE"
         else:
-            status = "UNEXPLAINED_RECOVERY"
+            status = "NOT_CLEANING_ELIGIBLE_MID_RUN"
         if status == "REJECTED_SIGNAL_EVENT":
             confidence = "LOW_SIGNAL_CONFIDENCE"
         elif recovery >= high_confidence_recovery_fraction and len(pre) >= pre_records and len(post) >= post_records:
@@ -164,3 +164,74 @@ def detect_signal_recoveries(
                for other in kept):
             kept.append(index)
     return detected.loc[kept].sort_values("event_timestamp").reset_index(drop=True)[columns]
+
+
+def matched_condition_review(
+    records: pd.DataFrame,
+    event_timestamp,
+    *,
+    window_records: int = 60,
+    minimum_pairs: int = 7,
+    flow_tolerance_fraction: float = 0.05,
+    lmtd_tolerance_fraction: float = 0.05,
+    hot_in_tolerance_c: float = 3.0,
+    recovery_threshold_fraction: float = 0.05,
+    recovery_iqr_max: float = 0.15,
+) -> dict:
+    """Compare post-event UA with nearest pre-event operating-condition matches.
+
+    Matching is retrospective and descriptive. A positive result raises an event
+    to an engineering-review queue; it does not confirm cleaning or a clean state.
+    """
+    frame = records.loc[
+        records.operating_valid.astype(bool)
+        & records.ua_valid.astype(bool)
+        & np.isfinite(records.ua_value)
+        & (records.ua_value > 0)
+    ].copy()
+    frame["timestamp"] = pd.to_datetime(frame.timestamp)
+    event_time = pd.Timestamp(event_timestamp)
+    pre = frame[frame.timestamp < event_time].tail(window_records).reset_index(drop=True)
+    post = frame[frame.timestamp >= event_time].head(window_records).reset_index(drop=True)
+    used: set[int] = set()
+    pairs: list[tuple[float, float]] = []
+    for post_row in post.itertuples():
+        eligible = []
+        for index, pre_row in pre.iterrows():
+            if index in used:
+                continue
+            if not all(np.isfinite([pre_row.cold_flow_m3_h, post_row.cold_flow_m3_h,
+                                    pre_row.lmtd_value, post_row.lmtd_value,
+                                    pre_row.hot_in_c, post_row.hot_in_c])):
+                continue
+            flow_delta = abs(post_row.cold_flow_m3_h / pre_row.cold_flow_m3_h - 1) if pre_row.cold_flow_m3_h else np.inf
+            lmtd_delta = abs(post_row.lmtd_value / pre_row.lmtd_value - 1) if pre_row.lmtd_value else np.inf
+            hot_delta = abs(post_row.hot_in_c - pre_row.hot_in_c)
+            if flow_delta <= flow_tolerance_fraction and lmtd_delta <= lmtd_tolerance_fraction and hot_delta <= hot_in_tolerance_c:
+                distance = flow_delta / flow_tolerance_fraction + lmtd_delta / lmtd_tolerance_fraction + hot_delta / hot_in_tolerance_c
+                eligible.append((distance, index, float(pre_row.ua_value)))
+        if eligible:
+            _, index, pre_ua = min(eligible)
+            used.add(index)
+            pairs.append((pre_ua, float(post_row.ua_value)))
+    if len(pairs) < minimum_pairs:
+        return {
+            "matched_review_status": "INSUFFICIENT_MATCHED_DATA", "matched_pair_count": len(pairs),
+            "matched_median_recovery_fraction": None, "matched_recovery_iqr": None,
+            "matched_condition_cleaning_confirmed": False,
+        }
+    recoveries = pd.Series([post_ua / pre_ua - 1 for pre_ua, post_ua in pairs])
+    median = float(recoveries.median())
+    recovery_iqr = float(recoveries.quantile(.75) - recoveries.quantile(.25))
+    if median < recovery_threshold_fraction:
+        status = "NO_MATCHED_RECOVERY"
+    elif recovery_iqr > recovery_iqr_max:
+        status = "MATCHED_RECOVERY_UNSTABLE"
+    else:
+        status = "MATCHED_RECOVERY_PLAUSIBLE"
+    return {
+        "matched_review_status": status, "matched_pair_count": len(pairs),
+        "matched_median_recovery_fraction": median,
+        "matched_recovery_iqr": recovery_iqr,
+        "matched_condition_cleaning_confirmed": False,
+    }

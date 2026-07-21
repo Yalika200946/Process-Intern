@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from src.events.cleaning_detection import detect_signal_recoveries
+from src.events.cleaning_detection import detect_signal_recoveries, matched_condition_review
 
 
 def fixture(*, flow_after=100.0, lmtd_after=30.0, ua_after=110.0):
@@ -37,7 +37,7 @@ def test_operating_change_rejects_apparent_recovery():
 
 def test_tam_only_midrun_recovery_is_unexplained_not_cleaning_candidate():
     result = detect_signal_recoveries(fixture(), hx_id="HX", feasibility="TAM_ONLY")
-    assert "UNEXPLAINED_RECOVERY" in set(result.event_status)
+    assert "NOT_CLEANING_ELIGIBLE_MID_RUN" in set(result.event_status)
     assert "CLEANING_CANDIDATE" not in set(result.event_status)
 
 
@@ -57,3 +57,26 @@ def test_tam_proximity_is_association_not_confirmed_cleaning():
     event = result.loc[result.event_status == "TAM_ASSOCIATED_RECOVERY"].iloc[0]
     assert not event.cleaning_event_confirmed
     assert event.approval_status == "CANDIDATE"
+
+
+def test_matched_condition_review_recovers_step_without_confirmation():
+    result = matched_condition_review(fixture(), pd.Timestamp("2024-01-21", tz="Asia/Bangkok"))
+    assert result["matched_review_status"] == "MATCHED_RECOVERY_PLAUSIBLE"
+    assert result["matched_median_recovery_fraction"] == pytest.approx(0.10)
+    assert not result["matched_condition_cleaning_confirmed"]
+
+
+def test_matched_condition_review_reports_insufficient_overlap():
+    result = matched_condition_review(
+        fixture(flow_after=150.0), pd.Timestamp("2024-01-21", tz="Asia/Bangkok")
+    )
+    assert result["matched_review_status"] == "INSUFFICIENT_MATCHED_DATA"
+
+
+def test_matched_condition_review_rejects_unstable_recovery_distribution():
+    frame = fixture()
+    frame.loc[20:, "ua_value"] = [80.0, 140.0] * 10
+    result = matched_condition_review(
+        frame, pd.Timestamp("2024-01-21", tz="Asia/Bangkok"), recovery_iqr_max=0.15
+    )
+    assert result["matched_review_status"] == "MATCHED_RECOVERY_UNSTABLE"
