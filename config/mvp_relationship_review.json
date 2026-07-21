@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "scope": "B_C_C2_REPORTING_ONLY",
+  "throughput_band_quantiles": [0.0, 0.33, 0.67, 1.0],
+  "throughput_band_labels": ["LOW", "MEDIUM", "HIGH"],
+  "minimum_paired_records": 30,
+  "strong_absolute_correlation": 0.5,
+  "minimum_valid_coverage_for_method_review": 0.5,
+  "prohibited_outputs": ["clean_ua", "ua_normalized", "fouling_index", "cit_gain"]
+}
