@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.0.0",
+  "dataset": {
+    "path": "C:/Desktop/Bangchak Internship 2026/Data/Process information data (2024-2026).xlsx",
+    "sheet": "Sheet1",
+    "crude_properties_path": "C:/Desktop/Bangchak Internship 2026/Data/Crude_property_profiled.csv",
+    "timezone": "Asia/Bangkok",
+    "timestamp_data_row": 7,
+    "tag_row": 3,
+    "unit_row": 4,
+    "description_row": 5,
+    "timestamp_column": 2,
+    "first_tag_column": 3
+  },
+  "aliases": {
+    "1TI102": "1TI102.pv",
+    "1FI005": "1fi005.pv",
+    "1TI114": "1TI114.pv",
+    "1TI196": "1ti196.pv"
+  },
+  "rules": {
+    "flow_min_m3_h": 15.0,
+    "cold_delta_t_min_c": 3.0,
+    "hot_delta_t_min_c": 2.0,
+    "terminal_delta_t_min_c": 2.0,
+    "temperature_min_c": 0.0,
+    "temperature_max_c": 450.0,
+    "startup_records": 3,
+    "steady_flow_relative_change_max": 0.10,
+    "steady_temperature_change_max_c": 5.0,
+    "long_gap_hours": 36.0,
+    "flatline_records": 7,
+    "stable_window_records": 30,
+    "stable_window_max_candidates": 3,
+    "stable_flow_cv_max": 0.10,
+    "stable_ua_cv_max": 0.15,
+    "lmtd_correction_factor": 1.0,
+    "lmtd_correction_factor_status": "ASSUMPTION"
+  },
+  "heat_exchangers": {
+    "E101AB": {"status":"READY","cold_flow":"1FI007.pv","cold_in":"1TI102","cold_out":"1TI101.pv","hot_in":"1TI194.pv","hot_out":"1TI103.pv","area_m2":1433},
+    "E101CD": {"status":"READY","cold_flow":"1FI008.pv","cold_in":"1TI102","cold_out":"1TI104.pv","hot_in":"1TI194.pv","hot_out":"1TI105.pv","area_m2":469},
+    "E101EF": {"status":"READY_WITH_WARNING","cold_flow":"1FI009.pv","cold_in":"1TI102","cold_out":"1TI109.pv","hot_in":"1TI194.pv","hot_out":"1TI110.pv","area_m2":480,"mapping_warnings":["ELEVATED_TERMINAL_TEMPERATURE_VIOLATIONS"]},
+    "E101G": {"status":"UNAVAILABLE","unavailable_reason":"REQUIRED_TAGS_MISSING_FROM_RAW_DATA","missing_tags":["1FI085.pv","1TI015.pv","1FI086.pv"]},
+    "E102": {"status":"READY","cold_flow":"1FI005","cold_in":"1TI107.pv","cold_out":"1TI106.pv","hot_in":"1TI165.pv","hot_out":"1TI108.pv","area_m2":289},
+    "E103AB": {"status":"READY","cold_flow":"1FI015.pv","cold_in":"1TI225.pv","cold_out":"1TI136.pv","hot_in":"4TI107.pv","hot_out":"1TI137.pv","area_m2":614,"flow_kind":"SHARED_MEASURED"},
+    "E104": {"status":"READY","cold_flow":"1FI015.pv","cold_in":"1TI136.pv","cold_out":"1TI112.pv","hot_in":"1TI195.pv","hot_out":"4TI115.pv","area_m2":678,"flow_kind":"SHARED_MEASURED"},
+    "E105AB": {"status":"READY_WITH_WARNING","cold_flow":"1FI015.pv","cold_in":"1TI112.pv","cold_out":"1TI114","hot_in":"1TI196","hot_out":"1TI113.pv","area_m2":1364,"flow_kind":"SHARED_MEASURED","mapping_warnings":["TAG_REGISTER_CONFLICT_HOT_IN_1TI196_SELECTED"]},
+    "E106AB": {"status":"READY","cold_flow":"1FI016.pv","cold_in":"1TI225.pv","cold_out":"1TI128.pv","hot_in":"4TI107.pv","hot_out":"1TI129.pv","area_m2":620,"flow_kind":"SHARED_MEASURED"},
+    "E107AB": {"status":"READY_WITH_WARNING","cold_flow":"1FI016.pv","cold_in":"1TI128.pv","cold_out":"1TI130.pv","hot_in":"1TI135.pv","hot_out":"1TI131.pv","area_m2":480,"flow_kind":"SHARED_MEASURED","mapping_warnings":["ELEVATED_COLD_TEMPERATURE_VIOLATIONS"]},
+    "E108AB": {"status":"READY_WITH_WARNING","cold_flow":"1FI016.pv","cold_in":"1TI130.pv","cold_out":"1TI132.pv","hot_in":"1TI127.pv","hot_out":"1TI133.pv","area_m2":892,"flow_kind":"SHARED_MEASURED","mapping_warnings":["FULL_HISTORY_SCREENED_MAPPING","RETAIN_INVALID_TEMPERATURE_FLAGS"]},
+    "E109AB": {"status":"READY","cold_flow":"1FI016.pv","cold_in":"1TI132.pv","cold_out":"1TI134.pv","hot_in":"1TI163.pv","hot_out":"1TI135.pv","area_m2":762,"flow_kind":"SHARED_MEASURED"},
+    "E110ABC": {"status":"READY","cold_flow":"1FI017.pv","cold_in":"1TI225.pv","cold_out":"1TI124.pv","hot_in":"1TI133.pv","hot_out":"1TI122.pv","area_m2":1680,"flow_kind":"SHARED_MEASURED"},
+    "E111": {"status":"READY","cold_flow":"1FI017.pv","cold_in":"1TI124.pv","cold_out":"1TI123.pv","hot_in":"1TI113.pv","hot_out":"1TI125.pv","area_m2":139,"flow_kind":"SHARED_MEASURED"},
+    "E112AB": {"status":"READY_WITH_WARNING","cold_flow":"1FI017.pv","cold_in":"1TI123.pv","cold_out":"1TI126.pv","hot_in":{"method":"row_max","tags":["1TI117.pv","1TI117B.pv"]},"hot_out":"1TI127.pv","area_m2":1318,"flow_kind":"SHARED_MEASURED","hot_in_data_kind":"INFERRED","mapping_warnings":["SHARED_RESIDUE_INLET_INFERENCE"]},
+    "E112C": {"status":"BLOCKED","blocked_reason":"TOPOLOGY_AND_TERMINAL_TEMPERATURE_CONFLICT"},
+    "E113A": {"status":"READY_WITH_WARNING","cold_flow":{"method":"sum","tags":["1FI015.pv","1FI016.pv","1FI017.pv"]},"cold_in":"1TI115.pv","cold_out":"1TI116.pv","hot_in":"1TI161.pv","hot_out":"1TI117.pv","area_m2":852,"flow_kind":"CALCULATED","mapping_warnings":["CALCULATED_TOTAL_CRUDE_FLOW","E112C_NETWORK_OVERLAP_NOT_INCLUDED"]}
+  }
+}
