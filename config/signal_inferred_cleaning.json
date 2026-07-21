@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "analysis_status": "EXPLORATORY_SIGNAL_INFERRED",
+  "maintenance_evidence_available": false,
+  "cleaning_event_confirmed": false,
+  "clean_condition_confirmed": false,
+  "threshold_approval_status": "ASSUMPTION",
+  "major_shutdown_dates": ["2024-06-14"],
+  "major_shutdown_interpretation": "Shutdown proximity only; not evidence that an individual HX was cleaned.",
+  "screening": {
+    "pre_records": 14,
+    "post_records": 14,
+    "minimum_records": 7,
+    "minimum_recovery_fraction": 0.05,
+    "high_confidence_recovery_fraction": 0.10,
+    "post_ua_cv_max": 0.15,
+    "flow_change_max_fraction": 0.10,
+    "lmtd_change_max_fraction": 0.10,
+    "hot_in_change_max_c": 5.0,
+    "cluster_days": 14
+  },
+  "interpretation": "Signal-inferred thermal recovery candidate only. No maintenance record is available, so neither cleaning nor a clean state is confirmed."
+}
