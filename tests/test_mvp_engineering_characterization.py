@@ -14,6 +14,7 @@ from src.calculations.heat_duty import calculate_cold_side_heat_duty, calculate_
 from src.calculations.heat_transfer import calculate_lmtd, calculate_ua
 from src.domain.crude_properties import calculate_crude_cp, calculate_crude_density
 from src.network.attribution import equivalent_furnace_duty_mw
+from src.models.clean_baseline import calculate_clean_baseline
 
 
 def test_crude_cp_value_and_unit_at_100c_sg_085():
@@ -180,3 +181,55 @@ def test_invalid_clean_baseline_is_rejected():
 def test_invalid_negative_cit_inputs_are_rejected():
     with pytest.raises(ValueError):
         equivalent_furnace_duty_mw(-1.0, 100.0, 850.0, 2.0)
+
+
+def test_clean_window_median_uses_only_explicit_window():
+    result = calculate_clean_baseline(
+        [90, 100, 110, 120, 130, 1000],
+        ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-02-01"],
+        "2026-01-01", "2026-01-05", min_valid_records=5,
+    )
+
+    assert result["clean_ua"] == pytest.approx(110.0)
+    assert result["baseline_method"] == "median"
+    assert result["number_of_valid_records"] == 5
+
+
+def test_clean_window_excludes_invalid_rows():
+    result = calculate_clean_baseline(
+        [90, 100, math.nan, 110, 120, 130],
+        ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-01-06"],
+        "2026-01-01", "2026-01-06",
+        operating_valid=[True, True, True, False, True, True],
+        min_valid_records=4,
+    )
+
+    assert result["clean_ua"] == pytest.approx(110.0)
+    assert result["number_of_valid_records"] == 4
+    assert result["quality"]["is_valid"] is True
+    assert result["warnings"]
+
+
+def test_insufficient_clean_observations_are_invalidated():
+    result = calculate_clean_baseline(
+        [100, 110, 120],
+        ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "2026-01-01", "2026-01-03", min_valid_records=5,
+    )
+
+    assert result["clean_ua"] is None
+    assert result["quality"]["warning_code"] == "INSUFFICIENT_CLEAN_DATA"
+
+
+def test_clean_baseline_has_no_future_data_lookahead():
+    timestamps = ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05", "2026-02-01"]
+    base = calculate_clean_baseline(
+        [90, 100, 110, 120, 130, 140], timestamps,
+        "2026-01-01", "2026-01-05", min_valid_records=5,
+    )
+    future_outlier = calculate_clean_baseline(
+        [90, 100, 110, 120, 130, 1_000_000], timestamps,
+        "2026-01-01", "2026-01-05", min_valid_records=5,
+    )
+
+    assert base["clean_ua"] == future_outlier["clean_ua"] == pytest.approx(110.0)

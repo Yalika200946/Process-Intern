@@ -23,12 +23,12 @@ docstring for the full rationale.
 Physical invariant enforced & asserted: no `reliable` run has dRf_per_day ≤ 0.
 
 BEFORE the rate regression, this also fixes the same in-service blind spot in the
-baseline itself: notebook 02's `U_clean_run` (P90 of the first CLEAN_WINDOW_DAYS of a
+baseline itself: notebook 02's `U_clean_run` (median of the first CLEAN_WINDOW_DAYS of a
 run) only applies the physical operating mask (ΔT/flow), because `Operating_State.csv`
 doesn't exist yet at that point in the pipeline. If a shell spends part of its "clean
-window" as SUBSTITUTE_ACTIVE/PARALLEL (sharing duty with another shell, not on its own),
+window" outside a valid operating state,
 that baseline — and every `Rf_run`/`U_relative` value derived from it for the whole run
-— is biased. `_recompute_clean_baseline` redoes P90 using only in-service points and
+— is biased. `_recompute_clean_baseline` redoes the median using only in-service points and
 overwrites `{hx}_U_clean_run`/`_U_relative`/`_Rf_run` in Feature_calculated.csv in place,
 so both the exported features and the rate regression below use the corrected baseline.
 
@@ -48,20 +48,20 @@ FEAT = DATA / 'Feature_calculated.csv'
 sys.path.append(str(REPO))
 from src.validation import nb_audit as A
 from src.domain.config import HX_CONFIG
+from src.models.clean_baseline import calculate_clean_baseline
 
 CLEAN_WINDOW_DAYS = 30   # must match notebook 02 §3.4 (first N days of a run = clean baseline)
-U_CLEAN_PCT       = 90   # P90, not max — robust to restart-transient spikes
 
 
 def _recompute_clean_baseline(feat, ost, hx_config):
     """Redo U_clean_run/U_relative/Rf_run per run using the in-service state mask.
 
-    Same P90-of-clean-window logic as notebook 02 §3.4, but restricted to timestamps
+    Same approved-window median logic as notebook 02 §3.4, restricted to timestamps
     where the shell is actually NORMAL/SUBSTITUTE_ACTIVE/PARALLEL (not OFF/BYPASS and
     not mid-clean) — Operating_State.csv wasn't available when notebook 02 first
-    computed these columns. Falls back to in-service points across the whole run when
-    the clean window itself has too few in-service points (<5), matching notebook 02's
-    own fallback tier. Mutates `feat` in place; returns the list of HX actually redone.
+    computed these columns. An insufficient clean window is invalidated; records later
+    in the run are never used as a fallback. Mutates `feat` in place and returns the
+    list of HX actually redone.
     """
     redone = []
     for hx in hx_config:
@@ -77,13 +77,15 @@ def _recompute_clean_baseline(feat, ost, hx_config):
         u_clean_run = pd.Series(np.nan, index=feat.index)
         for run in sorted(rid[rid > 0].unique()):
             m = (rid == run).values
-            clean_win = m & (dod <= CLEAN_WINDOW_DAYS).values & in_service.values
-            u_clean_pts = u[clean_win].dropna()
-            if len(u_clean_pts) >= 5:
-                val = float(np.percentile(u_clean_pts, U_CLEAN_PCT))
-            else:
-                u_run_pts = u[m & in_service.values].dropna()
-                val = float(np.percentile(u_run_pts, U_CLEAN_PCT)) if len(u_run_pts) >= 5 else np.nan
+            run_index = feat.index[m]
+            start = run_index.min()
+            end = min(run_index.max(), start + pd.Timedelta(days=CLEAN_WINDOW_DAYS))
+            baseline = calculate_clean_baseline(
+                u, feat.index, start, end,
+                operating_valid=m & in_service.values,
+                method="median", min_valid_records=5,
+            )
+            val = baseline["clean_ua"] if baseline["quality"]["is_valid"] else np.nan
             u_clean_run[m] = val
 
         feat[ucr_col] = u_clean_run
