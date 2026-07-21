@@ -23,7 +23,7 @@ Usage:
   python pipeline/run_all.py --only cit_forecast_export   # just the terminal exporter
 """
 import argparse, logging, os, shutil, subprocess, sys, time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 # This script's own console output includes Thai text (POST step labels like "economics
@@ -38,6 +38,11 @@ if hasattr(sys.stdout, 'reconfigure'):
     sys.stderr.reconfigure(encoding='utf-8', errors='replace')
 
 REPO = Path(__file__).resolve().parent.parent
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+from pipeline.run_integrity import publish_snapshot
+from src.domain.bypass import BYPASS_CONFIG
+from src.validation.topology import validate_topology
 NB   = REPO / 'notebooks'
 SRC  = REPO / 'src'
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
@@ -122,6 +127,8 @@ POST = [
     # does, and it already runs later in this list.
     ('PHM: RUL/reliability/drivers', [sys.executable, str(REPO / 'pipeline' / 'phm_analysis.py')]),
     ('economics (CIT->฿)',           [sys.executable, str(REPO / 'pipeline' / 'export_economics.py')]),
+    ('network condition/consequence diagnostics', [sys.executable, str(REPO / 'pipeline' / 'export_network_diagnostics.py')]),
+    ('hybrid 16-position network model', [sys.executable, str(REPO / 'pipeline' / 'export_hybrid_network_model.py')]),
     ('cleaning/bypass/TAM list',     [sys.executable, str(SRC / 'optimization' / 'cleaning_logistics.py')]),
     ('TAM deep analysis (production/17)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                       f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=900',
@@ -129,6 +136,7 @@ POST = [
     ('cleaning schedule -> TAM2028', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler.py')]),
     ('cleaning schedule v2 (network)', [sys.executable, str(REPO / 'pipeline' / 'cleaning_scheduler_network.py')]),
     ('evidence & confidence surface', [sys.executable, str(REPO / 'pipeline' / 'export_evidence.py')]),
+    ('engineering review package', [sys.executable, str(REPO / 'pipeline' / 'build_engineering_review.py')]),
     ('integrated cleaning plan (production/13)', [sys.executable, '-m', 'nbconvert', '--to', 'notebook', '--execute',
                                           f'--output-dir={EXECUTED_NB}', '--ExecutePreprocessor.timeout=600',
                                           str(NB / 'production' / '13_cleaning_plan_optimization.ipynb')]),
@@ -193,6 +201,11 @@ def select_chain(only=None, start=None):
     return list(CHAIN)
 
 
+def reaches_terminal(selected):
+    """True only when this selection ends at the canonical terminal notebook."""
+    return bool(selected) and selected[-1] == CHAIN[-1]
+
+
 def backup(ts):
     for base, files in [(DATA, BACKUP_CSVS), (DASH_DATA, [p.name for p in DASH_DATA.glob('*.json')])]:
         bdir = base / f'backup_{ts}'; bdir.mkdir(exist_ok=True)
@@ -226,6 +239,11 @@ def main():
         ap.error(f'input not found: {up}')
 
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    generation_id = f'cpht-{ts}'
+    started_at = datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+    topology_errors = validate_topology(BYPASS_CONFIG)
+    if topology_errors:
+        ap.error('topology validation failed: ' + '; '.join(topology_errors))
     print(f'== CPHT pipeline run {ts} ==')
     log.info(f'=== pipeline run {ts} started (args: {vars(args)}) ===')
     data_bk, dash_bk = backup(ts)
@@ -282,7 +300,7 @@ def main():
     # Checking the actual last element of `results` instead is robust to future renames --
     # it doesn't need to know any notebook's name, just whether the chain that was actually
     # selected for this run (respecting --only/--from) finished its last step successfully.
-    ran_terminal = bool(results) and results[-1][1]
+    ran_terminal = bool(results) and results[-1][1] and reaches_terminal(chain)
     post_failed = []   # (label,) of every POST step that failed -- previously untracked, so a
                         # failure here silently didn't affect the final exit code (see below).
     if not failed and ran_terminal:
@@ -316,6 +334,28 @@ def main():
             for f in dash_bk.glob('*'):
                 shutil.copy2(f, DASH_DATA / f.name)
             print('rolled back.'); sys.exit(1)
+
+    if ran_terminal:
+        # A successful analytical run is not visible to the backend until a complete,
+        # immutable snapshot passes the publication gate and its pointer is atomically moved.
+        step_results = [
+            {'kind': 'notebook', 'name': name, 'ok': ok, 'duration_seconds': round(dt, 3)}
+            for name, ok, dt in results
+        ] + [
+            {'kind': 'post', 'name': label, 'ok': label not in post_failed}
+            for label, _ in POST
+        ]
+        try:
+            manifest = publish_snapshot(
+                generation_id, input_path=RAW_INPUT if RAW_INPUT.exists() else None,
+                step_results=step_results, started_at=started_at,
+            )
+            print(f'published immutable snapshot {manifest["generation_id"]}')
+            log.info(f'published snapshot {manifest["generation_id"]}')
+        except Exception as exc:
+            log.error(f'publish gate failed: {exc}')
+            print(f'!! publish gate failed; previous dashboard snapshot remains active: {exc}')
+            sys.exit(1)
 
     n_ok = sum(1 for _, ok, _ in results if ok)
     print(f'== done: {n_ok}/{len(results)} notebooks OK'

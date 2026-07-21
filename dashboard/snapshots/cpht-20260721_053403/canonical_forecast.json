@@ -1,0 +1,563 @@
+{
+  "as_of": "2026-07-01",
+  "hx": {
+    "E101AB": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "linear",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E101CD": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0.0,
+        "p50": 101.2,
+        "p90": 1006.5
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": true,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2027-04-11"
+        },
+        "rul_mc": {
+          "p50_date": "2026-10-10",
+          "p10": 0.0,
+          "p90": 1006.5
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "asymptotic",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E101EF": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 49.4,
+        "p50": 375.3,
+        "p90": 779.2
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "rul_mc": {
+          "p50_date": "2027-07-11",
+          "p10": 49.4,
+          "p90": 779.2
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "power",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E102": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0,
+        "p50": 0,
+        "p90": 0
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2026-07-01"
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "power",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    },
+    "E103AB": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 86.9,
+        "p50": 551.5,
+        "p90": 2956.6
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "rul_mc": {
+          "p50_date": "2028-01-03",
+          "p10": 86.9,
+          "p90": 2956.6
+        },
+        "propagation_c1": {
+          "best_proj_days": 92,
+          "best_model": "power",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E104": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0,
+        "p50": 0,
+        "p90": 0
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2026-07-01"
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "power",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    },
+    "E105AB": {
+      "rate_source": "previous_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": null,
+      "canonical_message": "insufficient current evidence",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "previous_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "linear",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E106AB": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "linear",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E107AB": {
+      "rate_source": "unreliable_current_fit",
+      "canonical_projected_date": null,
+      "canonical_interval": null,
+      "canonical_message": "insufficient current evidence",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "unreliable_current_fit"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "power",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E108AB": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": null,
+        "p50": null,
+        "p90": null
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "power",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E109AB": {
+      "rate_source": "previous_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": null,
+      "canonical_message": "insufficient current evidence",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "previous_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": null,
+          "best_model": "power",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    },
+    "E110ABC": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0,
+        "p50": 0,
+        "p90": 0
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2026-07-01"
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "asymptotic",
+          "beats_all_baselines": null
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    },
+    "E111": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0.0,
+        "p50": 202.9,
+        "p90": 2685.7
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": true,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2027-02-20"
+        },
+        "rul_mc": {
+          "p50_date": "2027-01-19",
+          "p10": 0.0,
+          "p90": 2685.7
+        },
+        "propagation_c1": {
+          "best_proj_days": 543,
+          "best_model": "linear",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": null
+        }
+      }
+    },
+    "E112AB": {
+      "rate_source": "previous_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": null,
+      "canonical_message": "insufficient current evidence",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "previous_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2026-07-01"
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "power",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    },
+    "E112C": {
+      "rate_source": "previous_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": null,
+      "canonical_message": "insufficient current evidence",
+      "sources_disagree": null,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "previous_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": null
+        }
+      }
+    },
+    "E113A": {
+      "rate_source": "current_reliable_run",
+      "canonical_projected_date": null,
+      "canonical_interval": {
+        "p10": 0,
+        "p50": 0,
+        "p90": 0
+      },
+      "canonical_message": "already past threshold",
+      "sources_disagree": false,
+      "cross_check": {
+        "end_of_run_urel": {
+          "projected_date": null,
+          "rate_source": "current_reliable_run"
+        },
+        "end_of_run_duty": {
+          "projected_date": "2026-07-01"
+        },
+        "rul_mc": {
+          "p50_date": "2026-07-01",
+          "p10": 0,
+          "p90": 0
+        },
+        "propagation_c1": {
+          "best_proj_days": 0,
+          "best_model": "linear",
+          "beats_all_baselines": true
+        },
+        "forecast_6mo": {
+          "breach_date": "2026-07-01"
+        }
+      }
+    }
+  },
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": "2026-07-01",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

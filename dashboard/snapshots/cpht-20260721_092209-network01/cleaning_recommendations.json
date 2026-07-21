@@ -1,0 +1,206 @@
+{
+  "data": [
+    {
+      "HX": "E113A",
+      "priority_score": 1.0,
+      "cit_shap_importance": 0.4896,
+      "Q_fouling_rate_abs": 0.0519,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 1,
+      "effort_tier": "SWAP_CAPABLE",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E112AB",
+      "priority_score": 0.9286,
+      "cit_shap_importance": 0.4548,
+      "Q_fouling_rate_abs": 0.139,
+      "recommended_action": "Stable / monitor",
+      "priority_rank": 2,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E108AB",
+      "priority_score": 0.8571,
+      "cit_shap_importance": 0.0782,
+      "Q_fouling_rate_abs": 0.0413,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 3,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": null
+    },
+    {
+      "HX": "E110ABC",
+      "priority_score": 0.7857,
+      "cit_shap_importance": 0.1748,
+      "Q_fouling_rate_abs": 0.0157,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 4,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E105AB",
+      "priority_score": 0.7143,
+      "cit_shap_importance": 0.4227,
+      "Q_fouling_rate_abs": 0.019,
+      "recommended_action": "Stable / monitor",
+      "priority_rank": 5,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": null
+    },
+    {
+      "HX": "E101AB",
+      "priority_score": 0.6429,
+      "cit_shap_importance": 0.2329,
+      "Q_fouling_rate_abs": 0.0143,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 6,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": null
+    },
+    {
+      "HX": "E103AB",
+      "priority_score": 0.5714,
+      "cit_shap_importance": 0.113,
+      "Q_fouling_rate_abs": 0.0294,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 7,
+      "effort_tier": "TAM_ONLY",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": 560.4
+    },
+    {
+      "HX": "E101CD",
+      "priority_score": 0.5,
+      "cit_shap_importance": 0.1146,
+      "Q_fouling_rate_abs": 0.0131,
+      "recommended_action": "Stable / monitor",
+      "priority_rank": 8,
+      "effort_tier": "ONLINE_PARTIAL",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": 284.6
+    },
+    {
+      "HX": "E102",
+      "priority_score": 0.4286,
+      "cit_shap_importance": 0.1361,
+      "Q_fouling_rate_abs": 0.0124,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 9,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E111",
+      "priority_score": 0.3571,
+      "cit_shap_importance": 0.3168,
+      "Q_fouling_rate_abs": 0.0188,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 10,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": 234.8
+    },
+    {
+      "HX": "E104",
+      "priority_score": 0.2857,
+      "cit_shap_importance": 0.3943,
+      "Q_fouling_rate_abs": 0.0054,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 11,
+      "effort_tier": "ONLINE_FULL",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E109AB",
+      "priority_score": 0.2143,
+      "cit_shap_importance": 0.1016,
+      "Q_fouling_rate_abs": 0.0125,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 12,
+      "effort_tier": "TAM_ONLY",
+      "projected_clean_date": "2026-07-01",
+      "at_risk_within_6mo": true,
+      "days_to_threshold_6mo": 0.0
+    },
+    {
+      "HX": "E107AB",
+      "priority_score": 0.1429,
+      "cit_shap_importance": 0.1238,
+      "Q_fouling_rate_abs": 0.1996,
+      "recommended_action": "Clean now (past trigger)",
+      "priority_rank": 13,
+      "effort_tier": "TAM_ONLY",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": null
+    },
+    {
+      "HX": "E106AB",
+      "priority_score": 0.0714,
+      "cit_shap_importance": 0.0777,
+      "Q_fouling_rate_abs": 0.009,
+      "recommended_action": "Stable / long horizon (>3y)",
+      "priority_rank": 14,
+      "effort_tier": "TAM_ONLY",
+      "projected_clean_date": null,
+      "at_risk_within_6mo": false,
+      "days_to_threshold_6mo": null
+    }
+  ],
+  "_meta": {
+    "generation_id": "cpht-20260721_092209-network01",
+    "generated_at": "2026-07-21T02:22:09.178786Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 1,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "METHOD-NETWORK-DIAGNOSTIC-V1"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 1,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "METHOD-NETWORK-DIAGNOSTIC-V1"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  }
+}

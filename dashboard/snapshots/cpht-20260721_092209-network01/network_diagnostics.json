@@ -1,0 +1,299 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-21T02:21:52.945125+00:00",
+  "method": "Observed Q_norm condition joined to audited single-HX CIT recovery",
+  "method_status": "CANDIDATE",
+  "network_model_status": "DIAGNOSTIC_NOT_FULL_THERMAL_DIGITAL_TWIN",
+  "interaction_status": "PAIR_AND_MULTI_HX_INTERACTIONS_NOT_ESTIMATED",
+  "basis": {
+    "clean_q_norm": "historical 90th percentile",
+    "current_q_norm": "latest 30-row median"
+  },
+  "warnings": [
+    "Do not sum single-HX CIT recoveries to estimate multi-HX benefit.",
+    "Compensation ratio remains diagnostic until event backtesting passes."
+  ],
+  "rows": [
+    {
+      "HX": "E101AB",
+      "local_q_loss_mw": 2.5487,
+      "condition_loss_fraction": 0.4595,
+      "marginal_cit_recovery_c": 4.36,
+      "cit_equivalent_duty_mw": 1.1974,
+      "compensation_ratio": 0.5302,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E101CD",
+      "local_q_loss_mw": 1.8309,
+      "condition_loss_fraction": 0.4059,
+      "marginal_cit_recovery_c": 1.18,
+      "cit_equivalent_duty_mw": 0.3241,
+      "compensation_ratio": 0.823,
+      "cit_evidence_source": "measured",
+      "cit_evidence_events": 1,
+      "confidence": "MEDIUM",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E101EF",
+      "local_q_loss_mw": 0.7913,
+      "condition_loss_fraction": 0.2153,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E102",
+      "local_q_loss_mw": 0.6039,
+      "condition_loss_fraction": 0.3481,
+      "marginal_cit_recovery_c": 1.42,
+      "cit_equivalent_duty_mw": 0.39,
+      "compensation_ratio": 0.3542,
+      "cit_evidence_source": "measured",
+      "cit_evidence_events": 3,
+      "confidence": "HIGH",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E103AB",
+      "local_q_loss_mw": 6.0097,
+      "condition_loss_fraction": 0.5965,
+      "marginal_cit_recovery_c": 0.84,
+      "cit_equivalent_duty_mw": 0.2307,
+      "compensation_ratio": 0.9616,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E104",
+      "local_q_loss_mw": 1.0615,
+      "condition_loss_fraction": 0.2324,
+      "marginal_cit_recovery_c": 1.82,
+      "cit_equivalent_duty_mw": 0.4998,
+      "compensation_ratio": 0.5291,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E105AB",
+      "local_q_loss_mw": 0.0,
+      "condition_loss_fraction": 0.0,
+      "marginal_cit_recovery_c": 0.33,
+      "cit_equivalent_duty_mw": 0.0906,
+      "compensation_ratio": null,
+      "cit_evidence_source": "measured",
+      "cit_evidence_events": 1,
+      "confidence": "MEDIUM",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "LOCAL_Q_LOSS_NOT_ESTIMABLE"
+      ]
+    },
+    {
+      "HX": "E106AB",
+      "local_q_loss_mw": 3.3691,
+      "condition_loss_fraction": 0.4843,
+      "marginal_cit_recovery_c": 1.07,
+      "cit_equivalent_duty_mw": 0.2939,
+      "compensation_ratio": 0.9128,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E107AB",
+      "local_q_loss_mw": 1.2493,
+      "condition_loss_fraction": 0.3783,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E108AB",
+      "local_q_loss_mw": 1.6117,
+      "condition_loss_fraction": 0.571,
+      "marginal_cit_recovery_c": 0.24,
+      "cit_equivalent_duty_mw": 0.0659,
+      "compensation_ratio": 0.9591,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E109AB",
+      "local_q_loss_mw": 1.4624,
+      "condition_loss_fraction": 0.4554,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E110ABC",
+      "local_q_loss_mw": 5.9699,
+      "condition_loss_fraction": 0.6362,
+      "marginal_cit_recovery_c": 2.24,
+      "cit_equivalent_duty_mw": 0.6152,
+      "compensation_ratio": 0.897,
+      "cit_evidence_source": "model_calibrated",
+      "cit_evidence_events": 0,
+      "confidence": "LOW",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    },
+    {
+      "HX": "E111",
+      "local_q_loss_mw": 1.0906,
+      "condition_loss_fraction": 0.3959,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E112AB",
+      "local_q_loss_mw": 0.5002,
+      "condition_loss_fraction": 0.0834,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E112C",
+      "local_q_loss_mw": 41.4872,
+      "condition_loss_fraction": 0.8303,
+      "marginal_cit_recovery_c": null,
+      "cit_equivalent_duty_mw": null,
+      "compensation_ratio": null,
+      "cit_evidence_source": null,
+      "cit_evidence_events": null,
+      "confidence": "INSUFFICIENT",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": [
+        "NO_SINGLE_HX_CIT_ESTIMATE"
+      ]
+    },
+    {
+      "HX": "E113A",
+      "local_q_loss_mw": 5.041,
+      "condition_loss_fraction": 0.5001,
+      "marginal_cit_recovery_c": 4.34,
+      "cit_equivalent_duty_mw": 1.1919,
+      "compensation_ratio": 0.7636,
+      "cit_evidence_source": "measured",
+      "cit_evidence_events": 11,
+      "confidence": "HIGH",
+      "data_kind": "CALCULATED",
+      "approval_status": "CANDIDATE",
+      "warnings": []
+    }
+  ],
+  "plots": [
+    "figures\\network_diagnostics\\condition_vs_consequence.png",
+    "figures\\network_diagnostics\\compensation_ratio.png",
+    "figures\\network_diagnostics\\cit_recovery_by_hx.png",
+    "figures\\network_diagnostics\\condition_consequence_matrix.png"
+  ],
+  "_meta": {
+    "generation_id": "cpht-20260721_092209-network01",
+    "generated_at": "2026-07-21T02:22:09.178786Z",
+    "data_as_of": "2026-07-21T02:21:52.945125+00:00",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 1,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "METHOD-NETWORK-DIAGNOSTIC-V1"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 1,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "METHOD-NETWORK-DIAGNOSTIC-V1"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "METHOD-NETWORK-DIAGNOSTIC-V1"
+  ]
+}

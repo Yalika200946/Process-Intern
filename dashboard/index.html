@@ -48,7 +48,14 @@ const fmt=(v,d=1)=>(v==null||Number.isNaN(+v))?'—':Number(v).toFixed(d);
 const daysBetween=(a,b)=>Math.round((new Date(b)-new Date(a))/864e5);
 const parseISO=s=>new Date(s+'T00:00:00');
 const thaiDate=iso=>iso?parseISO(iso).toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'}):'—';
-async function loadJSON(n){const r=await fetch(`${DATA_DIR}/${n}?t=${Date.now()}`);if(!r.ok)throw new Error(`${n}: ${r.status}`);return r.json();}
+async function loadJSON(n){
+  const r=await fetch(`${DATA_DIR}/${n}?t=${Date.now()}`);if(!r.ok)throw new Error(`${n}: ${r.status}`);
+  const j=await r.json();
+  // Immutable review snapshots wrap top-level arrays so they can carry lineage metadata.
+  // Preserve the legacy consumer shape while retaining _meta on the returned array.
+  if(j&&Array.isArray(j.data)&&j._meta){j.data._meta=j._meta;j.data.approval_summary=j.approval_summary;return j.data;}
+  return j;
+}
 // Last-Modified (backend/server.py's do_GET sets it from the file's mtime) lets the dashboard
 // detect when /api/run's "quick update" (topology only, see server.py's own docstring) has left
 // pfd_topology.json newer than hx_ranking.json/economics.json -- i.e. the ranking/economics shown
@@ -2238,13 +2245,23 @@ function App(){
   const tamDays=daysBetween(new Date(),params.NEXT_TAM);
   const top1=engPriority.slice().sort((a,b)=>(b.engineering_priority_score||0)-(a.engineering_priority_score||0))[0];
   const engPriorityByHX=Object.fromEntries(engPriority.map(r=>[r.HX,r]));
+  const reviewSummary=topo?.approval_summary||topo?._meta?.approval_summary;
+  const assumptionCount=(reviewSummary?.counts?.ASSUMPTION||0)+(reviewSummary?.counts?.CANDIDATE||0);
+  const artifactGenerations=[topo,models,forecast,econ,plan,ev].map(x=>x?._meta?.generation_id).filter(Boolean);
+  const mixedGeneration=(new Set(artifactGenerations)).size>1;
+  const generationId=topo?._meta?.generation_id;
 
   const TABS=[['overview','ภาพรวม & P&ID'],['plan','แผนล้าง HX'],['phm','พยากรณ์ & ความเสี่ยง'],['furnace','เตา & โมเดล Optimization'],['evidence','หลักฐาน & ความเชื่อมั่น']];
 
   return(
    <div className="min-h-screen font-sans text-bcp-black">
     {DEMO && <div className="bg-bcp-orange text-white text-[12px] text-center py-1.5 px-4 font-medium">
-      🔒 DEMO · ข้อมูลจำลอง (anonymized) — tag และค่าทั้งหมดถูกสุ่มแทน ไม่ใช่ข้อมูลจริงของโรงงาน · ฟังก์ชันอัปโหลด/วิเคราะห์ปิดในโหมดนี้</div>}
+     🔒 DEMO · ข้อมูลจำลอง (anonymized) — tag และค่าทั้งหมดถูกสุ่มแทน ไม่ใช่ข้อมูลจริงของโรงงาน · ฟังก์ชันอัปโหลด/วิเคราะห์ปิดในโหมดนี้</div>}
+    {!DEMO && <div className={`${mixedGeneration?'bg-bcp-red':'bg-amber-500'} text-white text-[11px] text-center py-1.5 px-4 font-medium`}>
+      {mixedGeneration
+        ? '⛔ ARTIFACT GENERATION MISMATCH — ห้ามใช้ผลประกอบการตัดสินใจ กรุณารัน full pipeline ใหม่'
+        : `⚠ ENGINEERING REVIEW MODE · ${assumptionCount} candidate/assumption items ยังไม่ใช่ค่าที่โรงงานอนุมัติ${generationId?' · '+generationId:''}`}
+    </div>}
     <header className="sticky top-0 z-30 glass border-b border-black/[.06]">
       <div className="max-w-[1440px] mx-auto px-6 h-[58px] flex items-center justify-between">
         <div className="flex items-center gap-3">

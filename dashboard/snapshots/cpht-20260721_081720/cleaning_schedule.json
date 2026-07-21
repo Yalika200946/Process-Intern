@@ -1,0 +1,543 @@
+{
+  "as_of": "2026-07-01",
+  "next_tam": "2028-06-01",
+  "next_tam_assumed": true,
+  "k_baht_per_C_day": 23030,
+  "feed_kbd": 79.8,
+  "method": "analytic optimal interval T*=sqrt(2C/(k·r)) — minimize fouling-energy cost + cleaning cost; r จากค่าวัดจริง (median recovery ÷ median run duration); เฉพาะ HX ที่มี bypass จริงเท่านั้นที่ล้าง online ได้; เพดานความถี่ 3 ครั้ง/ปีต่อ HX (ข้อจำกัดหน้างานจริง)",
+  "per_hx": [
+    {
+      "HX": "E101AB",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 59,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.00748,
+      "cit_gain_C": 4.36,
+      "cit_gain_source": "model_calibrated",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 31926090,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0075)) = 59 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี)",
+      "priority": 1
+    },
+    {
+      "HX": "E110ABC",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 82,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.00384,
+      "cit_gain_C": 2.24,
+      "cit_gain_source": "model_calibrated",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 15964780,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0038)) = 82 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี)",
+      "priority": 2
+    },
+    {
+      "HX": "E113A",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 17,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.04568,
+      "cit_gain_C": 4.34,
+      "cit_gain_source": "measured",
+      "cleaning_cost": 150000,
+      "net_saving_thb_yr": 12670815,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×150,000/(23,030×0.0457)) = 17 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี)",
+      "priority": 3
+    },
+    {
+      "HX": "E104",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 49,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.01064,
+      "cit_gain_C": 1.82,
+      "cit_gain_source": "model_calibrated",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 8956383,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0106)) = 49 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี)",
+      "priority": 4
+    },
+    {
+      "HX": "E101CD",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 98,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.00273,
+      "cit_gain_C": 0.59,
+      "cit_gain_source": "measured",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 2662778,
+      "duty_fraction": 0.5,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0027)) = 98 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี) [ล้าง online ได้บางส่วน 50% — อีก shell รอ TAM]",
+      "priority": 5
+    },
+    {
+      "HX": "E105AB",
+      "online": true,
+      "T_opt_days": 225,
+      "T_unclipped_days": 225,
+      "freq_per_year": 1.62,
+      "next_dates": [
+        "2027-02-11",
+        "2027-09-24"
+      ],
+      "r_C_per_day": 0.00051,
+      "cit_gain_C": 0.33,
+      "cit_gain_source": "measured",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 1801990,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0005)) = 225 วัน → ล้างทุก ~225 วัน (1.6 ครั้ง/ปี)",
+      "priority": 6
+    },
+    {
+      "HX": "E108AB",
+      "online": true,
+      "T_opt_days": 176,
+      "T_unclipped_days": 176,
+      "freq_per_year": 2.08,
+      "next_dates": [
+        "2026-12-24",
+        "2027-06-18",
+        "2027-12-11"
+      ],
+      "r_C_per_day": 0.00084,
+      "cit_gain_C": 0.24,
+      "cit_gain_source": "model_calibrated",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 771267,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0008)) = 176 วัน → ล้างทุก ~176 วัน (2.1 ครั้ง/ปี)",
+      "priority": 7
+    },
+    {
+      "HX": "E103AB",
+      "online": false,
+      "T_opt_days": null,
+      "freq_per_year": 0,
+      "next_dates": [
+        "2028-06-01"
+      ],
+      "r_C_per_day": 0.00833,
+      "cit_gain_C": 0.0,
+      "cleaning_cost": 400000,
+      "net_saving_thb_yr": null,
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM 2028",
+      "priority": 8
+    },
+    {
+      "HX": "E102",
+      "online": true,
+      "T_opt_days": 122,
+      "T_unclipped_days": 34,
+      "freq_per_year": 3.0,
+      "next_dates": [
+        "2026-10-31",
+        "2027-03-02",
+        "2027-07-02",
+        "2027-11-01",
+        "2028-03-02"
+      ],
+      "r_C_per_day": 0.0229,
+      "cit_gain_C": 1.42,
+      "cit_gain_source": "measured",
+      "cleaning_cost": 300000,
+      "net_saving_thb_yr": 0,
+      "duty_fraction": 1.0,
+      "rationale": "T* = sqrt(2×300,000/(23,030×0.0229)) = 34 วัน (ชนเพดาน 3 ครั้ง/ปี) → ล้างทุก ~122 วัน (3.0 ครั้ง/ปี)",
+      "priority": 9
+    },
+    {
+      "HX": "E106AB",
+      "online": false,
+      "T_opt_days": null,
+      "freq_per_year": 0,
+      "next_dates": [
+        "2028-06-01"
+      ],
+      "r_C_per_day": 0.00833,
+      "cit_gain_C": 0.0,
+      "cleaning_cost": 400000,
+      "net_saving_thb_yr": null,
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM 2028",
+      "priority": 10
+    }
+  ],
+  "timeline": [
+    {
+      "HX": "E113A",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E102",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E104",
+      "date": "2026-10-31",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2026-12-24",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2027-02-11",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E104",
+      "date": "2027-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2027-06-18",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E104",
+      "date": "2027-07-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2027-09-24",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E104",
+      "date": "2027-11-01",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2027-12-11",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E104",
+      "date": "2028-03-02",
+      "kind": "ONLINE"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E103AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E104",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E106AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    }
+  ],
+  "post_2028": {
+    "assumption": "ทุก HX ถูกล้างครบที่ TAM 2028 (reset) แล้ว fouling ดำเนินด้วย rate เดิม",
+    "cycle": [
+      "2028-06-01",
+      "2032-06-01"
+    ],
+    "per_hx": [
+      {
+        "HX": "E101AB",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E110ABC",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E113A",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E104",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E101CD",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E105AB",
+        "first_clean_after_tam": "2029-01-12",
+        "freq_per_year": 1.62,
+        "expected_cleans_in_cycle": 6.5
+      },
+      {
+        "HX": "E108AB",
+        "first_clean_after_tam": "2028-11-24",
+        "freq_per_year": 2.08,
+        "expected_cleans_in_cycle": 8.3
+      },
+      {
+        "HX": "E103AB",
+        "first_clean_after_tam": null,
+        "freq_per_year": 0,
+        "expected_cleans_in_cycle": 0
+      },
+      {
+        "HX": "E102",
+        "first_clean_after_tam": "2028-10-01",
+        "freq_per_year": 3.0,
+        "expected_cleans_in_cycle": 12.0
+      },
+      {
+        "HX": "E106AB",
+        "first_clean_after_tam": null,
+        "freq_per_year": 0,
+        "expected_cleans_in_cycle": 0
+      }
+    ]
+  },
+  "totals": {
+    "online_hx": 8,
+    "tam_only": 2,
+    "total_net_saving_thb_yr": 74754103
+  },
+  "_meta": {
+    "generation_id": "cpht-20260721_081720",
+    "generated_at": "2026-07-21T02:16:35.848274Z",
+    "data_as_of": "2026-07-01",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 0,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": true,
+      "assumption_flags": [],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 0,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": true,
+    "assumption_flags": [],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": []
+}

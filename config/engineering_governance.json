@@ -1,0 +1,86 @@
+{
+  "schema_version": "1.0.0",
+  "mode": "REVIEW",
+  "statuses": ["CANDIDATE", "ASSUMPTION", "APPROVED", "TARGET_NOT_IMPLEMENTED"],
+  "data_kinds": ["MEASURED", "CALCULATED", "INFERRED", "PREDICTED", "ASSUMPTION"],
+  "records": [
+    {
+      "id": "METHOD-COLD-DUTY",
+      "category": "calculation_method",
+      "name": "Cold-side heat duty",
+      "value": "Q = volumetric_flow * density * Cp * (Tout-Tin) / 3600",
+      "unit": "kW",
+      "status": "APPROVED",
+      "source": "src/features/crude_properties.py; src/features/heat_duty.py; project owner confirmation 2026-07-21",
+      "approver": "PROJECT_OWNER_CONFIRMED",
+      "approved_at": "2026-07-21",
+      "review_due": "2027-07-21",
+      "notes": "Approved for project decision-support use. Cold-side basis and crude-property correlation must be re-reviewed if feed properties or instrumentation change."
+    },
+    {
+      "id": "METHOD-Q-NORM",
+      "category": "calculation_method",
+      "name": "Normalized heat duty",
+      "value": "Q_norm = Q_kW / total_charge_m3_h",
+      "unit": "kW per (m3/h)",
+      "status": "APPROVED",
+      "source": "production notebook chain; project owner confirmation 2026-07-21",
+      "approver": "PROJECT_OWNER_CONFIRMED",
+      "approved_at": "2026-07-21",
+      "review_due": "2027-07-21",
+      "notes": "Approved as a throughput-normalized performance signal only; it is not a direct fouling-resistance measurement."
+    },
+    {
+      "id": "TOPO-E112C-E113A",
+      "category": "topology",
+      "name": "E112C and E113A parallel alternate position",
+      "value": ["E113A", "E112C"],
+      "unit": null,
+      "status": "APPROVED",
+      "source": "docs/requirements/02_Requirement_v2_SSOT.md; project owner confirmation 2026-07-21",
+      "approver": "PROJECT_OWNER_CONFIRMED",
+      "approved_at": "2026-07-21",
+      "review_due": "2027-07-21",
+      "notes": "Approved project topology: both use 1TI115 to 1TI116 and total charge. Re-review against any revised P&ID or valve lineup."
+    },
+    {
+      "id": "INFER-E101G",
+      "category": "inference",
+      "name": "E101G flow and service state",
+      "value": "total_charge - E101AB - E101CD - E101EF branch flows",
+      "unit": "m3/h",
+      "status": "APPROVED",
+      "source": "Operating_State.csv production logic; project owner confirmation 2026-07-21",
+      "approver": "PROJECT_OWNER_CONFIRMED",
+      "approved_at": "2026-07-21",
+      "review_due": "2027-07-21",
+      "notes": "Approved inference method. E101G has no direct temperature or flow instrumentation and must always remain labelled INFERRED."
+    },
+    {
+      "id": "METHOD-NETWORK-DIAGNOSTIC-V1",
+      "category": "calculation_method",
+      "name": "Local condition versus single-HX network consequence diagnostic",
+      "value": "Q_norm P90 clean envelope vs latest-30 median; join to audited single-HX CIT recovery; CR = 1 - CIT-equivalent-duty/local-Q-loss",
+      "unit": "mixed engineering diagnostic",
+      "status": "CANDIDATE",
+      "source": "supplied CPHT end-to-end concept; src/network/attribution.py; pipeline/export_network_diagnostics.py",
+      "approver": null,
+      "approved_at": null,
+      "review_due": null,
+      "notes": "Diagnostic only. Pair/multi-HX interaction and thermal temperature propagation are not estimated. Must pass confirmed cleaning-event backtesting before approval."
+    },
+    {
+      "id": "METHOD-HYBRID-NETWORK-V1",
+      "category": "calculation_method",
+      "name": "Hybrid empirical clean-response and datasheet diagnostic network model",
+      "value": "Chronological clean-state model per HX; three CPHT-2 branches; flow-weighted mixing; E113A/E112C active terminal; clean-one and pairwise counterfactuals",
+      "unit": "degC and engineering diagnostics",
+      "status": "CANDIDATE",
+      "source": "src/network/hybrid.py; src/network/datasheet.py; pipeline/export_hybrid_network_model.py",
+      "approver": null,
+      "approved_at": null,
+      "review_due": null,
+      "notes": "Covers 16 network positions represented by 17 assets because E113A/E112C share one alternate terminal position. Scheduler replacement remains prohibited until all acceptance gates pass."
+    }
+  ]
+}

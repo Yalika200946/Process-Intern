@@ -1,0 +1,1012 @@
+{
+  "schema_version": "1.0.0",
+  "generated_at": "2026-07-20T23:07:55.921076Z",
+  "mode": "REVIEW",
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "topology_validation": {
+    "structurally_valid": true,
+    "errors": [],
+    "engineering_review_flags": [
+      "TOPO-E112C-E113A",
+      "INFER-E101G"
+    ]
+  },
+  "heat_exchangers": [
+    {
+      "hx_id": "E101AB",
+      "train_position": "CPHT-1",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E101CD",
+      "train_position": "CPHT-1",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "partial",
+      "duty_fraction": 0.5,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E101EF",
+      "train_position": "CPHT-1",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E101G",
+      "train_position": "CPHT-1",
+      "swap_capable": false,
+      "tam_only": true,
+      "online_mode": "none",
+      "duty_fraction": 0.0,
+      "sensor_coverage": "INFERRED",
+      "flow_allocation_method": "mass-balance inference",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E102",
+      "train_position": "CPHT-1",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "total charge (no dedicated meter)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E106AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": true,
+      "online_mode": "none",
+      "duty_fraction": 0.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E110ABC",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E103AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": true,
+      "online_mode": "none",
+      "duty_fraction": 0.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "dedicated meter",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E107AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": true,
+      "online_mode": "none",
+      "duty_fraction": 0.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E106AB (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E111",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E110ABC (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E104",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E103AB (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E108AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E106AB (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E112AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E110ABC (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E105AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E103AB (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E112C",
+      "train_position": "CPHT-2",
+      "swap_capable": true,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "total charge (no dedicated meter, spare for E113A)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E109AB",
+      "train_position": "CPHT-2",
+      "swap_capable": false,
+      "tam_only": true,
+      "online_mode": "none",
+      "duty_fraction": 0.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "shared with E106AB (same crude stream)",
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "hx_id": "E113A",
+      "train_position": "CPHT-2",
+      "swap_capable": true,
+      "tam_only": false,
+      "online_mode": "full",
+      "duty_fraction": 1.0,
+      "sensor_coverage": "COLD_SIDE_MEASURED",
+      "flow_allocation_method": "total charge (no dedicated meter)",
+      "approval_status": "CANDIDATE"
+    }
+  ],
+  "tags": [
+    {
+      "tag_id": "1AI001.pv",
+      "source_tag": "1AI001.pv",
+      "canonical_name": "O2",
+      "asset_ids": [
+        "F101"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "pct",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI007.pv",
+      "source_tag": "1FI007.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E101AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI008.pv",
+      "source_tag": "1FI008.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E101CD"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI009.pv",
+      "source_tag": "1FI009.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E101EF"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI015.pv",
+      "source_tag": "1FI015.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E103AB",
+        "E104",
+        "E105AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI016.pv",
+      "source_tag": "1FI016.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E106AB",
+        "E107AB",
+        "E108AB",
+        "E109AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI017.pv",
+      "source_tag": "1FI017.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E110ABC",
+        "E111",
+        "E112AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1FI028.pv",
+      "source_tag": "1FI028.pv",
+      "canonical_name": "FG_FLOW",
+      "asset_ids": [
+        "F101"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "t/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1PC010.pv",
+      "source_tag": "1PC010.pv",
+      "canonical_name": "FG_PRESSURE",
+      "asset_ids": [
+        "F101"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "kg/cm2g",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1PC034.pv",
+      "source_tag": "1PC034.pv",
+      "canonical_name": "DRAFT",
+      "asset_ids": [
+        "F101"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "mmH2O",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI101.pv",
+      "source_tag": "1TI101.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E101AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI102.pv",
+      "source_tag": "1TI102.pv",
+      "canonical_name": "cold_in",
+      "asset_ids": [
+        "E101AB",
+        "E101CD",
+        "E101EF"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI104.pv",
+      "source_tag": "1TI104.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E101CD"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI106.pv",
+      "source_tag": "1TI106.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E102"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI107.pv",
+      "source_tag": "1TI107.pv",
+      "canonical_name": "cold_in",
+      "asset_ids": [
+        "E102"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI109.pv",
+      "source_tag": "1TI109.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E101EF"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI112.pv",
+      "source_tag": "1TI112.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E104",
+        "E105AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI114.pv",
+      "source_tag": "1TI114.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E105AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI115.pv",
+      "source_tag": "1TI115.pv",
+      "canonical_name": "cold_in",
+      "asset_ids": [
+        "E112C",
+        "E113A"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI116.pv",
+      "source_tag": "1TI116.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E112C",
+        "E113A"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI123.pv",
+      "source_tag": "1TI123.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E111",
+        "E112AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI124.pv",
+      "source_tag": "1TI124.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E110ABC",
+        "E111"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI126.pv",
+      "source_tag": "1TI126.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E112AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI128.pv",
+      "source_tag": "1TI128.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E106AB",
+        "E107AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI130.pv",
+      "source_tag": "1TI130.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E107AB",
+        "E108AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI132.pv",
+      "source_tag": "1TI132.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E108AB",
+        "E109AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI134.pv",
+      "source_tag": "1TI134.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E109AB"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI136.pv",
+      "source_tag": "1TI136.pv",
+      "canonical_name": "cold_out",
+      "asset_ids": [
+        "E103AB",
+        "E104"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI150.pv",
+      "source_tag": "1TI150.pv",
+      "canonical_name": "COT",
+      "asset_ids": [
+        "F101"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1TI225.pv",
+      "source_tag": "1TI225.pv",
+      "canonical_name": "cold_in",
+      "asset_ids": [
+        "E103AB",
+        "E106AB",
+        "E110ABC"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "degC",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "1fi005.pv",
+      "source_tag": "1fi005.pv",
+      "canonical_name": "cold_flow",
+      "asset_ids": [
+        "E102",
+        "E112C",
+        "E113A"
+      ],
+      "measurement_type": "MEASURED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    },
+    {
+      "tag_id": "E101G_FLOW_INFERRED",
+      "source_tag": null,
+      "canonical_name": "E101G cold flow",
+      "asset_ids": [
+        "E101G"
+      ],
+      "measurement_type": "INFERRED",
+      "unit_raw": null,
+      "unit_canonical": "m3/h",
+      "valid_from": null,
+      "valid_to": null,
+      "approval_status": "CANDIDATE"
+    }
+  ],
+  "registries": [
+    {
+      "schema_version": "1.0.0",
+      "mode": "REVIEW",
+      "statuses": [
+        "CANDIDATE",
+        "ASSUMPTION",
+        "APPROVED",
+        "TARGET_NOT_IMPLEMENTED"
+      ],
+      "data_kinds": [
+        "MEASURED",
+        "CALCULATED",
+        "INFERRED",
+        "PREDICTED",
+        "ASSUMPTION"
+      ],
+      "records": [
+        {
+          "id": "METHOD-COLD-DUTY",
+          "category": "calculation_method",
+          "name": "Cold-side heat duty",
+          "value": "Q = volumetric_flow * density * Cp * (Tout-Tin) / 3600",
+          "unit": "kW",
+          "status": "CANDIDATE",
+          "source": "src/features/crude_properties.py; src/features/heat_duty.py",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Cold-side only; crude-property correlation and operating range require engineering approval."
+        },
+        {
+          "id": "METHOD-Q-NORM",
+          "category": "calculation_method",
+          "name": "Normalized heat duty",
+          "value": "Q_norm = Q_kW / total_charge_m3_h",
+          "unit": "kW per (m3/h)",
+          "status": "CANDIDATE",
+          "source": "production notebook chain",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Permitted as a throughput-normalized performance signal, not approved as a direct fouling-resistance measurement."
+        },
+        {
+          "id": "TOPO-E112C-E113A",
+          "category": "topology",
+          "name": "E112C and E113A parallel alternate position",
+          "value": [
+            "E113A",
+            "E112C"
+          ],
+          "unit": null,
+          "status": "CANDIDATE",
+          "source": "docs/requirements/02_Requirement_v2_SSOT.md",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Both currently use 1TI115 to 1TI116 and total charge; must be checked against the latest approved P&ID."
+        },
+        {
+          "id": "INFER-E101G",
+          "category": "inference",
+          "name": "E101G flow and service state",
+          "value": "total_charge - E101AB - E101CD - E101EF branch flows",
+          "unit": "m3/h",
+          "status": "CANDIDATE",
+          "source": "Operating_State.csv production logic",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "E101G has no direct temperature or flow instrumentation and must always be labelled INFERRED."
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0.0",
+      "records": [
+        {
+          "id": "CIT_FLOOR",
+          "value": 250.0,
+          "unit": "degC",
+          "direction": "LOW",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting furnace engineer confirmation."
+        },
+        {
+          "id": "COT_LIMIT",
+          "value": 345.0,
+          "unit": "degC",
+          "direction": "HIGH",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting furnace engineer confirmation."
+        },
+        {
+          "id": "TUBE_SKIN_LIMIT",
+          "value": 400.0,
+          "unit": "degC",
+          "direction": "HIGH",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Use the hottest pass as worst case."
+        },
+        {
+          "id": "FG_FLOW_MAX",
+          "value": 9.0,
+          "unit": "t/h",
+          "direction": "HIGH",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting furnace engineer confirmation."
+        },
+        {
+          "id": "FG_PRESSURE_MIN",
+          "value": 2.5,
+          "unit": "kg/cm2g",
+          "direction": "LOW",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting furnace engineer confirmation."
+        },
+        {
+          "id": "O2_MIN",
+          "value": 1.5,
+          "unit": "pct",
+          "direction": "LOW",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Guideline only."
+        },
+        {
+          "id": "O2_MAX",
+          "value": 4.5,
+          "unit": "pct",
+          "direction": "HIGH",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Guideline only."
+        },
+        {
+          "id": "DRAFT_MIN",
+          "value": -6.0,
+          "unit": "mmH2O",
+          "direction": "LOW",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Guideline only."
+        },
+        {
+          "id": "DRAFT_MAX",
+          "value": 0.5,
+          "unit": "mmH2O",
+          "direction": "HIGH",
+          "status": "ASSUMPTION",
+          "source": "legacy dashboard configuration",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Guideline only."
+        }
+      ]
+    },
+    {
+      "schema_version": "1.0.0",
+      "records": [
+        {
+          "id": "NATURAL_GAS_PRICE",
+          "value": 390.0,
+          "unit": "THB/MMBTU",
+          "status": "ASSUMPTION",
+          "source": "legacy economics model",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Must carry an effective date before approval."
+        },
+        {
+          "id": "FURNACE_EFFICIENCY",
+          "value": 0.88,
+          "unit": "fraction",
+          "status": "ASSUMPTION",
+          "source": "legacy first-principles cross-check",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Scenario input, not an approved performance guarantee."
+        },
+        {
+          "id": "NEXT_TAM_DATE",
+          "value": "2028-06-01",
+          "unit": "date",
+          "status": "ASSUMPTION",
+          "source": "planning placeholder",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Replace after TAM planner confirmation."
+        },
+        {
+          "id": "MAX_CLEANS_PER_HX_YEAR",
+          "value": 4,
+          "unit": "events/year/HX",
+          "status": "ASSUMPTION",
+          "source": "current scheduling constraint",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting maintenance confirmation."
+        },
+        {
+          "id": "MAX_ONLINE_CLEANS_PER_MONTH",
+          "value": 2,
+          "unit": "events/month",
+          "status": "ASSUMPTION",
+          "source": "current network scheduler",
+          "approver": null,
+          "approved_at": null,
+          "review_due": null,
+          "notes": "Awaiting crew-capacity confirmation."
+        }
+      ]
+    }
+  ],
+  "disclaimer": "Candidate review package; not an approved operating record.",
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": "2026-07-20T23:07:55.921076Z",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

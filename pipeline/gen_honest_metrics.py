@@ -118,6 +118,10 @@ def main():
         target='1TI116.pv (CIT, Coil Inlet Temp to furnace F101)',
         n_rows=int(len(X)), date_range=[str(X.index.min().date()), str(X.index.max().date())],
         primary_baseline='Persistence',
+        selected_operational_model='Persistence',
+        candidate_forecast_approved=False,
+        approval_status='CANDIDATE',
+        fallback_reason='Tree models do not beat persistence in walk-forward validation.',
         headline=('CIT is near-random-walk; persistence (today = yesterday) is the honest baseline '
                   'and the ML trees do NOT beat it out-of-sample. Tree models are kept for HX->CIT '
                   'SHAP attribution only, not point forecasting.'),

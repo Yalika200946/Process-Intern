@@ -1,0 +1,274 @@
+{
+  "as_of": "2026-07-01",
+  "principle": "จัดลำดับล้างอิงสัญญาณกายภาพที่วัดได้เป็นหลัก — ไม่พึ่งโมเดลที่ยัง validate ไม่ผ่าน · ทุกโมเดลมี baseline เทียบ + CV ที่ hold out จริง + ธงความเชื่อมั่น",
+  "data": {
+    "date_start": "2021-01-08",
+    "date_end": "2026-07-01",
+    "n_days_cit": 1891,
+    "n_hx": 16,
+    "n_fouling_runs": 97,
+    "n_cleaning_events_audited": 81,
+    "n_tams_detected": 1,
+    "tam_dates": [
+      "2021-03-25"
+    ],
+    "as_of": "2026-07-01"
+  },
+  "validation": {
+    "cit": {
+      "method": "walk-forward TimeSeriesSplit (5-fold, expanding window)",
+      "target": "1TI116.pv (CIT, Coil Inlet Temp to furnace F101)",
+      "primary_baseline": "Persistence",
+      "skill_vs_persistence_pct": -60.0,
+      "headline": "CIT is near-random-walk; persistence (today = yesterday) is the honest baseline and the ML trees do NOT beat it out-of-sample. Tree models are kept for HX->CIT SHAP attribution only, not point forecasting.",
+      "models": [
+        {
+          "name": "Persistence (yesterday's CIT)",
+          "role": "baseline",
+          "cv_r2": 0.89,
+          "beats_persistence": null,
+          "note": "Honest baseline. Strong because CIT is slow and strongly autocorrelated."
+        },
+        {
+          "name": "XGBoost",
+          "role": "attribution-only",
+          "cv_r2": 0.691,
+          "beats_persistence": false,
+          "note": "Single 80/20 R2 looked good but loses to persistence on every walk-forward fold. SHAP attribution only."
+        },
+        {
+          "name": "RandomForest",
+          "role": "attribution-only",
+          "cv_r2": 0.769,
+          "beats_persistence": false,
+          "note": "Same story as XGBoost; does not beat persistence out-of-sample."
+        },
+        {
+          "name": "XGBoost (no CIT_lag1 ablation)",
+          "role": "ablation",
+          "cv_r2": -0.092,
+          "beats_persistence": false,
+          "note": "Removing CIT_lag1/CIT_roll7 makes it WORSE (CV R2 -0.092 vs 0.691 with the lag) -- HX/crude features alone cannot explain the CIT level at all; the lag is not an error to remove, it is the only reason the model is in the right ballpark."
+        },
+        {
+          "name": "LSTM",
+          "role": "rejected",
+          "cv_r2": null,
+          "beats_persistence": false,
+          "note": "~700 daily rows is too few for a sequence model. Tested and rejected."
+        }
+      ]
+    },
+    "fouling_forecast": {
+      "metric": "leave-HX-out CV R²",
+      "value": 0.1,
+      "source": "production/04_fouling_cit_impact_forecast.ipynb Part 2 §7 (documented, was 04_clean_baseline.ipynb / 06_fouling_rate_forecast.ipynb)",
+      "note": "ข้ามไป HX ใหม่ทำนายไม่ได้ (Q scale ต่างกันมาก) — สัญญาณที่ deploy ใช้ได้เพราะ refit บน baseline ของ HX นั้นเอง ไม่ใช่ zero-shot"
+    },
+    "fouling_quality_gate": {
+      "n_runs": 97,
+      "n_reliable": 48,
+      "n_flagged": 49,
+      "flag_breakdown": {
+        "ok": 48,
+        "insufficient_span": 35,
+        "noisy_low_r2": 11,
+        "flat_no_signal": 3
+      },
+      "method": "robust: in-service mask + winsorize + AIC race (linear vs asymptotic-decay vs power) on U_relative -> current/tail-slope rate + physics gate (slope<0, CI) + R2 floor (>=0.30) + oscillation gate (sign-change-rate, catches shell-switch sawtooth noise)",
+      "note": "48/97 รอบผ่านเกณฑ์ฟิสิกส์ (reliable, slope<0) — ที่เหลือติดธง ok=48 · insufficient_span=35 · noisy_low_r2=11 · flat_no_signal=3"
+    },
+    "degradation_drivers": {
+      "metric": "CV R²",
+      "value": -30.159,
+      "n": 47,
+      "note": "CV R²<0 = associative (บอกความสัมพันธ์) ไม่ใช่ causation"
+    }
+  },
+  "quantity_register": [
+    {
+      "quantity": "U_relative / fouling rate",
+      "status": "measured",
+      "basis": "U/U_clean ต่อรอบจากข้อมูลจริง (Feature_calculated.csv) + linregress ต่อรอบ",
+      "source": "production/02_hx_performance_operating_modes.ipynb (was 03_hx_performance.ipynb / 02_feature_engineering.ipynb)"
+    },
+    {
+      "quantity": "Q duty shortfall (ค่าเบี่ยงเบน)",
+      "status": "measured",
+      "basis": "clean-baseline model refit บน 30 วันแรกหลังล้างของ HX นั้นเอง แล้ววัด deviation",
+      "source": "production/04_fouling_cit_impact_forecast.ipynb Part 2 (was 04_clean_baseline.ipynb / 06_fouling_rate_forecast.ipynb)"
+    },
+    {
+      "quantity": "ΔCIT คืนต่อการล้าง",
+      "status": "measured-first",
+      "basis": "median จาก audit history จริง (4 HX) · fallback ค่าโมเดล (0 HX) เมื่อวัดไม่ได้",
+      "source": "export_cleaning_history.py → economics.json"
+    },
+    {
+      "quantity": "สูตรพลังงาน (Energy Saving Benefit)",
+      "status": "plant-formula",
+      "basis": "STD_ENERGY 0.74 × Feed[KBD] × NG 390 × 360 × 0.5(decay) — สไลด์วิศวกร",
+      "source": "slide-check 8,311,680 ฿/ปี ✓"
+    },
+    {
+      "quantity": "Cp/ρ crude (2.2 / 850 คงที่)",
+      "status": "assumed",
+      "basis": "ใช้เชิงเปรียบเทียบ (U_relative/Q_drop) — ไม่ขึ้นกับ T/crude",
+      "source": "METHODOLOGY §4"
+    },
+    {
+      "quantity": "ค่าล้าง HX (150k-400k ฿/ครั้ง)",
+      "status": "assumed",
+      "basis": "baseline ตามช่วงจริงหน้างาน ~100k-500k · ปรับต่อ HX ได้บน dashboard",
+      "source": "export_economics.py::CLEANING_COST_BY_HX — รอราคาจริง"
+    },
+    {
+      "quantity": "FG price / NEXT_TAM / cleaning-crew cap",
+      "status": "assumed",
+      "basis": "ค่าปรับได้บน dashboard, ติดป้าย \"ค่าสมมติ\" ชัดเจน",
+      "source": "รอวิศวกรยืนยัน"
+    },
+    {
+      "quantity": "hot-side per-HX flow",
+      "status": "not-available",
+      "basis": "residue path ใช้ร่วม/สลับ — เป็น confound ที่ละไว้ (บันทึกตรง ๆ)",
+      "source": "METHODOLOGY §4"
+    }
+  ],
+  "caveats": [
+    "โมเดล CIT ไม่ชนะ persistence (walk-forward CV) — tree ใช้ SHAP attribution เท่านั้น ไม่ใช่ตัวพยากรณ์",
+    "การพยากรณ์ fouling ข้าม HX ไม่ generalize (leave-HX-out R²≈0.10) — ใช้ได้เฉพาะแบบ refit ต่อ HX",
+    "ไม่มี ground-truth Rf — validate ด้วยการ reset หลังล้างเท่านั้น (noisier สำหรับ Q มากกว่าอุณหภูมิ)",
+    "ข้อมูลเล็ก (2-6 รอบ/HX) — per-HX Weibull ที่ n<4 ใช้ pooled shape · driver analysis เป็น associative",
+    "CIT gain ต่อ HX จาก single-TAM calibration → เชิงทิศทาง จนกว่าจะมี TAM ที่สอง validate"
+  ],
+  "live_flags": {
+    "stale_rate_hx": [
+      "E101AB",
+      "E101CD",
+      "E101EF",
+      "E102",
+      "E103AB",
+      "E104",
+      "E105AB",
+      "E106AB",
+      "E107AB",
+      "E108AB",
+      "E109AB",
+      "E110ABC",
+      "E111",
+      "E112AB",
+      "E112C",
+      "E113A"
+    ],
+    "past_trigger_hx": [
+      "E101AB",
+      "E101CD",
+      "E101EF",
+      "E102",
+      "E103AB",
+      "E104",
+      "E105AB",
+      "E106AB",
+      "E107AB",
+      "E108AB",
+      "E109AB",
+      "E110ABC",
+      "E111",
+      "E112AB",
+      "E112C",
+      "E113A"
+    ],
+    "low_confidence_trend_hx": [],
+    "note": "ธงที่คำนวณจากข้อมูลปัจจุบัน — แสดงตรง ๆ ไม่ซ่อน (เช่น HX ที่อัตรา fouling มาจากรอบก่อนหน้า จะงดสรุปแนวโน้ม)"
+  },
+  "methodology_ref": "docs/METHODOLOGY.md",
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": "2026-07-01",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

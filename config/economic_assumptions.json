@@ -1,0 +1,10 @@
+{
+  "schema_version": "1.0.0",
+  "records": [
+    {"id":"NATURAL_GAS_PRICE","value":390.0,"unit":"THB/MMBTU","status":"APPROVED","source":"legacy economics model; project owner confirmation 2026-07-21","approver":"PROJECT_OWNER_CONFIRMED","approved_at":"2026-07-21","review_due":"2027-07-21","notes":"Approved base-case project assumption effective 2026-07-21; economics remains scenario-based and not a savings guarantee."},
+    {"id":"FURNACE_EFFICIENCY","value":0.88,"unit":"fraction","status":"APPROVED","source":"legacy first-principles cross-check; project owner confirmation 2026-07-21","approver":"PROJECT_OWNER_CONFIRMED","approved_at":"2026-07-21","review_due":"2027-07-21","notes":"Approved project scenario input, not a performance guarantee."},
+    {"id":"NEXT_TAM_DATE","value":"2028-06-01","unit":"date","status":"APPROVED","source":"planning placeholder; project owner confirmation 2026-07-21","approver":"PROJECT_OWNER_CONFIRMED","approved_at":"2026-07-21","review_due":"2027-07-21","notes":"Approved project planning date; re-review whenever the official TAM schedule changes."},
+    {"id":"MAX_CLEANS_PER_HX_YEAR","value":4,"unit":"events/year/HX","status":"APPROVED","source":"current scheduling constraint; project owner confirmation 2026-07-21","approver":"PROJECT_OWNER_CONFIRMED","approved_at":"2026-07-21","review_due":"2027-07-21","notes":"Approved project scheduling constraint."},
+    {"id":"MAX_ONLINE_CLEANS_PER_MONTH","value":2,"unit":"events/month","status":"APPROVED","source":"current network scheduler; project owner confirmation 2026-07-21","approver":"PROJECT_OWNER_CONFIRMED","approved_at":"2026-07-21","review_due":"2027-07-21","notes":"Approved project crew-capacity constraint."}
+  ]
+}

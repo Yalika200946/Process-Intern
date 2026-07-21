@@ -1,0 +1,285 @@
+{
+  "E101AB": {
+    "past_threshold": false,
+    "p10": null,
+    "p50": null,
+    "p90": null,
+    "prob_30": 0.0,
+    "prob_60": 0.0,
+    "prob_90": 0.0,
+    "stable": true,
+    "current_deviation": 393.18,
+    "threshold": 568.29,
+    "rate": -1.2173,
+    "rate_source": "current_reliable_run"
+  },
+  "E101CD": {
+    "past_threshold": false,
+    "p10": 0.0,
+    "p50": 101.2,
+    "p90": 1006.5,
+    "prob_30": 36.8,
+    "prob_60": 43.0,
+    "prob_90": 48.2,
+    "current_deviation": 148.46,
+    "threshold": 354.63,
+    "rate": 0.7245,
+    "rate_rel_sd": 0.527,
+    "rate_source": "current_reliable_run",
+    "uncertainty_method": "bootstrap_partial_pooled",
+    "uncertainty_sources": {
+      "rate_fit": true,
+      "signal_noise": true,
+      "threshold": "assumed_band",
+      "operating_state": "fallback_flat_band",
+      "baseline_choice": "not_applicable_single_rate_model",
+      "crude_scenario": "not_implemented"
+    },
+    "n_own_reliable_runs": 3,
+    "pooled_from_hx": [
+      "E101EF"
+    ]
+  },
+  "E101EF": {
+    "past_threshold": false,
+    "p10": 49.4,
+    "p50": 375.3,
+    "p90": 779.2,
+    "prob_30": 3.0,
+    "prob_60": 14.5,
+    "prob_90": 21.8,
+    "current_deviation": 2190.49,
+    "threshold": 3001.65,
+    "rate": 2.1346,
+    "rate_rel_sd": 0.507,
+    "rate_source": "current_reliable_run",
+    "uncertainty_method": "bootstrap_partial_pooled",
+    "uncertainty_sources": {
+      "rate_fit": true,
+      "signal_noise": true,
+      "threshold": "assumed_band",
+      "operating_state": "fallback_flat_band",
+      "baseline_choice": "not_applicable_single_rate_model",
+      "crude_scenario": "not_implemented"
+    },
+    "n_own_reliable_runs": 2,
+    "pooled_from_hx": [
+      "E101CD"
+    ]
+  },
+  "E102": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 248.83,
+    "threshold": 95.84,
+    "rate_source": "current_reliable_run"
+  },
+  "E103AB": {
+    "past_threshold": false,
+    "p10": 86.9,
+    "p50": 551.5,
+    "p90": 2956.6,
+    "prob_30": 7.4,
+    "prob_60": 8.7,
+    "prob_90": 10.2,
+    "current_deviation": 630.65,
+    "threshold": 1684.9,
+    "rate": 1.8813,
+    "rate_rel_sd": 0.176,
+    "rate_source": "current_reliable_run",
+    "uncertainty_method": "bootstrap_partial_pooled",
+    "uncertainty_sources": {
+      "rate_fit": true,
+      "signal_noise": true,
+      "threshold": "assumed_band",
+      "operating_state": "fallback_flat_band",
+      "baseline_choice": "not_applicable_single_rate_model",
+      "crude_scenario": "not_implemented"
+    },
+    "n_own_reliable_runs": 2,
+    "pooled_from_hx": [
+      "E106AB",
+      "E104"
+    ]
+  },
+  "E104": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 2225.08,
+    "threshold": 161.73,
+    "rate_source": "current_reliable_run"
+  },
+  "E105AB": {
+    "past_threshold": false,
+    "p10": null,
+    "p50": null,
+    "p90": null,
+    "prob_30": 0.0,
+    "prob_60": 0.0,
+    "prob_90": 0.0,
+    "stable": true,
+    "current_deviation": -465.54,
+    "threshold": 1058.12,
+    "rate": -3.6673,
+    "rate_source": "previous_reliable_run"
+  },
+  "E106AB": {
+    "past_threshold": false,
+    "p10": null,
+    "p50": null,
+    "p90": null,
+    "prob_30": 0.0,
+    "prob_60": 0.0,
+    "prob_90": 0.0,
+    "stable": true,
+    "current_deviation": -315.42,
+    "threshold": 1137.62,
+    "rate": -1.1272,
+    "rate_source": "current_reliable_run"
+  },
+  "E107AB": {
+    "past_threshold": false,
+    "p10": null,
+    "p50": null,
+    "p90": null,
+    "prob_30": 0.0,
+    "prob_60": 0.0,
+    "prob_90": 0.0,
+    "stable": true,
+    "current_deviation": -398.82,
+    "threshold": 1578.44,
+    "rate": -0.4821,
+    "rate_source": "unreliable_current_fit"
+  },
+  "E108AB": {
+    "past_threshold": false,
+    "p10": null,
+    "p50": null,
+    "p90": null,
+    "prob_30": 0.0,
+    "prob_60": 0.0,
+    "prob_90": 0.0,
+    "stable": true,
+    "current_deviation": -485.4,
+    "threshold": 616.43,
+    "rate": -3.5639,
+    "rate_source": "current_reliable_run"
+  },
+  "E109AB": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 983.06,
+    "threshold": 200.23,
+    "rate_source": "previous_reliable_run"
+  },
+  "E110ABC": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 2704.01,
+    "threshold": 1418.59,
+    "rate_source": "current_reliable_run"
+  },
+  "E111": {
+    "past_threshold": false,
+    "p10": 0.0,
+    "p50": 202.9,
+    "p90": 2685.7,
+    "prob_30": 44.3,
+    "prob_60": 45.2,
+    "prob_90": 46.1,
+    "current_deviation": 787.96,
+    "threshold": 928.4,
+    "rate": 0.5981,
+    "rate_rel_sd": 0.954,
+    "rate_source": "current_reliable_run",
+    "uncertainty_method": "bootstrap_partial_pooled",
+    "uncertainty_sources": {
+      "rate_fit": true,
+      "signal_noise": true,
+      "threshold": "assumed_band",
+      "operating_state": "fallback_flat_band",
+      "baseline_choice": "not_applicable_single_rate_model",
+      "crude_scenario": "not_implemented"
+    },
+    "n_own_reliable_runs": 3,
+    "pooled_from_hx": [
+      "E105AB",
+      "E106AB"
+    ]
+  },
+  "E112AB": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 2665.99,
+    "threshold": 1162.09,
+    "rate_source": "previous_reliable_run"
+  },
+  "E113A": {
+    "past_threshold": true,
+    "p10": 0,
+    "p50": 0,
+    "p90": 0,
+    "prob_30": 100.0,
+    "prob_60": 100.0,
+    "prob_90": 100.0,
+    "current_deviation": 2248.36,
+    "threshold": 1220.4,
+    "rate_source": "current_reliable_run"
+  },
+  "_meta": {
+    "generation_id": "cpht-20260721_081720",
+    "generated_at": "2026-07-21T02:16:35.848274Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 0,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": true,
+      "assumption_flags": [],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 0,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": true,
+    "assumption_flags": [],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": []
+}

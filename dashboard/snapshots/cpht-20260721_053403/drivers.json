@@ -1,0 +1,146 @@
+{
+  "target": "dRf_per_day",
+  "n": 47,
+  "cv_method": "leave_hx_out",
+  "cv_r2_mean": -30.159,
+  "cv_r2_sd": 53.134,
+  "baseline_r2_mean": -29.667,
+  "show_in_dashboard": false,
+  "drivers": [
+    {
+      "feature": "duration",
+      "label": "อายุการเดินเครื่อง",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "film_temp",
+      "label": "อุณหภูมิผิว (film)",
+      "importance": 1e-05,
+      "direction": 1
+    },
+    {
+      "feature": "API",
+      "label": "API crude",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "flow",
+      "label": "อัตราการไหล (velocity)",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "MCRT_pct",
+      "label": "MCRT %",
+      "importance": 0.0,
+      "direction": 1
+    },
+    {
+      "feature": "Visc_100C_cSt",
+      "label": "ความหนืด 100°C",
+      "importance": 0.0,
+      "direction": -1
+    },
+    {
+      "feature": "Asphaltenes_pct",
+      "label": "Asphaltenes %",
+      "importance": 0.0,
+      "direction": -1
+    }
+  ],
+  "levers": [
+    "ลดอุณหภูมิผิว (film) → ลดอัตราการเกิดตะกรัน (driver อันดับต้น ๆ, ควบคุมได้)",
+    "เพิ่มอัตราการไหล (velocity) → ลดอัตราการเกิดตะกรัน (driver อันดับต้น ๆ, ควบคุมได้)"
+  ],
+  "note": "n=47 runs · leave-HX-out CV (was leaky within-HX KFold before 2026-07-20) · R2 may be low/negative with few HX -- shown only if it beats the constant-mean baseline (show_in_dashboard) · associative, not causation",
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

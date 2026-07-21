@@ -1,0 +1,153 @@
+{
+  "as_of_date": "2026-07-01",
+  "tam_date": "2024-06-14",
+  "champion_features": [
+    "total_charge",
+    "crude_leadin_filled",
+    "crude_API",
+    "crude_SG_15_6C",
+    "crude_Visc_50C_cSt",
+    "crude_Visc_100C_cSt",
+    "crude_MCRT_pct",
+    "crude_Asphaltenes_pct",
+    "E109AB_Q_norm",
+    "E109AB_dT_cold",
+    "E109AB_dT_hot",
+    "E101AB_Q_norm",
+    "E101AB_dT_cold",
+    "E101AB_dT_hot",
+    "E105AB_Q_norm",
+    "E105AB_dT_cold",
+    "E105AB_dT_hot",
+    "E101EF_Q_norm",
+    "E101EF_dT_cold",
+    "E101EF_dT_hot",
+    "E113A_dT_hot",
+    "E113A_cold_in"
+  ],
+  "resettable_hx": [
+    {
+      "HX": "E101EF",
+      "mean_CIT_gain_C": 4.3768,
+      "median_CIT_gain_C": 5.5868,
+      "CIT_gain_last_day_C": 1.5088,
+      "pct_days_gain_gt_0": 96.1456
+    },
+    {
+      "HX": "E101AB",
+      "mean_CIT_gain_C": 0.6391,
+      "median_CIT_gain_C": 0.7432,
+      "CIT_gain_last_day_C": 0.2677,
+      "pct_days_gain_gt_0": 98.7152
+    },
+    {
+      "HX": "E113A",
+      "mean_CIT_gain_C": 0.4733,
+      "median_CIT_gain_C": -1.5658,
+      "CIT_gain_last_day_C": -1.5658,
+      "pct_days_gain_gt_0": 31.6916
+    },
+    {
+      "HX": "E105AB",
+      "mean_CIT_gain_C": 0.3549,
+      "median_CIT_gain_C": 0.7152,
+      "CIT_gain_last_day_C": 0.722,
+      "pct_days_gain_gt_0": 62.7409
+    },
+    {
+      "HX": "E109AB",
+      "mean_CIT_gain_C": -0.1015,
+      "median_CIT_gain_C": -0.1806,
+      "CIT_gain_last_day_C": 0.377,
+      "pct_days_gain_gt_0": 45.5032
+    }
+  ],
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

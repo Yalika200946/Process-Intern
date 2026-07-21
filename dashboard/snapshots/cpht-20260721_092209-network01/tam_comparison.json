@@ -1,0 +1,77 @@
+{
+  "scenarios": {
+    "3yr": {
+      "tam_dates": [
+        "2028-06-01",
+        "2031-06-01"
+      ],
+      "net_saving_note": "ดูจาก cleaning_plan.json (economics.json ต่างหาก) -- ที่นี่รายงานเฉพาะต้นทุนที่ scheduler ใช้ตัดสินใจ",
+      "total_cost_thb": 191165444,
+      "n_cleans_to_tam": 63,
+      "effective_max_deficit_C": 2.0,
+      "binding_constraint": "cit_floor",
+      "max_realized_deficit_C": 11.763,
+      "constraint_satisfied": false,
+      "tube_skin_risk_advisory": false,
+      "optimal_window_months": 6
+    },
+    "4yr": {
+      "tam_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "net_saving_note": "ดูจาก cleaning_plan.json (economics.json ต่างหาก) -- ที่นี่รายงานเฉพาะต้นทุนที่ scheduler ใช้ตัดสินใจ",
+      "total_cost_thb": 228990632,
+      "n_cleans_to_tam": 78,
+      "effective_max_deficit_C": 2.0,
+      "binding_constraint": "cit_floor",
+      "max_realized_deficit_C": 11.763,
+      "constraint_satisfied": false,
+      "tube_skin_risk_advisory": false,
+      "optimal_window_months": 6
+    }
+  },
+  "base_tam": "2028-06-01",
+  "years_options": [
+    3,
+    4
+  ],
+  "note": "เปรียบเทียบด้วย compute_schedule() ตัวเดียวกันทุกประการ ต่างกันแค่ tam_dates[1] (base_tam + 3 ปี vs +4 ปี) -- ไม่มีการสร้างโมเดล tube-skin-vs-TAM-length ใหม่ เพราะไม่มีข้อมูลรองรับสมการ CIT->tube-skin ในโปรเจกต์นี้",
+  "_meta": {
+    "generation_id": "cpht-20260721_092209-network01",
+    "generated_at": "2026-07-21T02:22:09.178786Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 1,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "METHOD-NETWORK-DIAGNOSTIC-V1"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 1,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "METHOD-NETWORK-DIAGNOSTIC-V1"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "METHOD-NETWORK-DIAGNOSTIC-V1"
+  ]
+}

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from backend.server import _safe_filename
-from pipeline.run_all import CHAIN, select_chain
+from pipeline.run_all import CHAIN, reaches_terminal, select_chain
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,3 +68,8 @@ def test_orchestrator_does_not_execute_source_notebooks_inplace():
     source = (ROOT / "pipeline" / "run_all.py").read_text(encoding="utf-8")
     assert "--inplace" not in source
     assert "executed_notebooks" in source
+
+
+def test_only_upstream_notebook_cannot_publish_or_run_post_processors():
+    assert not reaches_terminal(select_chain(only="01_data_quality"))
+    assert reaches_terminal(select_chain(start="08_cleaning_priority"))

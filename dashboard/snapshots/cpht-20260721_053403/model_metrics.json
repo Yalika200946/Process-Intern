@@ -1,0 +1,211 @@
+{
+  "validation": "walk-forward TimeSeriesSplit (5-fold, expanding window)",
+  "target": "1TI116.pv (CIT, Coil Inlet Temp to furnace F101)",
+  "n_rows": 1891,
+  "date_range": [
+    "2021-01-08",
+    "2026-07-01"
+  ],
+  "primary_baseline": "Persistence",
+  "selected_operational_model": "Persistence",
+  "candidate_forecast_approved": false,
+  "approval_status": "CANDIDATE",
+  "fallback_reason": "Tree models do not beat persistence in walk-forward validation.",
+  "headline": "CIT is near-random-walk; persistence (today = yesterday) is the honest baseline and the ML trees do NOT beat it out-of-sample. Tree models are kept for HX->CIT SHAP attribution only, not point forecasting.",
+  "skill_vs_persistence_pct_mean": -60.0,
+  "skill_by_fold": [
+    {
+      "fold": 1,
+      "test_start": "2022-01-20",
+      "rmse_xgb": 2.613,
+      "rmse_persist": 1.261,
+      "skill_pct": -107.1
+    },
+    {
+      "fold": 2,
+      "test_start": "2022-12-01",
+      "rmse_xgb": 1.685,
+      "rmse_persist": 1.236,
+      "skill_pct": -36.3
+    },
+    {
+      "fold": 3,
+      "test_start": "2023-10-12",
+      "rmse_xgb": 4.499,
+      "rmse_persist": 2.195,
+      "skill_pct": -104.9
+    },
+    {
+      "fold": 4,
+      "test_start": "2024-10-10",
+      "rmse_xgb": 1.433,
+      "rmse_persist": 1.149,
+      "skill_pct": -24.8
+    },
+    {
+      "fold": 5,
+      "test_start": "2025-08-21",
+      "rmse_xgb": 1.22,
+      "rmse_persist": 0.962,
+      "skill_pct": -26.9
+    }
+  ],
+  "models": [
+    {
+      "model": "Persistence (yesterday's CIT)",
+      "role": "baseline",
+      "beats_persistence": null,
+      "R2": 0.89,
+      "R2_sd": 0.059,
+      "RMSE": 1.361,
+      "RMSE_sd": 0.481,
+      "MAE": 0.853,
+      "within_5C_%": 99.492,
+      "within_10C_%": 99.873,
+      "single_split_R2": 0.881,
+      "single_split_RMSE": 0.973,
+      "note": "Honest baseline. Strong because CIT is slow and strongly autocorrelated."
+    },
+    {
+      "model": "XGBoost",
+      "role": "attribution-only",
+      "beats_persistence": false,
+      "R2": 0.691,
+      "R2_sd": 0.295,
+      "RMSE": 2.29,
+      "RMSE_sd": 1.344,
+      "MAE": 1.808,
+      "within_5C_%": 92.317,
+      "within_10C_%": 99.873,
+      "single_split_R2": 0.82,
+      "single_split_RMSE": 1.194,
+      "note": "Single 80/20 R2 looked good but loses to persistence on every walk-forward fold. SHAP attribution only."
+    },
+    {
+      "model": "RandomForest",
+      "role": "attribution-only",
+      "beats_persistence": false,
+      "R2": 0.769,
+      "R2_sd": 0.222,
+      "RMSE": 1.922,
+      "RMSE_sd": 0.994,
+      "MAE": 1.442,
+      "within_5C_%": 96.635,
+      "within_10C_%": 99.937,
+      "single_split_R2": 0.87,
+      "single_split_RMSE": 1.017,
+      "note": "Same story as XGBoost; does not beat persistence out-of-sample."
+    },
+    {
+      "model": "XGBoost (no CIT_lag1 ablation)",
+      "role": "ablation",
+      "beats_persistence": false,
+      "R2": -0.092,
+      "R2_sd": 0.254,
+      "RMSE": 4.775,
+      "RMSE_sd": 2.56,
+      "MAE": 3.985,
+      "within_10C_%": 92.254,
+      "note": "Removing CIT_lag1/CIT_roll7 makes it WORSE (CV R2 -0.092 vs 0.691 with the lag) -- HX/crude features alone cannot explain the CIT level at all; the lag is not an error to remove, it is the only reason the model is in the right ballpark."
+    },
+    {
+      "model": "LSTM",
+      "role": "rejected",
+      "beats_persistence": false,
+      "R2": null,
+      "R2_sd": null,
+      "RMSE": 2.66,
+      "within_10C_%": 100.0,
+      "single_split_R2": -0.033,
+      "note": "~700 daily rows is too few for a sequence model. Tested and rejected."
+    }
+  ],
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

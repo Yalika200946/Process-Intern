@@ -22,6 +22,7 @@ sys.path.append(str(REPO))
 from src.domain.config import (CPHT_1_HX, CPHT_2_HX, CHAIN_PREDECESSOR,
                          PARALLEL_SHELL_GROUPS, HX_CONFIG as COLD_CFG)
 from src.features.heat_duty import HX_CONFIG as FULL_CFG, parse_hx
+from src.governance import approval_summary, load_registry
 DATA = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data'))
 OUT  = REPO / 'dashboard' / 'data' / 'pfd_topology.json'
 
@@ -29,6 +30,13 @@ OUT  = REPO / 'dashboard' / 'data' / 'pfd_topology.json'
 #   python build_dashboard_topology.py [input_cleaned_csv] [output_json]
 INPUT_CSV = Path(sys.argv[1]) if len(sys.argv) > 1 else DATA / 'Process_information_cleaned.csv'
 OUT       = Path(sys.argv[2]) if len(sys.argv) > 2 else OUT
+
+LIMIT_REGISTRY = load_registry(REPO / 'config' / 'plant_limits.json')
+LIMITS = {row['id']: row for row in LIMIT_REGISTRY['records']}
+
+
+def limit_value(key, fallback):
+    return LIMITS.get(key, {}).get('value', fallback)
 
 # ---- latest process values ----
 proc = pd.read_csv(INPUT_CSV, index_col='Timestamp', parse_dates=True)
@@ -85,16 +93,16 @@ for hx in hx_list:
 # limit = the operating LIMIT the optimizer must respect (min for higher_better, else max)
 furnace = [
     # -- Coil / CIT (what fouling directly hurts) --
-    {'key': 'CIT',   'tag': '1TI116.pv', 'name': 'Coil Inlet Temp (จาก E113A)',  'unit': '°C',      'group': 'Coil / CIT',        'target': 258.05, 'limit': 250,  'band': [242, 250, 999, 999], 'higher_better': True},
-    {'key': 'COT',   'tag': '1TI150.pv', 'name': 'Coil Outlet Temp',             'unit': '°C',      'group': 'Coil / CIT',        'target': 340.1,  'limit': 345,  'band': [335, 338, 342, 345]},
+    {'key': 'CIT',   'tag': '1TI116.pv', 'name': 'Coil Inlet Temp (จาก E113A)',  'unit': '°C',      'group': 'Coil / CIT',        'target': 258.05, 'limit': limit_value('CIT_FLOOR', 250),  'band': [242, 250, 999, 999], 'higher_better': True},
+    {'key': 'COT',   'tag': '1TI150.pv', 'name': 'Coil Outlet Temp',             'unit': '°C',      'group': 'Coil / CIT',        'target': 340.1,  'limit': limit_value('COT_LIMIT', 345),  'band': [335, 338, 342, 345]},
     {'key': 'COT_SP','tag': '1TC007.pv', 'name': 'COT Setpoint (control)',       'unit': '°C',      'group': 'Coil / CIT',        'target': 340.1,  'limit': 345,  'band': None},
     {'key': 'INLET_P','tag':'1PI003.pv', 'name': 'Crude Pressure เข้าเตา',       'unit': 'kg/cm²g', 'group': 'Coil / CIT',        'target': 18.17,  'limit': 25,   'band': None},
     # -- Firing / Fuel --
-    {'key': 'FG_FLOW','tag':'1FI028.pv', 'name': 'Fuel Gas flow (firing)',       'unit': 't/h',     'group': 'Firing / Fuel',     'target': 6.66,   'limit': 9.0,  'band': [0, 0, 8, 9.5]},
-    {'key': 'FG_PRESS','tag':'1PC010.pv','name': 'Fuel Gas pressure',            'unit': 'kg/cm²g', 'group': 'Firing / Fuel',     'target': 1.82,   'limit': 2.5,  'band': None},
+    {'key': 'FG_FLOW','tag':'1FI028.pv', 'name': 'Fuel Gas flow (firing)',       'unit': 't/h',     'group': 'Firing / Fuel',     'target': 6.66,   'limit': limit_value('FG_FLOW_MAX', 9.0),  'band': [0, 0, 8, 9.5]},
+    {'key': 'FG_PRESS','tag':'1PC010.pv','name': 'Fuel Gas pressure',            'unit': 'kg/cm²g', 'group': 'Firing / Fuel',     'target': 1.82,   'limit': limit_value('FG_PRESSURE_MIN', 2.5),  'band': None},
     # -- Combustion / Draft --
-    {'key': 'O2',    'tag': '1AI001.pv', 'name': 'O₂ ใน flue gas',               'unit': '%',       'group': 'Combustion / Draft','target': 2.52,   'limit': 4.5,  'band': [1.5, 2.0, 3.5, 4.5]},
-    {'key': 'DRAFT', 'tag': '1PC034.pv', 'name': 'Furnace draft',                'unit': 'mmH₂O',   'group': 'Combustion / Draft','target': -3.02,  'limit': 0,    'band': [-6, -4, -1, 0.5]},
+    {'key': 'O2',    'tag': '1AI001.pv', 'name': 'O₂ ใน flue gas',               'unit': '%',       'group': 'Combustion / Draft','target': 2.52,   'limit': limit_value('O2_MAX', 4.5),  'band': [limit_value('O2_MIN', 1.5), 2.0, 3.5, limit_value('O2_MAX', 4.5)]},
+    {'key': 'DRAFT', 'tag': '1PC034.pv', 'name': 'Furnace draft',                'unit': 'mmH₂O',   'group': 'Combustion / Draft','target': -3.02,  'limit': limit_value('DRAFT_MAX', 0.5),    'band': [limit_value('DRAFT_MIN', -6), -4, -1, limit_value('DRAFT_MAX', 0.5)]},
     {'key': 'DRAFT_K151','tag':'1PC035.pv','name':'Draft fan K151 (%open)',      'unit': '%',       'group': 'Combustion / Draft','target': 28.1,   'limit': 90,   'band': None},
     # -- Body / Stack (mechanical / heat-loss) --
     {'key': 'BODY1', 'tag': '1TI212.pv', 'name': 'Furnace Body 1',               'unit': '°C',      'group': 'Body / Stack',      'target': 183.71, 'limit': 250,  'band': None},
@@ -146,7 +154,7 @@ PASS_TAGS = [
     {'pass': 4, 'conv': '1TI139.pv', 'skin': '1TI145.pv', 'coil': '1TI149.pv', 'flow': '1FC023.pv',
      'conv_def': 290.30, 'skin_def': 378.75, 'coil_def': 345.41, 'flow_def': 131.8},
 ]
-SKIN_ALARM = 400.0   # tube-skin (metal) temp alarm — coking/creep risk above this
+SKIN_ALARM = float(limit_value('TUBE_SKIN_LIMIT', 400.0))
 passes = []
 for p in PASS_TAGS:
     row = {'pass': p['pass']}
@@ -174,6 +182,8 @@ topo = {
     'cit_tag': '1TI116.pv',
     'limits_assumed': True,
     'advice_note': 'คำแนะนำและค่า limit เป็น "ค่าสมมติเชิงวิศวกรรม" — รอยืนยันค่าจริงจากวิศวกรเตา',
+    'approval_summary': approval_summary(),
+    'assumption_flags': approval_summary()['assumption_flags'],
 }
 OUT.write_text(json.dumps(topo, indent=2, ensure_ascii=False), encoding='utf-8')
 print(f'Wrote {OUT}')

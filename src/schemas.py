@@ -203,7 +203,9 @@ def validate_dataframe_schema(
             errors.append(f"pipeline_stage must equal {stage_id}")
 
     if "measurement_type" in columns:
-        allowed = {"MEASURED", "CALCULATED", "INFERRED", "ASSUMED"}
+        # ASSUMED remains accepted for backward compatibility with existing CSVs;
+        # new review-mode outputs use the governance vocabulary ASSUMPTION/PREDICTED.
+        allowed = {"MEASURED", "CALCULATED", "INFERRED", "PREDICTED", "ASSUMPTION", "ASSUMED"}
         observed = set(dataframe["measurement_type"].dropna().astype(str))
         invalid = observed - allowed
         if invalid:
@@ -248,4 +250,3 @@ def contract_summary(registry: Mapping[str, Any] | None = None) -> Sequence[dict
         }
         for contract in active_registry["contracts"]
     ]
-

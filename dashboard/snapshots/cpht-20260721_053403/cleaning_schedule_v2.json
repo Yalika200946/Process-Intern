@@ -1,0 +1,1216 @@
+{
+  "as_of": "2026-07-01",
+  "next_tam": "2028-06-01",
+  "next_tam_assumed": false,
+  "tam_dates": [
+    "2028-06-01",
+    "2032-06-01"
+  ],
+  "tam_dates_confirmed": [
+    true,
+    false
+  ],
+  "per_cycle_summary": [
+    {
+      "cycle_ends": "2028-06-01",
+      "n_online_cleans": 31,
+      "n_periods": 24
+    },
+    {
+      "cycle_ends": "2032-06-01",
+      "n_online_cleans": 59,
+      "n_periods": 49
+    }
+  ],
+  "method": "Moving-window joint optimal-control schedule across all online-capable HX (Dekebo, Oh & Lee, Appl. Sci. 2023, 13, 604; framework: Al Ismaili et al., Comput. Chem. Eng. 2018) — reduced-form network coupling: ผลรวม deviation ที่วัดจริงต่อ HX (ไม่ใช่ full epsilon-NTU DAE เพราะ UA nameplate ไม่ผ่านการ validate กับสภาพจริง) · แก้ปัญหาต่อหน้าต่างเลื่อนด้วย SLSQP แล้ว commit เฉพาะงวดแรก · เพดานความถี่ 3 ครั้ง/ปีต่อ HX (ข้อจำกัดหน้างานจริง) · จัดคิวเมื่อทีมล้างไม่พอด้วยคะแนนเสี่ยง NB08 (engineering_priority_score, RISK_WEIGHT=1.0) ถ่วงเข้า objective ตรงๆ ไม่ใช่แค่จัดลำดับแสดงผล",
+  "max_online_cleans_per_period": 2,
+  "max_online_cleans_assumed": true,
+  "max_cleans_per_year_per_hx": 3,
+  "risk_weight_applied": 1.0,
+  "k_baht_per_C_day": 23030,
+  "feed_kbd": 79.8,
+  "max_cit_deficit_C_applied": null,
+  "furnace_fg_ceiling_C": 99.974,
+  "furnace_fg_info": {
+    "available": true,
+    "fg_limit_tph": 9.0,
+    "fg_baseline_tph": 6.66,
+    "fg_limit_overridden": false,
+    "headroom_tph": 2.34,
+    "tph_per_degC": 0.0234,
+    "charge_m3h": 528.7,
+    "source": "pfd_topology.json FG_FLOW.limit (ค่าสมมติ รอวิศวกรเตายืนยัน) + export_economics.LEGACY formula (สูตรเดียวกับ banner หน้าเตาบน dashboard)"
+  },
+  "effective_max_deficit_C": 99.974,
+  "binding_constraint": "furnace_fg",
+  "cit_deficit_trajectory_C": [
+    7.884,
+    5.794,
+    2.411,
+    3.941,
+    3.142,
+    2.642,
+    4.905,
+    7.302,
+    8.08,
+    9.797,
+    11.04,
+    13.879,
+    5.754,
+    7.787,
+    3.762,
+    4.272,
+    2.454,
+    3.232,
+    5.398,
+    7.546,
+    8.324,
+    9.566,
+    11.508,
+    0.0,
+    1.469,
+    4.308,
+    2.345,
+    3.009,
+    3.107,
+    3.194,
+    5.075,
+    7.017,
+    7.795,
+    9.814,
+    11.376,
+    14.216,
+    6.091,
+    7.584,
+    3.559,
+    4.841,
+    3.023,
+    3.146,
+    4.863,
+    6.744,
+    7.522,
+    9.67,
+    11.612,
+    14.451,
+    6.326,
+    7.249,
+    3.225,
+    4.553,
+    3.305,
+    2.806,
+    5.167,
+    7.602,
+    8.38,
+    10.097,
+    11.34,
+    13.257,
+    5.132,
+    7.074,
+    3.049,
+    3.308,
+    2.83,
+    2.711,
+    4.592,
+    7.431,
+    8.209,
+    10.151,
+    11.713,
+    14.552,
+    6.427
+  ],
+  "max_realized_deficit_C": 14.552,
+  "constraint_satisfied": true,
+  "tube_skin_risk_advisory": false,
+  "tube_skin_risk_note": null,
+  "furnace_current_state_alerts": [
+    {
+      "key": "COT",
+      "name": "Coil Outlet Temp",
+      "value": 344.36,
+      "unit": "°C",
+      "limit": 345.0,
+      "band": [
+        335,
+        338,
+        342,
+        345
+      ],
+      "severity": "warning",
+      "advice": "COT สูงเกินเกณฑ์ → ลด firing/FG หรือตรวจ coil coking; เสี่ยง tube overheat/creep",
+      "limit_assumed": true
+    },
+    {
+      "key": "STACK",
+      "name": "Stack (flue) temp",
+      "value": 351.6,
+      "unit": "°C",
+      "limit": 380,
+      "band": [
+        0,
+        0,
+        350,
+        380
+      ],
+      "severity": "warning",
+      "advice": "Stack (flue) temp สูง → convection section สกปรก/soot สะสม ความร้อนสูญเสียมาก: soot-blow และตรวจ excess air",
+      "limit_assumed": true
+    },
+    {
+      "key": "O2",
+      "name": "O₂ ใน flue gas",
+      "value": 1.3,
+      "unit": "%",
+      "limit": 4.5,
+      "band": [
+        1.5,
+        2.0,
+        3.5,
+        4.5
+      ],
+      "severity": "critical",
+      "advice": "O₂ ต่ำ → เสี่ยงเผาไหม้ไม่สมบูรณ์/CO และ afterburn: เพิ่มอากาศทันที เฝ้าระวังเปลวไฟ",
+      "limit_assumed": true
+    },
+    {
+      "key": "DRAFT",
+      "name": "Furnace draft",
+      "value": 0.19,
+      "unit": "mmH₂O",
+      "limit": 0.5,
+      "band": [
+        -6.0,
+        -4,
+        -1,
+        0.5
+      ],
+      "severity": "warning",
+      "advice": "Draft เป็นบวก/สูงเกิน → เสี่ยง flue gas รั่วออก/ความร้อนย้อน: เปิด stack damper หรือปรับ ID fan ให้ draft ~ −2 ถึง −4 mmH₂O",
+      "limit_assumed": true
+    },
+    {
+      "key": "TUBE_SKIN_PASS1",
+      "name": "Tube-skin Pass 1",
+      "value": 400.64,
+      "unit": "°C",
+      "limit": 400.0,
+      "severity": "critical",
+      "advice": "Tube-skin เกิน alarm จริงตอนนี้ (ค่าวัดจริง ไม่ใช่การพยากรณ์) — ตรวจสอบด่วน",
+      "limit_assumed": false
+    },
+    {
+      "key": "TUBE_SKIN_PASS2",
+      "name": "Tube-skin Pass 2",
+      "value": 474.4,
+      "unit": "°C",
+      "limit": 400.0,
+      "severity": "critical",
+      "advice": "Tube-skin เกิน alarm จริงตอนนี้ (ค่าวัดจริง ไม่ใช่การพยากรณ์) — ตรวจสอบด่วน",
+      "limit_assumed": false
+    }
+  ],
+  "furnace_current_state_pass_headrooms": [
+    {
+      "pass_no": 1,
+      "skin_val": 400.64,
+      "skin_alarm": 400.0,
+      "headroom_C": -0.64,
+      "over_alarm": true
+    },
+    {
+      "pass_no": 2,
+      "skin_val": 474.4,
+      "skin_alarm": 400.0,
+      "headroom_C": -74.4,
+      "over_alarm": true
+    },
+    {
+      "pass_no": 3,
+      "skin_val": 390.84,
+      "skin_alarm": 400.0,
+      "headroom_C": 9.16,
+      "over_alarm": false
+    },
+    {
+      "pass_no": 4,
+      "skin_val": 389.2,
+      "skin_alarm": 400.0,
+      "headroom_C": 10.8,
+      "over_alarm": false
+    }
+  ],
+  "furnace_current_state_worst_pass": {
+    "pass_no": 2,
+    "skin_val": 474.4,
+    "skin_alarm": 400.0,
+    "headroom_C": -74.4,
+    "over_alarm": true
+  },
+  "furnace_current_state_note": "สแนปช็อตค่าจริงตอนนี้จาก pfd_topology.json (value/band/skin_val ล่าสุด) ไม่ใช่การพยากรณ์จาก CIT deficit — แยกจาก tube_skin_risk_advisory ที่เป็น proxy เชิงพยากรณ์จาก FG-flow headroom เท่านั้น",
+  "window_size_sweep": [
+    {
+      "window_months": 2,
+      "objective_thb": 393984679,
+      "fuel_thb": 373434679,
+      "cleaning_thb": 20550000,
+      "n_cleaning_actions": 78
+    },
+    {
+      "window_months": 3,
+      "objective_thb": 398674572,
+      "fuel_thb": 378124572,
+      "cleaning_thb": 20550000,
+      "n_cleaning_actions": 78
+    },
+    {
+      "window_months": 4,
+      "objective_thb": 380164568,
+      "fuel_thb": 357814568,
+      "cleaning_thb": 22350000,
+      "n_cleaning_actions": 84
+    },
+    {
+      "window_months": 5,
+      "objective_thb": 375063225,
+      "fuel_thb": 352113225,
+      "cleaning_thb": 22950000,
+      "n_cleaning_actions": 86
+    },
+    {
+      "window_months": 6,
+      "objective_thb": 353530566,
+      "fuel_thb": 329380566,
+      "cleaning_thb": 24150000,
+      "n_cleaning_actions": 90
+    }
+  ],
+  "optimal_window_months": 6,
+  "comparison_vs_v1": {
+    "scope": "ถึง TAM แรก (2028-06-01) เท่านั้น — v1 ไม่เคยถูกวางแผนเลยจุดนี้",
+    "v1_total_cost_thb": 132466608,
+    "v1_fuel_thb": 122716608,
+    "v1_cleaning_thb": 9750000,
+    "v2_total_cost_thb": 122241230,
+    "v2_fuel_thb": 113841230,
+    "v2_cleaning_thb": 8400000,
+    "pct_improvement": 7.7,
+    "note": "เปรียบเทียบภายใต้ objective เดียวกัน (ต้นทุนพลังงาน CIT-deficit สะสม + ค่าล้าง) จำกัดขอบเขตถึง TAM รอบแรกเท่านั้น เพราะ v1 (cleaning_schedule.json) ไม่มีวันที่ล้างเกินรอบนั้น — ถ้าเทียบทั้ง horizon จะเห็น v1 \"หยุดล้าง\" หลัง TAM แรกซึ่งไม่ใช่พฤติกรรมจริงของ v1 แค่ export ไม่ได้ครอบคลุมช่วงนั้น การเทียบแบบนั้นจะไม่ยุติธรรมกับ v1 — ทั้งสองแผนถูกจำลองด้วยฟังก์ชันเดียวกัน ถ้า v2 ไม่ดีกว่า v1 จะรายงานตรงตามจริง"
+  },
+  "v2_full_horizon": {
+    "total_cost_thb": 353530566,
+    "note": "v2 ตลอด horizon ถึง TAM สุดท้าย (2032-06-01) — ไม่มี v1 baseline เทียบเพราะ v1 ไม่เคยวางแผนไกลขนาดนี้"
+  },
+  "per_hx": [
+    {
+      "HX": "E113A",
+      "online": true,
+      "r_C_per_day": 0.04568,
+      "min_interval_days_applied": 60,
+      "cleaning_cost": 150000,
+      "n_cleans_to_tam": 19,
+      "next_dates": [
+        "2026-07-31",
+        "2026-09-29",
+        "2026-11-28",
+        "2027-07-26",
+        "2027-09-24",
+        "2027-11-23",
+        "2028-07-20",
+        "2028-09-18",
+        "2028-11-17",
+        "2029-07-15",
+        "2029-09-13",
+        "2029-11-12",
+        "2030-07-10",
+        "2030-09-08",
+        "2030-11-07",
+        "2031-07-05",
+        "2031-09-03",
+        "2031-11-02",
+        "2032-06-29"
+      ],
+      "scheduler_risk_mult": 2.0
+    },
+    {
+      "HX": "E102",
+      "online": true,
+      "r_C_per_day": 0.0229,
+      "min_interval_days_applied": 60,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 18,
+      "next_dates": [
+        "2026-09-29",
+        "2026-12-28",
+        "2027-03-28",
+        "2027-09-24",
+        "2027-12-23",
+        "2028-03-22",
+        "2028-09-18",
+        "2028-12-17",
+        "2029-03-17",
+        "2029-09-13",
+        "2029-12-12",
+        "2030-03-12",
+        "2030-09-08",
+        "2030-12-07",
+        "2031-03-07",
+        "2031-09-03",
+        "2031-12-02",
+        "2032-03-01"
+      ],
+      "scheduler_risk_mult": 1.429
+    },
+    {
+      "HX": "E101AB",
+      "online": true,
+      "r_C_per_day": 0.00748,
+      "min_interval_days_applied": 60,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 16,
+      "next_dates": [
+        "2026-07-31",
+        "2026-11-28",
+        "2027-04-27",
+        "2027-10-24",
+        "2028-01-22",
+        "2028-05-21",
+        "2028-10-18",
+        "2029-02-15",
+        "2029-08-14",
+        "2030-01-11",
+        "2030-05-11",
+        "2030-11-07",
+        "2031-04-06",
+        "2031-08-04",
+        "2031-12-02",
+        "2032-03-31"
+      ],
+      "scheduler_risk_mult": 1.643
+    },
+    {
+      "HX": "E104",
+      "online": true,
+      "r_C_per_day": 0.01064,
+      "min_interval_days_applied": 60,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 16,
+      "next_dates": [
+        "2026-08-30",
+        "2026-12-28",
+        "2027-05-27",
+        "2027-11-23",
+        "2028-04-21",
+        "2028-10-18",
+        "2029-01-16",
+        "2029-05-16",
+        "2029-11-12",
+        "2030-02-10",
+        "2030-08-09",
+        "2030-12-07",
+        "2031-05-06",
+        "2031-10-03",
+        "2032-01-01",
+        "2032-04-30"
+      ],
+      "scheduler_risk_mult": 1.286
+    },
+    {
+      "HX": "E110ABC",
+      "online": true,
+      "r_C_per_day": 0.00384,
+      "min_interval_days_applied": 90,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 10,
+      "next_dates": [
+        "2026-08-30",
+        "2027-01-27",
+        "2027-08-25",
+        "2028-02-21",
+        "2028-12-17",
+        "2029-10-13",
+        "2030-04-11",
+        "2030-10-08",
+        "2031-06-05",
+        "2031-11-02"
+      ],
+      "scheduler_risk_mult": 1.786
+    },
+    {
+      "HX": "E101CD",
+      "online": true,
+      "r_C_per_day": 0.00273,
+      "min_interval_days_applied": 120,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 6,
+      "next_dates": [
+        "2026-10-29",
+        "2027-10-24",
+        "2029-04-16",
+        "2029-12-12",
+        "2030-10-08",
+        "2031-10-03"
+      ],
+      "scheduler_risk_mult": 1.5
+    },
+    {
+      "HX": "E108AB",
+      "online": true,
+      "r_C_per_day": 0.00084,
+      "min_interval_days_applied": 180,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 3,
+      "next_dates": [
+        "2027-02-26",
+        "2029-10-13",
+        "2031-02-05"
+      ],
+      "scheduler_risk_mult": 1.857
+    },
+    {
+      "HX": "E105AB",
+      "online": true,
+      "r_C_per_day": 0.00051,
+      "min_interval_days_applied": 240,
+      "cleaning_cost": 300000,
+      "n_cleans_to_tam": 2,
+      "next_dates": [
+        "2026-10-29",
+        "2031-01-06"
+      ],
+      "scheduler_risk_mult": 1.714
+    },
+    {
+      "HX": "E101G",
+      "online": false,
+      "r_C_per_day": 0.0,
+      "cleaning_cost": 400000,
+      "n_cleans_to_tam": 0,
+      "next_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM (2028-06-01, 2032-06-01)"
+    },
+    {
+      "HX": "E103AB",
+      "online": false,
+      "r_C_per_day": 0.0,
+      "cleaning_cost": 400000,
+      "n_cleans_to_tam": 0,
+      "next_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM (2028-06-01, 2032-06-01)"
+    },
+    {
+      "HX": "E106AB",
+      "online": false,
+      "r_C_per_day": 0.0,
+      "cleaning_cost": 400000,
+      "n_cleans_to_tam": 0,
+      "next_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM (2028-06-01, 2032-06-01)"
+    },
+    {
+      "HX": "E107AB",
+      "online": false,
+      "r_C_per_day": 0.0,
+      "cleaning_cost": 400000,
+      "n_cleans_to_tam": 0,
+      "next_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM (2028-06-01, 2032-06-01)"
+    },
+    {
+      "HX": "E109AB",
+      "online": false,
+      "r_C_per_day": 0.0,
+      "cleaning_cost": 400000,
+      "n_cleans_to_tam": 0,
+      "next_dates": [
+        "2028-06-01",
+        "2032-06-01"
+      ],
+      "rationale": "ไม่มี bypass (list โรงงาน) — ล้างได้เฉพาะ TAM (2028-06-01, 2032-06-01)"
+    }
+  ],
+  "timeline": [
+    {
+      "HX": "E101AB",
+      "date": "2026-07-31",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2026-07-31",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2026-08-30",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2026-08-30",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2026-09-29",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2026-09-29",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2026-10-29",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2026-10-29",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2026-11-28",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2026-11-28",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2026-12-28",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2026-12-28",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2027-01-27",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2027-02-26",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-03-28",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2027-04-27",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2027-05-27",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-07-26",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2027-08-25",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-09-24",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-09-24",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2027-10-24",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2027-10-24",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2027-11-23",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2027-11-23",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2027-12-23",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-01-22",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2028-02-21",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-03-22",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2028-04-21",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-05-21",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E104",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101G",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E103AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E106AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E107AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E109AB",
+      "date": "2028-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-07-20",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-09-18",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-09-18",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2028-10-18",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2028-10-18",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2028-11-17",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2028-12-17",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2028-12-17",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2029-01-16",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2029-02-15",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2029-03-17",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2029-04-16",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2029-05-16",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2029-07-15",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2029-08-14",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2029-09-13",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2029-09-13",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2029-10-13",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2029-10-13",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2029-11-12",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2029-11-12",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2029-12-12",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2029-12-12",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2030-01-11",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2030-02-10",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2030-03-12",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2030-04-11",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2030-05-11",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2030-07-10",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2030-08-09",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2030-09-08",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2030-09-08",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2030-10-08",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2030-10-08",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2030-11-07",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2030-11-07",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2030-12-07",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2030-12-07",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2031-01-06",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2031-02-05",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2031-03-07",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2031-04-06",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2031-05-06",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2031-06-05",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2031-07-05",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2031-08-04",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2031-09-03",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2031-09-03",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2031-10-03",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2031-10-03",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2031-11-02",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E113A",
+      "date": "2031-11-02",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2031-12-02",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2031-12-02",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2032-01-01",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E102",
+      "date": "2032-03-01",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2032-03-31",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E104",
+      "date": "2032-04-30",
+      "kind": "ONLINE_V2"
+    },
+    {
+      "HX": "E101AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101CD",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E102",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E104",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E105AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E108AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E110ABC",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E113A",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E101G",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E103AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E106AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E107AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E109AB",
+      "date": "2032-06-01",
+      "kind": "TAM"
+    },
+    {
+      "HX": "E113A",
+      "date": "2032-06-29",
+      "kind": "ONLINE_V2"
+    }
+  ],
+  "totals": {
+    "online_hx": 8,
+    "tam_only": 5
+  },
+  "_meta": {
+    "generation_id": "cpht-20260721_053403",
+    "generated_at": "2026-07-20T23:10:00.188624Z",
+    "data_as_of": "2026-07-01",
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 0,
+        "ASSUMPTION": 14,
+        "CANDIDATE": 4,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": false,
+      "assumption_flags": [
+        "CIT_FLOOR",
+        "COT_LIMIT",
+        "DRAFT_MAX",
+        "DRAFT_MIN",
+        "FG_FLOW_MAX",
+        "FG_PRESSURE_MIN",
+        "FURNACE_EFFICIENCY",
+        "INFER-E101G",
+        "MAX_CLEANS_PER_HX_YEAR",
+        "MAX_ONLINE_CLEANS_PER_MONTH",
+        "METHOD-COLD-DUTY",
+        "METHOD-Q-NORM",
+        "NATURAL_GAS_PRICE",
+        "NEXT_TAM_DATE",
+        "O2_MAX",
+        "O2_MIN",
+        "TOPO-E112C-E113A",
+        "TUBE_SKIN_LIMIT"
+      ],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 0,
+      "ASSUMPTION": 14,
+      "CANDIDATE": 4,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": false,
+    "assumption_flags": [
+      "CIT_FLOOR",
+      "COT_LIMIT",
+      "DRAFT_MAX",
+      "DRAFT_MIN",
+      "FG_FLOW_MAX",
+      "FG_PRESSURE_MIN",
+      "FURNACE_EFFICIENCY",
+      "INFER-E101G",
+      "MAX_CLEANS_PER_HX_YEAR",
+      "MAX_ONLINE_CLEANS_PER_MONTH",
+      "METHOD-COLD-DUTY",
+      "METHOD-Q-NORM",
+      "NATURAL_GAS_PRICE",
+      "NEXT_TAM_DATE",
+      "O2_MAX",
+      "O2_MIN",
+      "TOPO-E112C-E113A",
+      "TUBE_SKIN_LIMIT"
+    ],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": [
+    "CIT_FLOOR",
+    "COT_LIMIT",
+    "DRAFT_MAX",
+    "DRAFT_MIN",
+    "FG_FLOW_MAX",
+    "FG_PRESSURE_MIN",
+    "FURNACE_EFFICIENCY",
+    "INFER-E101G",
+    "MAX_CLEANS_PER_HX_YEAR",
+    "MAX_ONLINE_CLEANS_PER_MONTH",
+    "METHOD-COLD-DUTY",
+    "METHOD-Q-NORM",
+    "NATURAL_GAS_PRICE",
+    "NEXT_TAM_DATE",
+    "O2_MAX",
+    "O2_MIN",
+    "TOPO-E112C-E113A",
+    "TUBE_SKIN_LIMIT"
+  ]
+}

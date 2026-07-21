@@ -1,4 +1,50 @@
-# Furnace Optimization Using Machine Learning
+# CPHT Fouling & Cleaning Decision Support
+
+> **Approved cleanup target:** development is currently limited to the minimal
+> CPHT fouling-analysis boundary documented in
+> [`docs/MVP_SCOPE.md`](docs/MVP_SCOPE.md). Phase 1 preserves the existing full
+> system and adds characterization tests only; the production pipeline below
+> has not yet been reduced or replaced.
+
+> **Engineering review mode:** this repository is a read-only decision-support
+> prototype for Bangchak Plant 3. It does not control the furnace, write DCS
+> setpoints, override alarms/SIS, or replace Process/Operations/Maintenance approval.
+
+The active production path evaluates Crude Preheat Train heat recovery, operating
+states, fouling evidence, CIT/furnace impact, cleaning priority, scheduling, and
+economics. Candidate methods and assumed limits remain visibly labelled until an
+approval record identifies the engineering source, approver, and date.
+
+## Production workflow
+
+`pipeline/run_all.py` is the execution truth. It runs the notebooks under
+`notebooks/production/` in dependency order, executes the post-processors, validates
+the complete artifact set, and publishes an immutable dashboard snapshot. The
+backend serves only the snapshot selected by `dashboard/data/current_snapshot.json`,
+so a failed or partial run cannot replace the last validated generation.
+
+```powershell
+# Use the Python environment that has requirements.txt installed
+python -m pytest -q
+python pipeline/run_all.py --timeout 1800
+python backend/server.py
+```
+
+Each published generation includes `run_manifest.json` with input/config hashes,
+code revision, step results, artifact hashes, schema version, and approval summary.
+See `docs/requirements/03_Business_Problem_and_Requirements.md` for scope and
+`docs/UNRESOLVED_ENGINEERING_DECISIONS.md` for items that still require plant review.
+
+## Safety boundary
+
+- Outputs are recommendations with evidence, confidence, assumptions, and required human review.
+- `CANDIDATE` and `ASSUMPTION` values may be displayed for engineering review but are not approved plant limits.
+- Low-confidence equipment is routed to `INVESTIGATE`, not an automatic cleaning command.
+- Scenario endpoints return isolated what-if results and do not overwrite the published snapshot.
+
+---
+
+## Legacy repository description
 
 This is the code repository for the Furnace Optimization project, focusing on the application of machine learning methods for optimizing furnace performance in industrial oil refinery processes (Bangchak).
 

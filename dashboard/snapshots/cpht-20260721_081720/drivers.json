@@ -1,0 +1,89 @@
+{
+  "target": "dRf_per_day",
+  "n": 47,
+  "cv_method": "leave_hx_out",
+  "cv_r2_mean": -30.159,
+  "cv_r2_sd": 53.134,
+  "baseline_r2_mean": -29.667,
+  "show_in_dashboard": false,
+  "drivers": [
+    {
+      "feature": "duration",
+      "label": "อายุการเดินเครื่อง",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "film_temp",
+      "label": "อุณหภูมิผิว (film)",
+      "importance": 1e-05,
+      "direction": 1
+    },
+    {
+      "feature": "API",
+      "label": "API crude",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "flow",
+      "label": "อัตราการไหล (velocity)",
+      "importance": 1e-05,
+      "direction": -1
+    },
+    {
+      "feature": "MCRT_pct",
+      "label": "MCRT %",
+      "importance": 0.0,
+      "direction": 1
+    },
+    {
+      "feature": "Visc_100C_cSt",
+      "label": "ความหนืด 100°C",
+      "importance": 0.0,
+      "direction": -1
+    },
+    {
+      "feature": "Asphaltenes_pct",
+      "label": "Asphaltenes %",
+      "importance": 0.0,
+      "direction": -1
+    }
+  ],
+  "levers": [
+    "ลดอุณหภูมิผิว (film) → ลดอัตราการเกิดตะกรัน (driver อันดับต้น ๆ, ควบคุมได้)",
+    "เพิ่มอัตราการไหล (velocity) → ลดอัตราการเกิดตะกรัน (driver อันดับต้น ๆ, ควบคุมได้)"
+  ],
+  "note": "n=47 runs · leave-HX-out CV (was leaky within-HX KFold before 2026-07-20) · R2 may be low/negative with few HX -- shown only if it beats the constant-mean baseline (show_in_dashboard) · associative, not causation",
+  "_meta": {
+    "generation_id": "cpht-20260721_081720",
+    "generated_at": "2026-07-21T02:16:35.848274Z",
+    "data_as_of": null,
+    "schema_version": "review-1.0",
+    "approval_summary": {
+      "mode": "REVIEW",
+      "counts": {
+        "APPROVED": 18,
+        "ASSUMPTION": 0,
+        "CANDIDATE": 0,
+        "TARGET_NOT_IMPLEMENTED": 0
+      },
+      "all_critical_approved": true,
+      "assumption_flags": [],
+      "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+    }
+  },
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 0,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": true,
+    "assumption_flags": [],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "assumption_flags": []
+}

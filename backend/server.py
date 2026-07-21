@@ -87,6 +87,8 @@ log = logging.getLogger('backend.server')
 
 sys.path.append(str(ROOT))
 from src.domain.config import HX_CONFIG, CIT_TAG, TOTAL_CHARGE_TAG
+from pipeline.run_integrity import resolve_published_artifact
+from src.events.review import append_review, read_reviews
 
 sys.path.append(str(ROOT / 'pipeline'))
 import cleaning_scheduler_network as SCHED
@@ -172,8 +174,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split('?')[0]
+        if path == '/api/event-reviews':
+            return self._send(200, {'reviews': read_reviews(), 'identity_verified': False})
         rel = 'index.html' if path in ('/', '') else path.lstrip('/')
-        fp = (DASH / rel).resolve()
+        published = resolve_published_artifact(Path(rel).name) if rel.startswith('data/') else None
+        fp = published or (DASH / rel).resolve()
         if not str(fp).startswith(str(DASH.resolve())) or not fp.is_file():
             return self._send(404, {'error': 'not found'})
         # Last-Modified lets the dashboard detect when /api/run's "quick update" (topology
@@ -186,6 +191,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         endpoint = self.path.split('?')[0]
+        if endpoint == '/api/review-event':
+            return self._review_event()
         if endpoint == '/api/run-full':
             return self._run_full()
         if endpoint == '/api/recompute-plan':
@@ -235,6 +242,19 @@ class Handler(BaseHTTPRequestHandler):
             self._send(422, {'error': str(e)})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
+
+    def _review_event(self):
+        try:
+            n = int(self.headers.get('Content-Length', 0))
+            if n > 1024 * 1024:
+                return self._send(413, {'error': 'review payload too large'})
+            body = json.loads(self.rfile.read(n).decode('utf-8') or '{}')
+            record = append_review(body)
+            self._send(200, {'ok': True, 'review': record})
+        except (ValueError, json.JSONDecodeError) as exc:
+            self._send(422, {'error': str(exc)})
+        except Exception as exc:
+            self._send(500, {'error': f'{type(exc).__name__}: {exc}'})
 
     def _recompute_plan(self):
         """Apply per-HX cleaning-cost overrides, an optional CIT-floor constraint, AND an
@@ -351,8 +371,8 @@ class Handler(BaseHTTPRequestHandler):
             comparison = SCHED.compare_tam_cycles(
                 econ_live, chist, logi, sched_v1, base_tam=base_tam, years_options=years_options,
                 max_cit_deficit_C=cit_floor_C, topo=topo, limit_overrides=furnace_limits)
-            (DASH / 'data' / 'tam_comparison.json').write_text(
-                json.dumps(comparison, ensure_ascii=False, indent=1), encoding='utf-8')
+            # Scenario output is returned to the caller only.  It must not overwrite the
+            # immutable canonical snapshot or the next pipeline's source artifacts.
             self._send(200, {'ok': True, 'comparison': comparison})
         except Exception as e:
             self._send(500, {'error': f'{type(e).__name__}: {e}'})
@@ -387,8 +407,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(422, {'error': 'tam_years ต้องเป็นจำนวนเต็ม'})
 
             sim = CITSIM.build_simulation(target_cit_C=target_cit_C, tam_years=tam_years)
-            (DASH / 'data' / 'cit_simulation.json').write_text(
-                json.dumps(sim, ensure_ascii=False, indent=1), encoding='utf-8')
+            # Read-only scenario: return the result without replacing canonical output.
             self._send(200, {'ok': True, 'simulation': sim})
         except RuntimeError as e:
             self._send(422, {'error': str(e)})

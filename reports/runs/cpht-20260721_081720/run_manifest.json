@@ -1,0 +1,331 @@
+{
+  "schema_version": "1.0.0",
+  "generation_id": "cpht-20260721_081720",
+  "mode": "REVIEW",
+  "started_at": "2026-07-21T01:17:20.487371Z",
+  "finished_at": "2026-07-21T02:16:35.848274Z",
+  "input": {
+    "path": "C:\\Desktop\\Bangchak Internship 2026\\Data\\Process information data (2024-2026).xlsx",
+    "sha256": "f11de48592ec3926b32b88f7b72d39ef05bf9eb84d0551280301ddda704970bd"
+  },
+  "config_hash": "cd4bfe8f6a43eddac89fcc1f720f85297cda2229303284d4a290b92f4255b9a8",
+  "code_revision": "f628e97902d4c4aa9b9c6b34d45fa956aed2a235",
+  "environment": {
+    "python": "3.13.14 (tags/v3.13.14:fd17997, Jun 10 2026, 13:03:48) [MSC v.1944 64 bit (AMD64)]",
+    "platform": "Windows-11-10.0.26200-SP0"
+  },
+  "steps": [
+    {
+      "kind": "notebook",
+      "name": "production/01_data_quality.ipynb",
+      "ok": true,
+      "duration_seconds": 116.93
+    },
+    {
+      "kind": "notebook",
+      "name": "production/02_hx_performance_operating_modes.ipynb",
+      "ok": true,
+      "duration_seconds": 391.755
+    },
+    {
+      "kind": "notebook",
+      "name": "production/05_fouling_analysis.ipynb",
+      "ok": true,
+      "duration_seconds": 33.028
+    },
+    {
+      "kind": "notebook",
+      "name": "production/04_fouling_cit_impact_forecast.ipynb",
+      "ok": true,
+      "duration_seconds": 1655.821
+    },
+    {
+      "kind": "notebook",
+      "name": "production/08_cleaning_priority.ipynb",
+      "ok": true,
+      "duration_seconds": 37.882
+    },
+    {
+      "kind": "notebook",
+      "name": "production/14_cit_model_feature_matrix.ipynb",
+      "ok": true,
+      "duration_seconds": 595.793
+    },
+    {
+      "kind": "notebook",
+      "name": "production/10_economic_evaluation_forecast_export.ipynb",
+      "ok": true,
+      "duration_seconds": 20.906
+    },
+    {
+      "kind": "post",
+      "name": "honest model_metrics.json",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "engineering priority ranking (nb 08)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "P&ID topology + furnace",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "per-HX time-series",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "End-of-Run duty forecast",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "cleaning audit history",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "event table (censoring taxonomy)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "PHM: RUL/reliability/drivers",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "economics (CIT->฿)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "cleaning/bypass/TAM list",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "TAM deep analysis (production/17)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "cleaning schedule -> TAM2028",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "cleaning schedule v2 (network)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "evidence & confidence surface",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "engineering review package",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "integrated cleaning plan (production/13)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "CIT sawtooth simulation (default, unconstrained)",
+      "ok": true
+    },
+    {
+      "kind": "post",
+      "name": "canonical forecast consolidation",
+      "ok": true
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "calibration.json",
+      "sha256": "dcbd4feb6f4cd9b40a2a77c6929e30dca764fbb976c5219214f6734fc1a49475",
+      "bytes": 1876,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "canonical_forecast.json",
+      "sha256": "80c23f71d5639eaea910fb5ab976e581952aa81f13a41a8c37413eef7f7666fc",
+      "bytes": 13787,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cit_simulation.json",
+      "sha256": "8a132a0118c40ca846ba1f5ec459cb4dba5211f7d16b03ae7aa16dfc55c4f13f",
+      "bytes": 19765,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "clean_baseline_sandbox.json",
+      "sha256": "f20948f32175bdb64eb2f42cb88020f560a44af504c3e360eaa2f4b2b171f08a",
+      "bytes": 2470,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_history.json",
+      "sha256": "1b0144f2c64bd916835689d5d6ff80172f78b04ae8081e861ef31cc879df16fb",
+      "bytes": 81700,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_logistics.json",
+      "sha256": "518fa48d839038e6d1fadc1e471b90d7d1774cbafa6e4596820f76ffdd42ff9c",
+      "bytes": 11992,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_plan.json",
+      "sha256": "5cf756c7313549e253077fab97ef99a4247e5aa993e1cfca0ffda715002c16f4",
+      "bytes": 42609,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_recommendations.json",
+      "sha256": "8a3946e8597cbab286ba0d24acfda4a77f0f8c7b216ae534387d26208b5b8c17",
+      "bytes": 6195,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_schedule.json",
+      "sha256": "9b7bcd11aeaf88d3cab08891865066f49ff7aeebee3233593d76210e947ee3b6",
+      "bytes": 14016,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "cleaning_schedule_v2.json",
+      "sha256": "267e874444ac54ae9cbc12c493e2708d6e0963edb07a873cd12a60311f0a0d4e",
+      "bytes": 27694,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "drivers.json",
+      "sha256": "f6086b3ebc7ada06139084b0dce061c35bbe51041a66c9c47fc139c764b4ff66",
+      "bytes": 2780,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "economics.json",
+      "sha256": "8d1168bf0bc12fe2ee5255140788031e88a2c1176fd617e8ea47bb7c05f02e3f",
+      "bytes": 16971,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "end_of_run.json",
+      "sha256": "4ebc4b765ae16b2e4b1afb206bc3c7d8cf35fbb9881b0b60624633ac0a42fb46",
+      "bytes": 50040,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "engineering_priority.json",
+      "sha256": "ec98b1e20b6dee8a9386a99d9f7d16e7df6e3781c32e381230b9b40d3d0a8303",
+      "bytes": 20396,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "engineering_review.json",
+      "sha256": "837874c21f81adb59ad4224a6c76b86f30bfec5a2208868e673186a8c324d075",
+      "bytes": 28666,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "event_table.json",
+      "sha256": "8a9c3e5c352547970993b9a8ecdb80fcb57d63ae2be4cea4ec367315062ba7c6",
+      "bytes": 29990,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "evidence.json",
+      "sha256": "526e9f649a05c3d49d99fb8760abb9dd2d46e6929955b42cc5ddc1f36b59249c",
+      "bytes": 9726,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "forecast_6mo.json",
+      "sha256": "b4a6d79e15f08ad09e701275595b76ee58f2223ddf032e584d7e355eec551272",
+      "bytes": 191947,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "hx_ranking.json",
+      "sha256": "4c3c25e79440d9c63299f140ea34635ed3a1ab0ad863f6e00bb3a81833ecccaa",
+      "bytes": 8081,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "hx_timeseries.json",
+      "sha256": "5eec0ad4c77d537ba4e8be6d97688f219e7a0900f8ca3a8e67402ec1134ae082",
+      "bytes": 2185145,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "model_metrics.json",
+      "sha256": "f2724956e588e0bce611518170c01190acb628a41ef4537f558514c6562df079",
+      "bytes": 4664,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "pfd_topology.json",
+      "sha256": "3929d89c17eea5d8dfd58b5a8c439f0a6876b77878489fcfcb0d356626e02a50",
+      "bytes": 22194,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "propagation_models.json",
+      "sha256": "85976c613e8514eb8acec0e25ce837c94c51ecbe4d6783f1f718c3eddc1b607b",
+      "bytes": 69321,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "reliability.json",
+      "sha256": "84014d883659f7b84ebea0098fde0cd435a920ba1007fb098d6e5396088c51f9",
+      "bytes": 91624,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "rul.json",
+      "sha256": "c04f963599d4e21be131be51771c30e6fad80c24738a9ae689e374f3877a007a",
+      "bytes": 7100,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "tam_analysis.json",
+      "sha256": "ab1b6a3cef8b53a951e425b0467d8e40c3bd94643788b7e30966f57e0465b955",
+      "bytes": 35757,
+      "schema_version": "review-1.0"
+    },
+    {
+      "name": "tam_comparison.json",
+      "sha256": "03bbbf926b74cca4fe99fe38f1b6c7993fd59f7bf067c55a34cc55e278b1ae69",
+      "bytes": 2731,
+      "schema_version": "review-1.0"
+    }
+  ],
+  "approval_summary": {
+    "mode": "REVIEW",
+    "counts": {
+      "APPROVED": 18,
+      "ASSUMPTION": 0,
+      "CANDIDATE": 0,
+      "TARGET_NOT_IMPLEMENTED": 0
+    },
+    "all_critical_approved": true,
+    "assumption_flags": [],
+    "warning": "Engineering review output; candidate and assumed values are not plant-approved."
+  },
+  "validation": {
+    "passed": true,
+    "errors": []
+  }
+}
