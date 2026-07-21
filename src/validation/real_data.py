@@ -88,8 +88,16 @@ def classify_hx_records(frame: pd.DataFrame, hx_id: str, hx: dict[str, Any],
     terminal_2 = out.hot_out - out.cold_in
     physical = (cold_dt >= rules["cold_delta_t_min_c"]) & (hot_dt >= rules["hot_delta_t_min_c"]) \
         & (terminal_1 >= rules["terminal_delta_t_min_c"]) & (terminal_2 >= rules["terminal_delta_t_min_c"])
+    timestamp_gap = out.timestamp.diff().dt.total_seconds().div(3600) > rules["long_gap_hours"]
+
+    def flatline_mask(values: pd.Series) -> pd.Series:
+        groups = values.ne(values.shift()).cumsum()
+        run_size = groups.map(groups.value_counts())
+        return values.notna() & (run_size >= rules["flatline_records"])
+
+    flatline = numeric.apply(flatline_mask).any(axis=1)
     shutdown = available & (out.cold_flow <= rules["flow_min_m3_h"])
-    invalid = ~available | ~temp_range | (~shutdown & ~physical)
+    invalid = ~available | ~temp_range | (~shutdown & ~physical) | timestamp_gap | flatline
     startup = pd.Series(False, index=out.index)
     ended = shutdown.shift(1, fill_value=False) & ~shutdown
     for offset in range(rules["startup_records"]):
@@ -109,6 +117,8 @@ def classify_hx_records(frame: pd.DataFrame, hx_id: str, hx: dict[str, Any],
     warnings = hx.get("mapping_warnings", [])
     for i in out.index:
         if not available.loc[i]: code, reason = "MISSING_OR_NONFINITE_INPUT", "One or more required measurements are missing or non-finite."
+        elif timestamp_gap.loc[i]: code, reason = "LONG_TIMESTAMP_GAP", "Elapsed time from the previous record exceeds the configured limit."
+        elif flatline.loc[i]: code, reason = "SENSOR_FLATLINE", "At least one required sensor repeats exactly for the configured number of records."
         elif shutdown.loc[i]: code, reason = "FLOW_BELOW_OPERATING_MINIMUM", "Crude flow is at or below the configured operating threshold."
         elif not temp_range.loc[i]: code, reason = "TEMPERATURE_OUT_OF_RANGE", "A temperature is outside the configured engineering range."
         elif not physical.loc[i]: code, reason = "IMPOSSIBLE_TEMPERATURE_RELATIONSHIP", "Temperature differences do not meet HX physics thresholds."
