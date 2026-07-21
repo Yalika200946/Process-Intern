@@ -49,6 +49,7 @@ sys.path.append(str(REPO))
 from src.validation import nb_audit as A
 from src.domain.config import HX_CONFIG
 from src.models.clean_baseline import calculate_clean_baseline
+from src.calculations.fouling import calculate_fouling_indicators
 
 CLEAN_WINDOW_DAYS = 30   # must match notebook 02 §3.4 (first N days of a run = clean baseline)
 
@@ -89,7 +90,17 @@ def _recompute_clean_baseline(feat, ost, hx_config):
             u_clean_run[m] = val
 
         feat[ucr_col] = u_clean_run
-        feat[urel_col] = (u / u_clean_run).clip(lower=0.0, upper=2.0)
+        indicators = [
+            (calculate_fouling_indicators(actual, clean, operating_valid=bool(valid))
+             if pd.notna(clean) else None)
+            for actual, clean, valid in zip(u, u_clean_run, in_service)
+        ]
+        feat[urel_col] = [
+            row["ua_normalized"]["value"] if row else np.nan for row in indicators
+        ]
+        feat[f'{hx}_Fouling_index'] = [
+            row["fouling_index"]["value"] if row else np.nan for row in indicators
+        ]
         feat[rf_col] = (1.0 / u) - (1.0 / u_clean_run)
         redone.append(hx)
     return redone

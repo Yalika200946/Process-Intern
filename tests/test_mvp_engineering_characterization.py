@@ -233,3 +233,49 @@ def test_clean_baseline_has_no_future_data_lookahead():
     )
 
     assert base["clean_ua"] == future_outlier["clean_ua"] == pytest.approx(110.0)
+
+
+def test_clean_condition_has_unit_normalized_ua_and_zero_fouling_index():
+    result = calculate_fouling_indicators(actual=100.0, clean_equivalent=100.0)
+
+    assert result["ua_normalized"]["value"] == pytest.approx(1.0)
+    assert result["fouling_index"]["value"] == pytest.approx(0.0)
+
+
+def test_degraded_ua_has_positive_fouling_index():
+    result = calculate_fouling_indicators(actual=80.0, clean_equivalent=100.0)
+
+    assert result["ua_normalized"]["value"] == pytest.approx(0.8)
+    assert result["fouling_index"]["value"] == pytest.approx(0.2)
+
+
+def test_above_clean_ua_is_warned_without_clipping():
+    result = calculate_fouling_indicators(actual=110.0, clean_equivalent=100.0)
+
+    assert result["ua_normalized"]["value"] == pytest.approx(1.1)
+    assert result["fouling_index"]["value"] == pytest.approx(-0.1)
+    assert result["ua_normalized"]["quality"]["warning_code"] == "ABOVE_CLEAN_BASELINE"
+
+
+def test_nonfinite_actual_ua_produces_no_numerical_indicator():
+    result = calculate_fouling_indicators(actual=math.nan, clean_equivalent=100.0)
+
+    assert result["ua_normalized"]["value"] is None
+    assert result["fouling_index"]["value"] is None
+    assert result["ua_normalized"]["quality"]["warning_code"] == "NONFINITE_ACTUAL_UA"
+
+
+def test_invalid_operating_record_produces_no_numerical_indicator():
+    result = calculate_fouling_indicators(
+        actual=80.0, clean_equivalent=100.0, operating_valid=False,
+    )
+
+    assert result["ua_normalized"]["value"] is None
+    assert result["fouling_index"]["quality"]["warning_code"] == "INVALID_OPERATING_RECORD"
+
+
+def test_normalized_ua_and_fouling_index_are_dimensionless():
+    result = calculate_fouling_indicators(actual=80.0, clean_equivalent=100.0)
+
+    assert result["ua_normalized"]["unit"] == "fraction"
+    assert result["fouling_index"]["unit"] == "fraction"
