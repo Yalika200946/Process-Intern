@@ -10,6 +10,7 @@ import math
 import pytest
 
 from src.calculations.fouling import calculate_fouling_indicators
+from src.calculations.cit_impact import calculate_single_hx_cit_impact
 from src.calculations.heat_duty import calculate_cold_side_heat_duty, calculate_mass_flow
 from src.calculations.heat_transfer import calculate_lmtd, calculate_ua
 from src.domain.crude_properties import calculate_crude_cp, calculate_crude_density
@@ -279,3 +280,139 @@ def test_normalized_ua_and_fouling_index_are_dimensionless():
 
     assert result["ua_normalized"]["unit"] == "fraction"
     assert result["fouling_index"]["unit"] == "fraction"
+
+
+def test_expected_clean_duty_from_clean_ua_factor_and_lmtd():
+    result = calculate_single_hx_cit_impact(
+        800.0, 100.0, 2.5, clean_ua_kw_k=20.0,
+        lmtd_current_k=50.0, correction_factor=0.9,
+    )
+
+    assert result["q_clean_expected"] == pytest.approx(900.0)
+
+
+def test_positive_recoverable_duty():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, expected_clean_duty_kw=2000.0,
+    )
+
+    assert result["q_deficit_signed"] == pytest.approx(1000.0)
+    assert result["q_recoverable"] == pytest.approx(1000.0)
+
+
+def test_zero_recoverable_duty_is_explicit():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, expected_clean_duty_kw=1000.0,
+    )
+
+    assert result["q_recoverable"] == 0.0
+    assert result["cit_gain_equivalent"] == 0.0
+    assert result["quality"]["warning_code"] == "NO_RECOVERABLE_DUTY"
+
+
+def test_actual_duty_above_clean_expectation_preserves_signed_diagnostic():
+    result = calculate_single_hx_cit_impact(
+        1200.0, 100.0, 2.5, expected_clean_duty_kw=1000.0,
+    )
+
+    assert result["q_deficit_signed"] == pytest.approx(-200.0)
+    assert result["q_recoverable"] == 0.0
+    assert result["cit_gain_equivalent"] == 0.0
+    assert result["quality"]["warning_code"] == "ACTUAL_DUTY_ABOVE_CLEAN_EXPECTATION"
+
+
+def test_equivalent_cit_gain_hand_calculation():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, expected_clean_duty_kw=2000.0,
+    )
+
+    assert result["cit_gain_equivalent"] == pytest.approx(4.0)
+
+
+@pytest.mark.parametrize("mass_flow", [0.0, -1.0])
+def test_nonpositive_crude_mass_flow_is_invalid(mass_flow):
+    result = calculate_single_hx_cit_impact(
+        1000.0, mass_flow, 2.5, expected_clean_duty_kw=2000.0,
+    )
+
+    assert result["cit_gain_equivalent"] is None
+    assert result["quality"]["warning_code"] == "INVALID_MASS_FLOW"
+
+
+def test_nonpositive_crude_cp_is_invalid():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 0.0, expected_clean_duty_kw=2000.0,
+    )
+
+    assert result["quality"]["warning_code"] == "INVALID_CRUDE_CP"
+
+
+def test_invalid_lmtd_is_rejected_without_numerical_impact():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, clean_ua_kw_k=20.0, lmtd_current_k=0.0,
+    )
+
+    assert result["q_recoverable"] is None
+    assert result["quality"]["warning_code"] == "INVALID_LMTD"
+
+
+def test_invalid_clean_ua_is_rejected_without_numerical_impact():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, clean_ua_kw_k=0.0, lmtd_current_k=50.0,
+    )
+
+    assert result["q_recoverable"] is None
+    assert result["quality"]["warning_code"] == "INVALID_CLEAN_UA"
+
+
+def test_invalid_operating_record_has_no_cit_impact():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, expected_clean_duty_kw=2000.0,
+        operating_valid=False,
+    )
+
+    assert result["cit_gain_equivalent"] is None
+    assert result["quality"]["warning_code"] == "INVALID_OPERATING_RECORD"
+
+
+def test_cit_impact_units_are_consistent_without_extra_conversion_factor():
+    result = calculate_single_hx_cit_impact(
+        1000.0, 100.0, 2.5, expected_clean_duty_kw=2000.0,
+    )
+
+    assert result["cit_gain_equivalent"] == pytest.approx(1000.0 / (100.0 * 2.5))
+    assert result["units"]["q_recoverable"] == "kW"
+    assert result["units"]["crude_mass_flow"] == "kg/s"
+    assert result["units"]["crude_cp"] == "kJ/kg-K"
+    assert result["units"]["cit_gain_equivalent"] == "K"
+
+
+def test_single_hx_contract_does_not_accept_or_sum_multiple_exchangers():
+    with pytest.raises(ValueError, match="single-HX"):
+        calculate_single_hx_cit_impact(
+            [1000.0, 500.0], 100.0, 2.5, expected_clean_duty_kw=2000.0,
+        )
+
+
+def test_cit_impact_integrates_canonical_mass_baseline_and_fouling_outputs():
+    mass_flow = calculate_mass_flow(360.0, 1000.0)
+    clean_baseline = calculate_clean_baseline(
+        [20, 20, 20, 20, 20],
+        ["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04", "2026-01-05"],
+        "2026-01-01", "2026-01-05", unit="kW/K",
+    )
+    fouling = calculate_fouling_indicators(actual=16.0, clean_equivalent=20.0)
+    impact = calculate_single_hx_cit_impact(
+        actual_duty_kw=800.0,
+        crude_mass_flow_kg_s=mass_flow,
+        crude_cp_kj_kg_k=2.5,
+        clean_ua_kw_k=clean_baseline,
+        lmtd_current_k=50.0,
+    )
+
+    assert fouling["ua_normalized"]["value"] == pytest.approx(0.8)
+    assert impact["q_clean_expected"] == pytest.approx(1000.0)
+    assert impact["q_recoverable"] == pytest.approx(200.0)
+    assert impact["cit_gain_equivalent"] == pytest.approx(0.8)
+    assert impact["impact_basis"] == "single_hx_equivalent_crude_temperature_gain"
+    assert any("full CPHT network effects" in item for item in impact["assumptions"])
