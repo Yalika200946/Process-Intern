@@ -77,12 +77,35 @@ def test_lmtd_equal_terminal_differences_uses_limit_value():
     assert calculate_lmtd(40.0, 40.0).value == pytest.approx(40.0)
 
 
+def test_lmtd_validity_metadata_is_explicit():
+    result = calculate_lmtd(100.0, 50.0)
+
+    assert result.quality == {"is_valid": True, "warning_code": None}
+
+
 def test_ua_hand_calculation_with_correction_factor():
     # UA = 1000 kW / (0.8 * 50 K) = 25 kW/K.
     result = calculate_ua(1000.0, 50.0, correction_factor=0.8)
 
     assert result.value == pytest.approx(25.0)
     assert result.unit == "kW/K"
+    assert result.quality["is_valid"] is True
+    assert result.quality["warning_code"] is None
+
+
+@pytest.mark.parametrize(
+    "function,args",
+    [
+        (calculate_lmtd, (math.nan, 50.0)),
+        (calculate_lmtd, (100.0, math.inf)),
+        (calculate_ua, (math.nan, 50.0)),
+        (calculate_ua, (1000.0, math.inf)),
+        (calculate_ua, (1000.0, 50.0, math.nan)),
+    ],
+)
+def test_nonfinite_heat_transfer_inputs_are_rejected(function, args):
+    with pytest.raises(ValueError):
+        function(*args)
 
 
 def test_normalized_ua_is_current_performance_ratio():
