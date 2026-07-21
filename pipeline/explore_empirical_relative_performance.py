@@ -17,44 +17,66 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 STATUS = "EMPIRICAL_HIGH_PERFORMANCE_REFERENCE"
+MIN_REFERENCE_RECORDS = 5
 INTERPRETATION = ("Relative thermal performance against a high-performance historical period, "
                   "not a confirmed clean-state fouling measurement.")
 
 
 def calculate_relative_performance(physics: pd.DataFrame, spec: dict) -> tuple[pd.DataFrame, dict]:
     hx = physics[(physics.hx_id == spec["hx_id"]) & physics.operating_valid & physics.ua_valid].copy()
-    hx = hx[hx.ua_value.notna() & hx.ua_w_m2_k.notna()].sort_values("timestamp")
+    hx = hx[np.isfinite(hx.ua_value) & (hx.ua_value > 0)].sort_values("timestamp")
     start = pd.Timestamp(spec["start"], tz="Asia/Bangkok")
     end = pd.Timestamp(spec["end"], tz="Asia/Bangkok")
     reference = hx[(hx.timestamp >= start) & (hx.timestamp <= end)]
-    if reference.empty:
-        raise ValueError(f"{spec['hx_id']} has no valid records in its empirical reference window")
+    if len(reference) < MIN_REFERENCE_RECORDS:
+        summary = {
+            "hx_id": spec["hx_id"],
+            "empirical_reference_start": start,
+            "empirical_reference_end": end,
+            "empirical_reference_status": STATUS,
+            "empirical_reference_valid_records": int(len(reference)),
+            "empirical_reference_confidence": "INSUFFICIENT",
+            "empirical_reference_warning_code": "INSUFFICIENT_REFERENCE_DATA",
+            "status": "INSUFFICIENT_REFERENCE_DATA",
+            "cleaning_event_confirmed": False,
+            "clean_condition_confirmed": False,
+            "impact_status": "BLOCKED_BY_REFERENCE_SEMANTICS",
+        }
+        return hx.iloc[0:0].copy(), summary
     reference_ua = float(reference.ua_value.median())
     reference_u = float(reference.ua_w_m2_k.median())
-    hx["reference_ua"] = reference_ua
-    hx["reference_ua_unit"] = "kW/K"
+    hx["reference_ua_empirical"] = reference_ua
+    hx["reference_ua_empirical_unit"] = "kW/K"
     hx["reference_u_w_m2_k"] = reference_u
-    hx["relative_ua"] = hx.ua_value / reference_ua
-    hx["relative_performance_loss"] = 1.0 - hx.relative_ua
-    hx["relative_warning_code"] = np.where(hx.relative_performance_loss < 0,
-                                            "ABOVE_REFERENCE_PERFORMANCE", "")
-    hx["reference_status"] = STATUS
+    hx["relative_ua_empirical"] = hx.ua_value / reference_ua
+    hx["relative_performance_loss"] = 1.0 - hx.relative_ua_empirical
+    hx["empirical_reference_warning_code"] = np.where(
+        hx.relative_performance_loss < 0, "ABOVE_EMPIRICAL_REFERENCE", ""
+    )
+    hx["empirical_reference_status"] = STATUS
+    hx["empirical_reference_start"] = start
+    hx["empirical_reference_end"] = end
+    hx["empirical_reference_valid_records"] = int(len(reference))
+    hx["empirical_reference_confidence"] = "MEDIUM_DESCRIPTIVE_ONLY"
     hx["source_reference_status"] = spec["reference_status"]
     hx["cleaning_event_confirmed"] = False
     hx["clean_condition_confirmed"] = False
     hx["interpretation"] = INTERPRETATION
     hx["impact_status"] = "BLOCKED_BY_REFERENCE_SEMANTICS"
     hx["network_effects_included"] = False
-    hx["reference_start"] = start
-    hx["reference_end"] = end
-    summary = {"hx_id": spec["hx_id"], "reference_start": start, "reference_end": end,
-               "reference_status": STATUS, "source_reference_status": spec["reference_status"],
-               "reference_valid_record_count": int(len(reference)), "reference_ua": reference_ua,
-               "reference_ua_unit": "kW/K", "reference_u_w_m2_k": reference_u,
-               "relative_ua_min": float(hx.relative_ua.min()), "relative_ua_max": float(hx.relative_ua.max()),
+    summary = {"hx_id": spec["hx_id"], "empirical_reference_start": start,
+               "empirical_reference_end": end, "empirical_reference_status": STATUS,
+               "source_reference_status": spec["reference_status"],
+               "empirical_reference_valid_records": int(len(reference)),
+               "reference_ua_empirical": reference_ua,
+               "reference_ua_empirical_unit": "kW/K", "reference_u_w_m2_k": reference_u,
+               "empirical_reference_confidence": "MEDIUM_DESCRIPTIVE_ONLY",
+               "empirical_reference_warning_code": "",
+               "relative_ua_empirical_min": float(hx.relative_ua_empirical.min()),
+               "relative_ua_empirical_max": float(hx.relative_ua_empirical.max()),
                "relative_performance_loss_min": float(hx.relative_performance_loss.min()),
                "relative_performance_loss_max": float(hx.relative_performance_loss.max()),
-               "records_above_reference_pct": float((hx.relative_ua > 1).mean() * 100),
+               "records_above_reference_pct": float((hx.relative_ua_empirical > 1).mean() * 100),
                "valid_record_count": int(len(hx)), "cleaning_event_confirmed": False,
                "clean_condition_confirmed": False, "interpretation": INTERPRETATION,
                "impact_status": "BLOCKED_BY_REFERENCE_SEMANTICS",
@@ -64,11 +86,17 @@ def calculate_relative_performance(physics: pd.DataFrame, spec: dict) -> tuple[p
 
 def relationship_summary(frame: pd.DataFrame) -> pd.DataFrame:
     rows=[]
-    for x in ("cold_flow_m3_h", "lmtd_value", "hot_in_c"):
-        pair=frame[[x,"relative_performance_loss"]].dropna()
-        rows.append({"hx_id":frame.hx_id.iloc[0],"x_variable":x,"paired_records":len(pair),
-                     "pearson":pair[x].corr(pair.relative_performance_loss,method="pearson"),
-                     "spearman":pair[x].corr(pair.relative_performance_loss,method="spearman"),
+    candidates = {
+        "cold_flow_m3_h": frame.cold_flow_m3_h,
+        "lmtd_value": frame.lmtd_value,
+        "hot_in_c": frame.hot_in_c,
+        "time_days": (frame.timestamp - frame.timestamp.min()).dt.total_seconds() / 86400.0,
+    }
+    for name, values in candidates.items():
+        pair=pd.DataFrame({"x":values,"relative_performance_loss":frame.relative_performance_loss}).dropna()
+        rows.append({"hx_id":frame.hx_id.iloc[0],"x_variable":name,"valid_sample_count":len(pair),
+                     "pearson":pair.x.corr(pair.relative_performance_loss,method="pearson"),
+                     "spearman":pair.x.corr(pair.relative_performance_loss,method="spearman"),
                      "interpretation":"Association only; a downward trend is not automatically fouling."})
     return pd.DataFrame(rows)
 
@@ -78,7 +106,8 @@ def throughput_distribution(frame: pd.DataFrame) -> tuple[pd.DataFrame,pd.DataFr
     rows=[]
     for band,g in out.groupby("throughput_band",observed=True):
         rows.append({"hx_id":g.hx_id.iloc[0],"throughput_band":str(band),"record_count":len(g),
-                     "relative_ua_median":g.relative_ua.median(),"relative_ua_iqr":g.relative_ua.quantile(.75)-g.relative_ua.quantile(.25),
+                     "relative_ua_empirical_median":g.relative_ua_empirical.median(),
+                     "relative_ua_empirical_iqr":g.relative_ua_empirical.quantile(.75)-g.relative_ua_empirical.quantile(.25),
                      "relative_performance_loss_median":g.relative_performance_loss.median()})
     return out,pd.DataFrame(rows)
 
