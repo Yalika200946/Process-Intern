@@ -10,7 +10,7 @@ import math
 import pytest
 
 from src.calculations.fouling import calculate_fouling_indicators
-from src.calculations.heat_duty import calculate_cold_side_heat_duty
+from src.calculations.heat_duty import calculate_cold_side_heat_duty, calculate_mass_flow
 from src.calculations.heat_transfer import calculate_lmtd, calculate_ua
 from src.domain.crude_properties import calculate_crude_cp, calculate_crude_density
 from src.network.attribution import equivalent_furnace_duty_mw
@@ -39,6 +39,22 @@ def test_mass_flow_conversion_is_embedded_in_cold_side_duty():
 
     assert result.value == pytest.approx(10.0)
     assert result.unit == "kW"
+
+
+def test_extracted_mass_flow_conversion_preserves_hand_calculated_case():
+    result = calculate_mass_flow(36.0, 1000.0)
+
+    assert result.value == pytest.approx(10.0)
+    assert result.unit == "kg/s"
+    assert result.quality == {"is_valid": True, "warning_code": None}
+
+
+def test_zero_mass_flow_is_traceable_without_changing_numerical_behavior():
+    result = calculate_mass_flow(0.0, 1000.0)
+
+    assert result.value == 0.0
+    assert result.quality["is_valid"] is False
+    assert result.quality["warning_code"] == "ZERO_VOLUMETRIC_FLOW"
 
 
 def test_crude_side_heat_duty_hand_calculation():
@@ -122,6 +138,8 @@ def test_current_negative_cold_side_delta_t_is_warned_not_rejected():
 
     assert result.value == pytest.approx(-472.2222222)
     assert result.warnings == ("Cold-side outlet is below inlet; check tags/state.",)
+    assert result.quality["is_valid"] is False
+    assert result.quality["warning_code"] == "NEGATIVE_COLD_SIDE_DELTA_T"
 
 
 def test_invalid_ua_denominators_are_rejected():
@@ -139,4 +157,3 @@ def test_invalid_clean_baseline_is_rejected():
 def test_invalid_negative_cit_inputs_are_rejected():
     with pytest.raises(ValueError):
         equivalent_furnace_duty_mw(-1.0, 100.0, 850.0, 2.0)
-

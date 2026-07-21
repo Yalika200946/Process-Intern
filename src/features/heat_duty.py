@@ -10,12 +10,22 @@ instead of re-copied into two more notebooks -- same single-source-of-truth rati
 import os
 import numpy as np
 import pandas as pd
+
+from src.calculations.heat_duty import calculate_cold_side_heat_duty
 from pathlib import Path
 from . import crude_properties
 
 DATA_FILE    = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')) / 'Process_information_cleaned.csv'
 CRUDE_FILE   = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')) / 'Crude_property_profiled.csv'
 FOULING_FILE = Path(os.environ.get('CPHT_DATA_DIR', r'C:\Desktop\Bangchak Internship 2026\Data')) / 'Feature_calculated.csv'
+
+
+def _canonical_duty_or_nan(flow, density, cp, t_in, t_out):
+    """Preserve missing/invalid rows while delegating the formula to the canonical module."""
+    try:
+        return calculate_cold_side_heat_duty(flow, density, cp, t_in, t_out).value
+    except (TypeError, ValueError):
+        return np.nan
 
 # Same induction-period length notebook 2 uses to skip the early, not-yet-fouling
 # part of each run when regressing fouling rate (its `FOULING_LAG_DAYS` constant) --
@@ -209,14 +219,24 @@ def compute_q_features(df, streams, charge_tag=CHARGE_TAG, sg=None):
             t_avg = (df[s['cold_in']] + df[s['cold_out']]) / 2
             cp, rho_t = crude_properties.cp_rho_crude(t_avg, sg_use)
             dT_cold = df[s['cold_out']] - df[s['cold_in']]
-            Q = rho_t * df[s['cold_flow']] * cp * dT_cold / 3600
+            Q = pd.Series(
+                [_canonical_duty_or_nan(flow, rho, heat_capacity, tin, tout)
+                 for flow, rho, heat_capacity, tin, tout in zip(
+                     df[s['cold_flow']], rho_t, cp, df[s['cold_in']], df[s['cold_out']])],
+                index=df.index,
+            )
             duty_df[hx]   = Q
             Q_norm_df[hx] = Q / charge
         elif s['hot_flow'] and s['hot_in'] and s['hot_out']:
             t_avg = (df[s['hot_in']] + df[s['hot_out']]) / 2
             cp, rho_t = crude_properties.cp_rho_crude(t_avg, sg_use)
             dT_hot = df[s['hot_in']] - df[s['hot_out']]
-            Q = rho_t * df[s['hot_flow']] * cp * dT_hot / 3600
+            Q = pd.Series(
+                [_canonical_duty_or_nan(flow, rho, heat_capacity, tin, tout)
+                 for flow, rho, heat_capacity, tin, tout in zip(
+                     df[s['hot_flow']], rho_t, cp, df[s['hot_out']], df[s['hot_in']])],
+                index=df.index,
+            )
             duty_df[hx]   = Q
             Q_norm_df[hx] = Q / charge
         elif s['cold_in'] and s['cold_out']:
