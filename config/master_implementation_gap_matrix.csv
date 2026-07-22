@@ -1,0 +1,19 @@
+stage,planned_method,planned_equation_or_model,currently_implemented,executed_on_real_data,validated,missing_input,blocker,downstream_dependency,priority,planned_work_batch
+Raw Data,Immutable source inventory and hashes,SHA256 plus worksheet inventory,TRUE,TRUE,TRUE,,NONE,All stages,1,Batch 1
+Data Validation,Record-level quality engine,missing duplicate gap flatline range ROC alignment,TRUE,TRUE,TRUE,direct maintenance/configuration flags,INFERRED_STATE_LIMITATION,All calculations,1,Batch 2
+Operating-State Classification,Steady and configuration masks,rule-based evidence-labelled states,TRUE,TRUE,FALSE,valve and shell history,CONFIGURATION_INFERRED,baseline/network,1,Batch 2
+Crude Properties,Temperature-dependent density Cp and enthalpy,"rho(T,SG); integral Cp(T)dT",PARTIAL,TRUE,FALSE,approved correlation range/property basis,CANDIDATE_PROPERTY_MODEL,HX/furnace duty,1,Batch 1
+HX Thermal Performance,Canonical cold and eligible hot side physics,"Q;LMTD;F;UA;U;effectiveness;closure",PARTIAL,TRUE,FALSE,hot-side properties;verified area/F,HOT_SIDE_AND_DESIGN_DATA_BLOCKED,condition/network,1,Batch 1-2
+Clean/Reference Performance,Confirmed clean plus empirical methods,median stratified matched regression,PARTIAL,TRUE,FALSE,documentary clean evidence,NO_CONFIRMED_CLEAN_STATE,condition/cycles,1,Batch 3-4
+Fouling and Condition,Confirmed and empirical indicators,"relative UA;Rf;rate;residual",PARTIAL,TRUE,FALSE,verified U and confirmed clean state,CONFIRMED_FOULING_BLOCKED,forecast/decision,1,Batch 3-4
+Cleaning Event and Cycle,Multi-signal candidate classification,rule step change-point CUSUM state-space,PARTIAL,TRUE,FALSE,maintenance and valve history,EVENTS_SIGNAL_INFERRED,trend validation,2,Batch 3
+HX-CIT Relationship,Association and chronological benchmarks,correlation robust Ridge GAM lag,PARTIAL,TRUE,FALSE,configuration controls and causal network,ASSOCIATION_ONLY,network candidate design,2,Batch 4
+CPHT Network,Configuration-aware enthalpy network,flow split mix node propagation,PARTIAL,TRUE,FALSE,E105AB mapping;terminal lineup history;E112C data,FULL_NETWORK_BLOCKED,counterfactual/furnace,1,Batch 5
+Counterfactual CIT,Isolated single-HX network rerun,CIT_cf-CIT_current,PARTIAL,TRUE,FALSE,validated full network,PILOT_ENDPOINT_ONLY,furnace consequence,1,Batch 6
+Furnace Impact,Physics plus chronological calibration,"m integral Cp dT;fuel=Q/(eta LHV)",PARTIAL,TRUE,FALSE,approved efficiency LHV and network CIT,FUEL_ATTRIBUTION_BLOCKED,economics,2,Batch 7
+Forecasting,Baseline and time-based model benchmark,persistence robust trend GAM state-space,PARTIAL,TRUE,FALSE,approved condition threshold and credible cycles,THRESHOLD_AND_CYCLE_BLOCKED,decision timing,3,Batch 8
+Cleaning Decision,Separated monitoring review and final action,transparent decomposed scoring,PARTIAL,TRUE,FALSE,network consequence economics feasibility,FINAL_ACTION_BLOCKED,optimization,3,Batch 9
+Economic Evaluation,Low base high documented scenarios,fuel cost CO2 NPV ROI,PARTIAL,FALSE,FALSE,approved/scenario-labelled inputs,ECONOMIC_INPUTS_BLOCKED,optimization,4,Batch 10
+Cleaning Optimization,Greedy/MILP only when inputs exist,net-benefit constrained selection,PARTIAL,FALSE,FALSE,benefits duration crew outage safety constraints,OPTIMIZATION_INPUTS_BLOCKED,dashboard decision level,4,Batch 10
+Dashboard Dataset,Generation-consistent canonical snapshot,backend outputs only,PARTIAL,TRUE,FALSE,validated upstream levels,LEVEL_D_BLOCKED,delivery,3,Batch 11
+Final Engineering Validation,Independent clean run and evidence scorecard,100-point evidence-cited verification,PARTIAL,TRUE,FALSE,all hard gates,END_TO_END_NOT_VALIDATED,plant use,5,Batch 12
