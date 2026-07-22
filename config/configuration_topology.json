@@ -1,0 +1,54 @@
+{
+  "schema_version": "1.0.0",
+  "evidence_status": "ENGINEER_CONFIRMED_DCS_EVIDENCE",
+  "evidence_sources": [
+    "Process Plant 3.png (DCS-derived process flow diagram)",
+    "Plant 3 TPU - Preheat Exchangers DCS screenshot",
+    "Engineer-provided operating and cleaning substitution rules"
+  ],
+  "crude_side": {
+    "cpht1_parallel_branches": ["E101AB", "E101CD", "E101EF", "E101G"],
+    "cpht1_downstream_sequence": ["E102", "D103"],
+    "cpht2_common_inlet_tag": "1TI225.pv",
+    "cpht2_branches": {
+      "BRANCH_1FI016": ["E106AB", "E107AB", "E108AB", "E109AB"],
+      "BRANCH_1FI017": ["E110ABC", "E111", "E112AB"],
+      "BRANCH_1FI015": ["E103AB", "E104", "E105AB"]
+    },
+    "terminal_to_furnace": ["E113A", "E112C"],
+    "cit_tag": "1TI116.pv"
+  },
+  "hot_stream_side": {
+    "residue_sequence": ["E113A", "E112C", "E112AB", "E108AB"],
+    "sequence_basis": "RESIDUE_SIDE_NOT_CRUDE_SIDE"
+  },
+  "grouped_equipment": {
+    "E101AB": ["E101A", "E101B"], "E101CD": ["E101C", "E101D"],
+    "E101EF": ["E101E", "E101F"], "E103AB": ["E103A", "E103B"],
+    "E105AB": ["E105A", "E105B"], "E106AB": ["E106A", "E106B"],
+    "E107AB": ["E107A", "E107B"], "E108AB": ["E108A", "E108B"],
+    "E109AB": ["E109A", "E109B"], "E110ABC": ["E110A", "E110B", "E110C"],
+    "E112AB": ["E112A", "E112B"]
+  },
+  "substitution_rules": {
+    "E101EF_OFF": {"substitute": "E101G", "direct_substitute_instrumentation": false},
+    "E113A_CLEANING": {"active_residue_hx": ["E112C", "E112AB", "E108AB"]},
+    "E112C_CLEANING": {"active_residue_hx": ["E113A", "E112AB", "E108AB"]},
+    "E112AB_CLEANING": {"active_residue_hx": ["E113A", "E112C", "E108AB"]}
+  },
+  "inference_rules": {
+    "total_crude_tag": "1fi005.pv",
+    "cpht1_branch_flow_tags": ["1FI007.pv", "1FI008.pv", "1FI009.pv"],
+    "cpht2_branch_flow_tags": ["1FI015.pv", "1FI016.pv", "1FI017.pv"],
+    "operating_total_flow_min_m3_h": 50.0,
+    "branch_operating_flow_min_m3_h": 15.0,
+    "flow_balance_relative_tolerance": 0.15,
+    "transition_buffer_records": 2
+  },
+  "limitations": [
+    "No valve-position or shell-selection history is available.",
+    "Grouped equipment is evaluated at group level; per-shell flow is not inferred.",
+    "Residue actual lineup remains unknown unless supported by event signals.",
+    "Cleaning events remain unconfirmed without maintenance records."
+  ]
+}
