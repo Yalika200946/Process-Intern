@@ -64,6 +64,7 @@ logs/
 reports/figures/
 reports/tables/
 reports/executed_notebooks/
+reports/runtime_snapshots/
 models/*
 !models/.gitkeep
 data/raw/
