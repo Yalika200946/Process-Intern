@@ -133,3 +133,19 @@ def sequential_temperature_propagation(inlet, stage_predictors):
     for predictor in stage_predictors:
         value = float(predictor(value)); outputs.append(value)
     return outputs
+
+
+def pilot_endpoint_counterfactual(actual_q_kw, actual_ua_kw_k, reference_ua_kw_k,
+                                  lmtd_c, mass_flow_kg_s, cp_kj_kg_k) -> dict:
+    values = (actual_q_kw, actual_ua_kw_k, reference_ua_kw_k, lmtd_c, mass_flow_kg_s, cp_kj_kg_k)
+    if not all(np.isfinite(value) for value in values) or min(reference_ua_kw_k, lmtd_c, mass_flow_kg_s, cp_kj_kg_k) <= 0:
+        return {"is_valid": False, "warning_code": "INVALID_COUNTERFACTUAL_INPUT"}
+    expected = float(reference_ua_kw_k * lmtd_c)
+    signed = expected - float(actual_q_kw)
+    recoverable = max(signed, 0.0)
+    gain = recoverable / (float(mass_flow_kg_s) * float(cp_kj_kg_k))
+    return {"is_valid": True, "q_expected_empirical_kw": expected,
+            "signed_duty_difference_kw": signed, "q_recoverable_kw": recoverable,
+            "pilot_endpoint_temperature_gain_c": gain,
+            "warning_code": "ABOVE_EMPIRICAL_REFERENCE" if signed < 0 else ("NO_RECOVERABLE_DUTY" if signed == 0 else ""),
+            "basis": "E104 empirical-reference restoration at measured pilot endpoint; not full CIT"}

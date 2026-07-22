@@ -6,7 +6,7 @@ from src.network.validation import (
     classify_configuration_response, classify_mix_node_regime, closure_case_kind, continuity_assessment,
     enthalpy_weighted_mix_temperature, evaluate_network_gates,
     flow_tolerance_sensitivity, segment_event_window,
-    screening_threshold_proposal, sequential_temperature_propagation,
+    pilot_endpoint_counterfactual, screening_threshold_proposal, sequential_temperature_propagation,
 )
 
 
@@ -82,3 +82,10 @@ def test_network_gate_logic_blocks_threshold_required():
 def test_network_gate_logic_allows_explicit_provisional_acceptance():
     result = evaluate_network_gates({"A": "PASS_PROVISIONAL", "B": "PASS_PROVISIONAL"})
     assert result["counterfactual_cit_can_start"]
+
+
+def test_pilot_endpoint_counterfactual_preserves_local_scope():
+    result = pilot_endpoint_counterfactual(900, 90, 100, 10, 100, 2.5)
+    assert result["q_recoverable_kw"] == pytest.approx(100)
+    assert result["pilot_endpoint_temperature_gain_c"] == pytest.approx(.4)
+    assert "not full CIT" in result["basis"]

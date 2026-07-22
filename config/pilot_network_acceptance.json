@@ -1,0 +1,20 @@
+{
+  "schema_version": "1.0.0",
+  "approval_status": "APPROVED_PROVISIONAL",
+  "approved_at": "2026-07-22",
+  "approver": "PROJECT_USER_ENGINEERING_REVIEW",
+  "source": "Explicit user confirmation after 1TI115 regime and threshold review",
+  "scope": "CPHT2_PILOT_VALIDATION_ONLY",
+  "mix_temperature_closure": {
+    "mae_limit_c": 5.0,
+    "absolute_bias_limit_c": 5.0,
+    "p90_absolute_error_limit_c": 10.0
+  },
+  "pilot_intermediate_node": {"mae_limit_c": 5.0, "absolute_bias_limit_c": 5.0},
+  "pilot_branch_outlet": {"mae_limit_c": 10.0, "absolute_bias_limit_c": 10.0},
+  "limitations": [
+    "Acceptance is provisional and does not validate the full CPHT network.",
+    "Acceptance does not confirm clean state, fouling, cleaning, or full CIT recovery.",
+    "E105AB and terminal-to-CIT propagation remain outside the validated pilot endpoint."
+  ]
+}
