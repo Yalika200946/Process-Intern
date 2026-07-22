@@ -31,3 +31,32 @@ The current fast-track pipeline and its accepted canonical cold-side calculation
 
 The machine-readable master gap matrix is `config/master_implementation_gap_matrix.csv`.
 
+## SmartPM conceptual-benchmark update
+
+HTRI SmartPM material is used only as a conceptual benchmark. This project does not copy proprietary algorithms, branding, interface designs, or undocumented equations, and does not claim equivalent commercial-digital-twin capability.
+
+The target dependency path is now:
+
+1. Business requirements.
+2. Data inventory and tag mapping.
+3. Data ingestion.
+4. Data quality.
+5. Time alignment and operating modes.
+6. Configuration-state model.
+7. Data reconciliation.
+8. Crude-property calculation.
+9. HX thermal performance.
+10. Reference or confirmed-clean baseline.
+11. Fouling-resistance estimation.
+12. Dynamic fouling model benchmark.
+13. Cleaning-event and cycle analysis.
+14. HX-CIT association.
+15. Network model and validation.
+16. Counterfactual cleaning benefit.
+17. Furnace and economic consequence.
+18. Forecast, ranking, and optimization.
+19. Dashboard and independent end-to-end verification.
+
+Reconciliation preserves raw measurements and writes separate `MEASURED`, `CALCULATED`, `INFERRED`, `RECONCILED`, `ASSUMED`, and `UNAVAILABLE` values. A reconciliation result cannot open an inverse-fouling or network gate unless identifiability, geometry, configuration, uncertainty, and balance residuals pass their own acceptance criteria.
+
+Current permitted scope is a provisional CPHT-2 branch-flow and measured-mix pilot. Full-network reconciliation, rigorous fouling resistance, future-date benefit, and schedule optimization remain blocked by the existing hard gates.

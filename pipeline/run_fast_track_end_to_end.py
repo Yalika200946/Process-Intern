@@ -2,7 +2,7 @@
 from pathlib import Path
 import json,os,subprocess,sys,time
 ROOT=Path(__file__).resolve().parents[1]
-SCRIPTS=["run_mvp_real_data.py","audit_batch1_formula_units.py","build_mvp_coverage_outputs.py","explore_empirical_relative_performance.py","analyze_signal_inferred_cleaning.py","analyze_configuration_states.py","validate_cpht2_mix_and_pilot.py","review_mix_node_regimes.py","run_pilot_counterfactual.py","screen_hx_cit_relationships.py","assess_fast_track_network.py","analyze_f101_consequence.py","build_batch2_validity_masks.py","run_batch3_condition_cycles.py","forecast_empirical_performance.py","build_batch4_model_benchmarks.py","close_batch5_network_gate.py","build_fast_track_decision_support.py","run_critical_correction_batch.py","audit_calculation_base_evidence.py","build_delivery_sprint.py"]
+SCRIPTS=["run_mvp_real_data.py","audit_batch1_formula_units.py","build_mvp_coverage_outputs.py","explore_empirical_relative_performance.py","analyze_signal_inferred_cleaning.py","analyze_configuration_states.py","validate_cpht2_mix_and_pilot.py","run_reconciliation_pilot.py","review_mix_node_regimes.py","run_pilot_counterfactual.py","screen_hx_cit_relationships.py","assess_fast_track_network.py","analyze_f101_consequence.py","build_batch2_validity_masks.py","run_batch3_condition_cycles.py","forecast_empirical_performance.py","build_batch4_model_benchmarks.py","close_batch5_network_gate.py","build_fast_track_decision_support.py","run_critical_correction_batch.py","audit_calculation_base_evidence.py","build_delivery_sprint.py"]
 def main():
     started=time.time();steps=[]
     for name in SCRIPTS:

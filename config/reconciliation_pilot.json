@@ -1,0 +1,16 @@
+{
+  "status": "ASSUMPTION",
+  "scope": "CPHT2_FLOW_AND_MIX_PILOT_ONLY",
+  "flow_uncertainty": {
+    "total_fraction": 0.01,
+    "branch_fraction": 0.02,
+    "minimum_m3_h": 1.0
+  },
+  "temperature_uncertainty_c": {
+    "measured_mix": 1.0,
+    "calculated_mix": 3.0
+  },
+  "normalized_residual_warning_threshold": 3.0,
+  "approval_status": "ENGINEERING_REVIEW_REQUIRED",
+  "notes": "Candidate uncertainty weights for reconciliation screening; not instrument-calibration accuracy."
+}
