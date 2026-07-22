@@ -28,6 +28,9 @@ def _result_fields(result, prefix):
     warnings = list(result.warnings or ())
     valid = bool(quality.get("is_valid", result.value is not None))
     return {f"{prefix}_value": result.value, f"{prefix}_unit": result.unit,
+            f"{prefix}_basis": result.basis, f"{prefix}_data_kind": result.data_kind,
+            f"{prefix}_confidence": result.confidence, f"{prefix}_approval_status": result.approval_status,
+            f"{prefix}_assumptions": "|".join(warnings),
             f"{prefix}_valid": valid,
             f"{prefix}_warning_code": quality.get("warning_code", "|".join(warnings)),
             f"{prefix}_reason": quality.get("reason", " ".join(warnings))}
@@ -53,6 +56,7 @@ def calculate_physics(states, hx, config, crude):
                   "data_available": bool(row.data_available),
                   "quality_warning_code": row.quality_warning_code,
                   "quality_reason": row.quality_reason,
+                  "data_kind": row.data_kind,
                   "cold_flow_m3_h": row.cold_flow, "cold_in_c": row.cold_in,
                   "cold_out_c": row.cold_out, "hot_in_c": row.hot_in,
                   "hot_out_c": row.hot_out, "hot_in_data_kind": row.hot_in_data_kind,
@@ -63,12 +67,20 @@ def calculate_physics(states, hx, config, crude):
                   "q_hot_warning_code": "MISSING_APPROVED_HOT_STREAM_PROPERTIES",
                   "delta_p_status": "UNAVAILABLE",
                   "delta_p_warning_code": "NO_CONFIRMED_HX_INLET_OUTLET_PRESSURE_PAIR"}
+        record.update({"cold_delta_t_c": row.cold_out-row.cold_in,
+                       "hot_delta_t_c": row.hot_in-row.hot_out,
+                       "terminal_delta_t_1_c": row.hot_in-row.cold_out,
+                       "terminal_delta_t_2_c": row.hot_out-row.cold_in,
+                       "four_temperature_valid": bool(row.hot_in>row.hot_out and row.cold_out>row.cold_in and row.hot_in>row.cold_out and row.hot_out>row.cold_in)})
         if not row.operating_valid or not np.isfinite(row.SG_15_6C):
             reason = "Record is not operating-valid." if not row.operating_valid else "Crude SG is unavailable for this date."
             code = "INVALID_OPERATING_RECORD" if not row.operating_valid else "MISSING_CRUDE_PROPERTY"
             for name, unit in (("mass_flow", "kg/s"), ("q_cold", "kW"),
                                ("lmtd", "degC"), ("ua", "kW/K")):
                 record.update({f"{name}_value": None, f"{name}_unit": unit,
+                               f"{name}_basis": "canonical calculation unavailable",
+                               f"{name}_data_kind": "UNAVAILABLE", f"{name}_confidence": "NONE",
+                               f"{name}_approval_status": "UNAVAILABLE", f"{name}_assumptions": "",
                                f"{name}_valid": False, f"{name}_warning_code": code,
                                f"{name}_reason": reason})
             record.update({"cp_kj_kg_k": None, "density_kg_m3": None,
@@ -93,6 +105,9 @@ def calculate_physics(states, hx, config, crude):
             for name, unit in (("mass_flow", "kg/s"), ("q_cold", "kW"),
                                ("lmtd", "degC"), ("ua", "kW/K")):
                 record.update({f"{name}_value": None, f"{name}_unit": unit,
+                               f"{name}_basis": "canonical calculation invalid",
+                               f"{name}_data_kind": "UNAVAILABLE", f"{name}_confidence": "NONE",
+                               f"{name}_approval_status": "UNAVAILABLE", f"{name}_assumptions": "",
                                f"{name}_valid": False, f"{name}_warning_code": "CANONICAL_CALCULATION_INVALID",
                                f"{name}_reason": str(exc)})
             record.update({"cp_kj_kg_k": None, "density_kg_m3": None,

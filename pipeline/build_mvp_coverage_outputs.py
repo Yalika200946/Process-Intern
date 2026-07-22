@@ -244,6 +244,20 @@ def plot_performance_comparison(summary: pd.DataFrame, output: Path):
     fig.tight_layout(); fig.savefig(output / "hx_performance_median_iqr.png", dpi=140, bbox_inches="tight"); plt.close(fig)
 
 
+def plot_temperature_validity(summary:pd.DataFrame,output:Path):
+    columns=[c for c in summary if c.endswith("_pct")];data=summary.set_index("hx_id")[columns]
+    fig,ax=plt.subplots(figsize=(11,6));im=ax.imshow(data,aspect="auto",vmin=0,vmax=100,cmap="RdYlGn");ax.set_yticks(range(len(data)),data.index);ax.set_xticks(range(len(columns)),[c.replace("_pct","") for c in columns],rotation=25,ha="right");ax.set_title("Four-temperature relationship validity coverage");fig.colorbar(im,ax=ax,label="Valid records (%)");fig.tight_layout();fig.savefig(output/"four_temperature_validity.png",dpi=140);plt.close(fig)
+
+
+def plot_operating_adjusted_residuals(physics:pd.DataFrame,output:Path):
+    directory=output/"operating_adjusted_residuals";directory.mkdir(parents=True,exist_ok=True);features=["cold_flow_m3_h","lmtd_value","cold_in_c","hot_in_c","sg_15_6c"]
+    for hx_id,g in physics.groupby("hx_id"):
+        frame=g[g.operating_valid & g.ua_valid][["timestamp","ua_w_m2_k",*features]].dropna().sort_values("timestamp")
+        if len(frame)<60:continue
+        x=frame[features];mean=x.mean();std=x.std().replace(0,1);design=np.c_[np.ones(len(x)),((x-mean)/std).to_numpy()];pen=np.eye(design.shape[1]);pen[0,0]=0;beta=np.linalg.solve(design.T@design+pen,design.T@frame.ua_w_m2_k.to_numpy());residual=frame.ua_w_m2_k.to_numpy()-design@beta
+        fig,ax=plt.subplots(figsize=(14,4));ax.plot(frame.timestamp,residual,lw=.7);ax.axhline(0,color="black",ls="--");ax.set(xlabel="Time (Asia/Bangkok)",ylabel="U residual (W/m2-K)",title=f"{hx_id} - exploratory operating-adjusted U residual");ax.grid(alpha=.2);fig.tight_layout();fig.savefig(directory/f"{hx_id}_ua_residual.png",dpi=140);plt.close(fig)
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--physics",type=Path,default=ROOT/"reports/tables/mvp_real_data/hx_physics_validation.csv");ap.add_argument("--states",type=Path,default=ROOT/"reports/tables/mvp_real_data/record_quality_states.csv");ap.add_argument("--mapping",type=Path,default=ROOT/"config/mvp_real_data_pilot.json");ap.add_argument("--settings",type=Path,default=ROOT/"config/mvp_relationship_review.json");args=ap.parse_args()
     physics=pd.read_csv(args.physics);physics["timestamp"]=pd.to_datetime(physics.timestamp,utc=True).dt.tz_convert("Asia/Bangkok");states=pd.read_csv(args.states);states["timestamp"]=pd.to_datetime(states.timestamp,utc=True).dt.tz_convert("Asia/Bangkok");mapping=json.loads(args.mapping.read_text(encoding="utf-8"));settings=json.loads(args.settings.read_text(encoding="utf-8"));metadata=pd.read_csv(ROOT/"reports/tables/mvp_real_data/source_tag_metadata.csv")
@@ -251,13 +265,13 @@ def main():
     dq,warnings=data_quality_summary(states);dq.to_csv(tables/"data_quality_summary.csv",index=False);warnings.to_csv(tables/"warning_code_summary.csv",index=False)
     consolidated_mapping(mapping,metadata).to_csv(tables/"tag_mapping_availability.csv",index=False)
     temporal, gaps = temporal_quality_audit(states, mapping["rules"]["long_gap_hours"]); temporal.to_csv(tables/"temporal_quality_summary.csv",index=False); gaps.to_csv(tables/"long_gap_records.csv",index=False)
-    temperature_validity(physics).to_csv(tables/"four_temperature_validity.csv",index=False)
+    temp_validity=temperature_validity(physics);temp_validity.to_csv(tables/"four_temperature_validity.csv",index=False)
     correlations=correlation_summary(physics,settings["minimum_paired_records"]);correlations.to_csv(tables/"relationship_correlations.csv",index=False)
     throughput,dist=throughput_summary(physics,settings);throughput.to_csv(tables/"ua_by_throughput_band.csv",index=False)
     method_recommendations(physics,correlations,settings).to_csv(tables/"baseline_method_review.csv",index=False)
     operating_model_screening(physics).to_csv(tables/"operating_adjusted_model_screening.csv",index=False)
     perf=performance_summary(physics);perf.to_csv(tables/"hx_performance_summary.csv",index=False)
-    plot_hx_outputs(physics,figures);plot_throughput(dist,figures);plot_performance_comparison(perf,figures)
+    plot_hx_outputs(physics,figures);plot_throughput(dist,figures);plot_performance_comparison(perf,figures);plot_temperature_validity(temp_validity,figures);plot_operating_adjusted_residuals(physics,figures)
     print(f"Completed feasible B/C/C2 reporting for {physics.hx_id.nunique()} HX.")
     print("Qhot, closure, differential pressure, and configuration stratification remain unavailable.")
 

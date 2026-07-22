@@ -79,6 +79,29 @@ def plot_screening(physics,cit,out):
         fig,axes=plt.subplots(1,2,figsize=(13,5));axes[0].scatter(v.ua_w_m2_k,v.measured_cit_c,s=8,alpha=.35);axes[0].set(xlabel="U (W/m2-K)",ylabel="Measured CIT (degC)")
         axes[1].plot(v.timestamp,v.measured_cit_c,label="Measured CIT",lw=.7);ax=axes[1].twinx();ax.plot(v.timestamp,v.ua_w_m2_k,color="tab:orange",label="Calculated U",lw=.6,alpha=.7);axes[1].set_ylabel("Measured CIT (degC)");ax.set_ylabel("U (W/m2-K)");axes[1].set_xlabel("Time (Asia/Bangkok)")
         fig.suptitle(f"{hx_id} - exploratory HX-CIT association (not cleaning benefit)");fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_screening.png",dpi=140,bbox_inches="tight");plt.close(fig)
+        fig,axes=plt.subplots(2,2,figsize=(12,9))
+        for ax,x,label in zip(axes.ravel(),["ua_w_m2_k","q_cold_value","cold_out_c","lmtd_value"],["U (W/m2-K)","Qcold (kW)","Crude outlet (degC)","LMTD (degC)"]):
+            pair=g[g.operating_valid & g.ua_valid][[x,"measured_cit_c"]].dropna();ax.scatter(pair[x],pair.measured_cit_c,s=8,alpha=.35);ax.set(xlabel=label,ylabel="Measured CIT (degC)");ax.grid(alpha=.2)
+        fig.suptitle(f"{hx_id} - exploratory CIT relationships (association only)");fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_multivariable.png",dpi=140);plt.close(fig)
+        fig,ax=plt.subplots(figsize=(9,5))
+        indexed=g.set_index("timestamp")
+        for x,label in [("ua_w_m2_k","U"),("q_cold_value","Qcold")]:
+            values=[indexed[x].corr(indexed.measured_cit_c.shift(-lag),method="spearman") for lag in range(-14,15)];ax.plot(range(-14,15),values,label=label)
+        ax.axvline(0,color="black",lw=.8);ax.set(xlabel="Lag (days; positive = HX signal leads CIT)",ylabel="Spearman correlation (-)",title=f"{hx_id} - lagged CIT screening");ax.legend();ax.grid(alpha=.2);fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_lag.png",dpi=140);plt.close(fig)
+        controls=["cold_flow_m3_h","sg_15_6c","cold_in_c","hot_in_c"];data=g[g.operating_valid & g.ua_valid][["ua_w_m2_k","measured_cit_c",*controls]].dropna()
+        if len(data)>=MINIMUM:
+            c=np.c_[np.ones(len(data)),data[controls].to_numpy()];rx=data.ua_w_m2_k.to_numpy()-c@np.linalg.lstsq(c,data.ua_w_m2_k.to_numpy(),rcond=None)[0];ry=data.measured_cit_c.to_numpy()-c@np.linalg.lstsq(c,data.measured_cit_c.to_numpy(),rcond=None)[0];fig,ax=plt.subplots(figsize=(7,5));ax.scatter(rx,ry,s=8,alpha=.35);ax.set(xlabel="U residual after controls (W/m2-K)",ylabel="CIT residual after controls (degC)",title=f"{hx_id} - partial relationship screening");ax.grid(alpha=.2);fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_partial.png",dpi=140);plt.close(fig)
+        features=["ua_w_m2_k","q_cold_value","lmtd_value","cold_flow_m3_h","hot_in_c","cold_in_c","sg_15_6c"];model=g[g.operating_valid & g.ua_valid][features+["measured_cit_c"]].dropna()
+        if len(model)>=MINIMUM:
+            split=int(len(model)*.8);train,test=model.iloc[:split],model.iloc[split:];mean=train[features].mean();std=train[features].std().replace(0,1);x=np.c_[np.ones(len(train)),((train[features]-mean)/std).to_numpy()];pen=np.eye(x.shape[1]);pen[0,0]=0;beta=np.linalg.solve(x.T@x+pen,x.T@train.measured_cit_c.to_numpy());pred=np.c_[np.ones(len(test)),((test[features]-mean)/std).to_numpy()]@beta;fig,ax=plt.subplots(figsize=(6,6));ax.scatter(test.measured_cit_c,pred,s=10,alpha=.5);lo=min(test.measured_cit_c.min(),pred.min());hi=max(test.measured_cit_c.max(),pred.max());ax.plot([lo,hi],[lo,hi],"k--");ax.set(xlabel="Measured CIT (degC)",ylabel="Predicted CIT (degC)",title=f"{hx_id} - chronological holdout diagnostics");ax.grid(alpha=.2);fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_model_diagnostics.png",dpi=140);plt.close(fig)
+
+
+def plot_relative_cit(relative,cit,out):
+    data=relative.merge(cit,on="timestamp",how="inner")
+    for hx_id,g in data.groupby("hx_id"):
+        pair=g[["relative_ua_empirical","measured_cit_c"]].dropna()
+        if len(pair)<MINIMUM:continue
+        fig,ax=plt.subplots(figsize=(7,5));ax.scatter(pair.relative_ua_empirical,pair.measured_cit_c,s=8,alpha=.35);ax.set(xlabel="Relative UA against empirical reference (-)",ylabel="Measured CIT (degC)",title=f"{hx_id} - exploratory relative performance vs CIT");ax.grid(alpha=.2);fig.tight_layout();fig.savefig(out/f"{hx_id}_cit_relative.png",dpi=140);plt.close(fig)
 
 
 def main():
@@ -88,5 +111,8 @@ def main():
     cit=pd.DataFrame({"timestamp":raw.timestamp,"measured_cit_c":pd.to_numeric(raw[tag],errors="coerce")});physics=pd.read_csv(args.physics);physics["timestamp"]=pd.to_datetime(physics.timestamp,utc=True).dt.tz_convert(cfg["dataset"]["timezone"])
     relationships,models=screen_relationships(physics,cit);tables=ROOT/"reports/tables/mvp_real_data/hx_cit_screening";figures=ROOT/"reports/figures/mvp_real_data/hx_cit_screening";tables.mkdir(parents=True,exist_ok=True)
     relationships.to_csv(tables/"hx_cit_relationships.csv",index=False);models.to_csv(tables/"hx_cit_model_validation.csv",index=False);pd.DataFrame([{"target_tag":tag,"target_unit":"degC","status":"EXPLORATORY","interpretation":"Association only; not cleaning benefit or network recovery."}]).to_csv(tables/"cit_target_register.csv",index=False);plot_screening(physics,cit,figures)
+    relative_path=ROOT/"reports/tables/mvp_real_data/empirical_relative_performance/relative_performance_timeseries.csv"
+    if relative_path.exists():
+        relative=pd.read_csv(relative_path);relative["timestamp"]=pd.to_datetime(relative.timestamp,utc=True).dt.tz_convert(cfg["dataset"]["timezone"]);plot_relative_cit(relative,cit,figures)
     print(relationships.status.value_counts().to_string())
 if __name__=="__main__":main()

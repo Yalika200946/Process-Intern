@@ -10,5 +10,6 @@ def main():
         if result.returncode:raise SystemExit(result.returncode)
     env=os.environ.copy();env["PYTEST_DISABLE_PLUGIN_AUTOLOAD"]="1";test=subprocess.run([sys.executable,"-m","pytest","-q"],cwd=ROOT,env=env);steps.append({"step":"full_tests","exit_code":test.returncode,"status":"VALIDATED" if test.returncode==0 else "BLOCKED"})
     if test.returncode:raise SystemExit(test.returncode)
-    subprocess.run([sys.executable,str(ROOT/"pipeline/build_fast_track_report.py")],cwd=ROOT,check=True);out=ROOT/"reports/tables/mvp_real_data/fast_track";out.mkdir(parents=True,exist_ok=True);(out/"run_execution_status.json").write_text(json.dumps({"command":"python pipeline/run_fast_track_end_to_end.py","elapsed_seconds":time.time()-started,"steps":steps},indent=2),encoding="utf-8")
+    out=ROOT/"reports/tables/mvp_real_data/fast_track";out.mkdir(parents=True,exist_ok=True);(out/"test_results.json").write_text(json.dumps({"status":"VALIDATED","exit_code":test.returncode,"command":"python -m pytest -q"},indent=2),encoding="utf-8")
+    subprocess.run([sys.executable,str(ROOT/"pipeline/build_fast_track_report.py")],cwd=ROOT,check=True);(out/"run_execution_status.json").write_text(json.dumps({"command":"python pipeline/run_fast_track_end_to_end.py","elapsed_seconds":time.time()-started,"steps":steps},indent=2),encoding="utf-8")
 if __name__=="__main__":main()

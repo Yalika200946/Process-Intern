@@ -65,6 +65,7 @@ def classify_hx_records(frame: pd.DataFrame, hx_id: str, hx: dict[str, Any],
     out = pd.DataFrame({"timestamp": frame["timestamp"], "hx_id": hx_id})
     if hx["status"] in {"UNAVAILABLE", "BLOCKED"}:
         out["data_available"] = False
+        out["data_kind"] = "UNAVAILABLE"
         out["operating_state"] = "UNAVAILABLE"
         out["operating_valid"] = False
         out["quality_warning_code"] = hx.get("unavailable_reason", hx.get("blocked_reason"))
@@ -78,6 +79,9 @@ def classify_hx_records(frame: pd.DataFrame, hx_id: str, hx: dict[str, Any],
         out[name] = mapped[name].to_numpy()
         out[f"{name}_data_kind"] = kinds[name]
     numeric = out[["cold_flow", "cold_in", "cold_out", "hot_in", "hot_out"]]
+    out["data_kind"] = ("UNAVAILABLE" if "UNAVAILABLE" in kinds.values() else
+                        "INFERRED" if "INFERRED" in kinds.values() else
+                        "CALCULATED" if "CALCULATED" in kinds.values() else "MEASURED")
     available = numeric.notna().all(axis=1) & np.isfinite(numeric).all(axis=1)
     temp_range = numeric[["cold_in", "cold_out", "hot_in", "hot_out"]].apply(
         lambda s: s.between(rules["temperature_min_c"], rules["temperature_max_c"])

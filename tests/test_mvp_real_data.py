@@ -29,6 +29,7 @@ def test_operating_states_are_rule_based_and_limited_to_contract():
     assert result.operating_state.tolist()==["SHUTDOWN","STARTUP","STARTUP","STEADY","STEADY"]
     assert set(result.operating_state)<=set(["SHUTDOWN","STARTUP","STEADY","TRANSIENT","INVALID_SENSOR","UNAVAILABLE"])
     assert result.operating_valid.tolist()==[False,False,False,True,True]
+    assert (result.data_kind=="MEASURED").all()
 
 
 def test_impossible_temperature_relationship_is_retained_and_invalid():
@@ -45,6 +46,7 @@ def test_blocked_and_unavailable_hx_return_explicit_unavailable_rows():
         assert (result.operating_state=="UNAVAILABLE").all()
         assert not result.operating_valid.any()
         assert (result.quality_warning_code=="TEST_REASON").all()
+        assert (result.data_kind=="UNAVAILABLE").all()
 
 
 def test_long_gap_and_flatline_are_explicitly_invalid():
