@@ -150,14 +150,47 @@ def method_recommendations(physics: pd.DataFrame, correlations: pd.DataFrame, se
         coverage=float(g.ua_valid.mean()); c=correlations[(correlations.hx_id==hx_id)&(correlations.y_variable=="ua_w_m2_k")]
         strongest=float(c[["pearson","spearman"]].abs().max().max()) if c[["pearson","spearman"]].notna().any().any() else None
         if coverage < settings["minimum_valid_coverage_for_method_review"]:
-            rec="INSUFFICIENT_VALID_COVERAGE"
+            rec="INSUFFICIENT_DATA"
         elif strongest is not None and strongest >= settings["strong_absolute_correlation"]:
-            rec="CONDITION_STRATIFIED_EMPIRICAL_REFERENCE_REVIEW"
+            rec="OPERATING_ADJUSTED_REFERENCE"
+        elif strongest is not None and strongest >= 0.30:
+            rec="STRATIFIED_REFERENCE"
         else:
-            rec="SIMPLE_EXPLICIT_WINDOW_MEDIAN_REVIEW"
+            rec="FIXED_EMPIRICAL_REFERENCE"
         rows.append({"hx_id":hx_id,"ua_valid_coverage":coverage,"strongest_absolute_relationship":strongest,
                      "method_recommendation":rec,"approval_status":"REVIEW_ONLY_NOT_A_CLEAN_BASELINE",
                      "reason":"Recommendation reflects operating relationships only; maintenance evidence remains required."})
+    return pd.DataFrame(rows)
+
+
+def operating_model_screening(physics: pd.DataFrame, minimum: int = 60) -> pd.DataFrame:
+    """Chronological Ridge screening; descriptive only, never a clean model."""
+    rows=[]
+    features=["cold_flow_m3_h","lmtd_value","cold_in_c","hot_in_c","sg_15_6c"]
+    for hx_id,g in physics.groupby("hx_id"):
+        valid=g[g.operating_valid & g.ua_valid].sort_values("timestamp").copy()
+        valid["time_days"]=(valid.timestamp-valid.timestamp.min()).dt.total_seconds()/86400
+        cols=features+["time_days"]
+        frame=valid[cols+["ua_w_m2_k"]].dropna()
+        if len(frame)<minimum:
+            rows.append({"hx_id":hx_id,"status":"PARTIAL","valid_sample_count":len(frame),
+                         "model":"RIDGE_SCREENING","reason":"INSUFFICIENT_COMPLETE_CASES"});continue
+        split=max(int(len(frame)*.8),1);train,test=frame.iloc[:split],frame.iloc[split:]
+        mean=train[cols].mean();std=train[cols].std().replace(0,1)
+        x=(train[cols]-mean)/std;y=train.ua_w_m2_k.to_numpy();design=np.c_[np.ones(len(x)),x.to_numpy()]
+        penalty=np.eye(design.shape[1]);penalty[0,0]=0
+        beta=np.linalg.solve(design.T@design+penalty,design.T@y)
+        xt=(test[cols]-mean)/std;pred=np.c_[np.ones(len(xt)),xt.to_numpy()]@beta
+        rmse=float(np.sqrt(np.mean((test.ua_w_m2_k.to_numpy()-pred)**2))) if len(test) else np.nan
+        scale=float(test.ua_w_m2_k.std()) if len(test)>1 else np.nan
+        row={"hx_id":hx_id,"status":"EXPLORATORY","valid_sample_count":len(frame),
+             "train_count":len(train),"test_count":len(test),"model":"RIDGE_SCREENING",
+             "holdout_rmse_w_m2_k":rmse,"holdout_rmse_over_test_std":rmse/scale if scale else np.nan,
+             "design_condition_number":float(np.linalg.cond(design)),
+             "multicollinearity_warning":bool(np.linalg.cond(design)>30),
+             "causal_interpretation_allowed":False}
+        row.update({f"coefficient_{name}":float(beta[i+1]) for i,name in enumerate(cols)})
+        rows.append(row)
     return pd.DataFrame(rows)
 
 
@@ -222,6 +255,7 @@ def main():
     correlations=correlation_summary(physics,settings["minimum_paired_records"]);correlations.to_csv(tables/"relationship_correlations.csv",index=False)
     throughput,dist=throughput_summary(physics,settings);throughput.to_csv(tables/"ua_by_throughput_band.csv",index=False)
     method_recommendations(physics,correlations,settings).to_csv(tables/"baseline_method_review.csv",index=False)
+    operating_model_screening(physics).to_csv(tables/"operating_adjusted_model_screening.csv",index=False)
     perf=performance_summary(physics);perf.to_csv(tables/"hx_performance_summary.csv",index=False)
     plot_hx_outputs(physics,figures);plot_throughput(dist,figures);plot_performance_comparison(perf,figures)
     print(f"Completed feasible B/C/C2 reporting for {physics.hx_id.nunique()} HX.")
