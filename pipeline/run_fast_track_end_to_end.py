@@ -2,7 +2,7 @@
 from pathlib import Path
 import json,os,subprocess,sys,time
 ROOT=Path(__file__).resolve().parents[1]
-SCRIPTS=["run_mvp_real_data.py","build_mvp_coverage_outputs.py","explore_empirical_relative_performance.py","analyze_signal_inferred_cleaning.py","screen_hx_cit_relationships.py","assess_fast_track_network.py","analyze_f101_consequence.py","forecast_empirical_performance.py","build_fast_track_decision_support.py"]
+SCRIPTS=["run_mvp_real_data.py","build_mvp_coverage_outputs.py","explore_empirical_relative_performance.py","analyze_signal_inferred_cleaning.py","screen_hx_cit_relationships.py","assess_fast_track_network.py","analyze_f101_consequence.py","forecast_empirical_performance.py","build_fast_track_decision_support.py","run_critical_correction_batch.py"]
 def main():
     started=time.time();steps=[]
     for name in SCRIPTS:
