@@ -1,7 +1,7 @@
 """Review 1TI115 measurement regimes and propose, but never approve, error gates."""
 from __future__ import annotations
 from pathlib import Path
-import sys
+import json,sys
 import matplotlib.pyplot as plt
 import pandas as pd
 
@@ -22,8 +22,8 @@ def main():
     mix["year"]=mix.timestamp.dt.year
     yearly=mix.groupby("year").agg(records=("timestamp","size"),eligible_records=("mix_node_eligible","sum"),median_1ti115_c=("mix_measured_c","median"),median_predicted_mix_c=("mix_predicted_c","median")).reset_index();yearly["eligible_pct"]=100*yearly.eligible_records/yearly.records;yearly["status"]="PROVISIONAL"
     valid=mix[mix.closure_valid.astype(bool)]
-    proposal=screening_threshold_proposal(valid.residual_C)
-    threshold=pd.DataFrame([{"metric":"mix_temperature_closure","status":"PROVISIONAL",**proposal,"interpretation":"Suggested review gate only; not plant-approved and does not open counterfactual CIT."},{"metric":"pilot_intermediate_node","status":"PROVISIONAL","proposed_mae_limit_c":5.0,"proposed_absolute_bias_limit_c":5.0,"proposed_p90_limit_c":None,"approval_status":"ENGINEERING_REVIEW_REQUIRED","interpretation":"Review proposal based on current pilot scale."},{"metric":"pilot_branch_outlet","status":"PROVISIONAL","proposed_mae_limit_c":10.0,"proposed_absolute_bias_limit_c":10.0,"proposed_p90_limit_c":None,"approval_status":"ENGINEERING_REVIEW_REQUIRED","interpretation":"Review proposal based on current pilot scale."}])
+    proposal=screening_threshold_proposal(valid.residual_C);accepted=json.loads((ROOT/"config/pilot_network_acceptance.json").read_text(encoding="utf-8"))
+    threshold=pd.DataFrame([{"metric":"mix_temperature_closure","status":"PROVISIONAL",**proposal,"approval_status":accepted["approval_status"],"interpretation":"Approved provisionally for pilot validation only; does not validate full-network CIT."},{"metric":"pilot_intermediate_node","status":"PROVISIONAL","proposed_mae_limit_c":accepted["pilot_intermediate_node"]["mae_limit_c"],"proposed_absolute_bias_limit_c":accepted["pilot_intermediate_node"]["absolute_bias_limit_c"],"proposed_p90_limit_c":None,"approval_status":accepted["approval_status"],"interpretation":"Approved provisionally for pilot validation only."},{"metric":"pilot_branch_outlet","status":"PROVISIONAL","proposed_mae_limit_c":accepted["pilot_branch_outlet"]["mae_limit_c"],"proposed_absolute_bias_limit_c":accepted["pilot_branch_outlet"]["absolute_bias_limit_c"],"proposed_p90_limit_c":None,"approval_status":accepted["approval_status"],"interpretation":"Approved provisionally for pilot validation only."}])
     evidence=mix[["timestamp","mix_measured_c","mix_predicted_c","inlet_min_c","inlet_max_c","mix_node_regime","mix_node_eligible","closure_valid","warning_code","raw_value_preserved"]].copy();evidence["residue_lineup_evidence"]="NO_VALVE_HISTORY";evidence["network_use_status"]=evidence.mix_node_eligible.map({True:"ELIGIBLE_FOR_PROVISIONAL_MIX_REVIEW",False:"EXCLUDED_CONFIGURATION_OR_SENSOR_REGIME"})
     mix.to_csv(OUT/"mix_node_regime_timeline.csv",index=False);periods.to_csv(OUT/"mix_node_regime_periods.csv",index=False);yearly.to_csv(OUT/"mix_node_regime_by_year.csv",index=False);threshold.to_csv(OUT/"engineering_threshold_proposal.csv",index=False);evidence.to_csv(OUT/"residue_mix_eligibility_timeline.csv",index=False)
     fig,ax=plt.subplots(figsize=(15,5));ax.plot(mix.timestamp,mix.mix_measured_c,label="1TI115 measured",lw=.7);ax.plot(mix.timestamp,mix.mix_predicted_c,label="Predicted branch mix",lw=.7);bad=~mix.mix_node_eligible;ax.scatter(mix.loc[bad,"timestamp"],mix.loc[bad,"mix_measured_c"],s=5,color="red",label="Excluded regime");ax.set(xlabel="Time",ylabel="Temperature (degC)",title="1TI115 measurement-regime review");ax.legend();ax.grid(alpha=.2);fig.tight_layout();fig.savefig(FIG/"1ti115_regime_timeline.png",dpi=140);plt.close(fig)
