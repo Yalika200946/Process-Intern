@@ -3,10 +3,10 @@ import pandas as pd
 import pytest
 
 from src.network.validation import (
-    classify_configuration_response, closure_case_kind, continuity_assessment,
+    classify_configuration_response, classify_mix_node_regime, closure_case_kind, continuity_assessment,
     enthalpy_weighted_mix_temperature, evaluate_network_gates,
     flow_tolerance_sensitivity, segment_event_window,
-    sequential_temperature_propagation,
+    screening_threshold_proposal, sequential_temperature_propagation,
 )
 
 
@@ -33,6 +33,17 @@ def test_flow_tolerances_are_screening_not_approved_limits():
 def test_inferred_and_measured_closure_cases_are_separate():
     assert closure_case_kind(["MEASURED", "MEASURED"]) == "FULLY_MEASURED"
     assert closure_case_kind(["MEASURED", "INFERRED"]) == "CONTAINS_INFERRED_OR_CALCULATED_INPUT"
+
+
+def test_mix_node_regime_preserves_inconsistent_measurement():
+    assert classify_mix_node_regime(40, 220, 240) == "MIX_NODE_LOW_TEMPERATURE_INCONSISTENT"
+    assert classify_mix_node_regime(230, 220, 240) == "MIX_NODE_PHYSICALLY_CONSISTENT"
+
+
+def test_threshold_proposal_requires_engineering_review():
+    result = screening_threshold_proposal([1.0] * 100)
+    assert result["status"] == "PROVISIONAL"
+    assert result["approval_status"] == "ENGINEERING_REVIEW_REQUIRED"
 
 
 def test_shared_tag_continuity_is_not_independent():

@@ -42,6 +42,29 @@ def closure_case_kind(data_kinds) -> str:
     return "CONTAINS_INFERRED_OR_CALCULATED_INPUT"
 
 
+def classify_mix_node_regime(measured, inlet_min, inlet_max, uncertainty_c: float = 3.0) -> str:
+    values = (measured, inlet_min, inlet_max)
+    if not all(np.isfinite(value) for value in values):
+        return "MIX_NODE_INPUT_INVALID"
+    if measured < inlet_min - uncertainty_c:
+        return "MIX_NODE_LOW_TEMPERATURE_INCONSISTENT"
+    if measured > inlet_max + uncertainty_c:
+        return "MIX_NODE_HIGH_TEMPERATURE_INCONSISTENT"
+    return "MIX_NODE_PHYSICALLY_CONSISTENT"
+
+
+def screening_threshold_proposal(errors, *, minimum_records: int = 100) -> dict:
+    err = pd.to_numeric(pd.Series(errors), errors="coerce").dropna()
+    if len(err) < minimum_records:
+        return {"status": "INSUFFICIENT_DATA", "valid_records": len(err)}
+    absolute = err.abs()
+    return {"status": "PROVISIONAL", "valid_records": len(err),
+            "observed_mae_c": float(absolute.mean()), "observed_bias_c": float(err.mean()),
+            "observed_p90_absolute_error_c": float(absolute.quantile(.9)),
+            "proposed_mae_limit_c": 5.0, "proposed_absolute_bias_limit_c": 5.0,
+            "proposed_p90_limit_c": 10.0, "approval_status": "ENGINEERING_REVIEW_REQUIRED"}
+
+
 def continuity_assessment(upstream_tag: str | None, downstream_tag: str | None,
                           upstream_values=None, downstream_values=None) -> dict:
     if not upstream_tag or not downstream_tag:
