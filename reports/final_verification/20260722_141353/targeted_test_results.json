@@ -1,0 +1,5 @@
+﻿{
+    "command":  "python -m pytest targeted engineering tests -q",
+    "exit_code":  0,
+    "status":  "PASSED"
+}

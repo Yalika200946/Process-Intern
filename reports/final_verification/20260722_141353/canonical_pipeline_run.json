@@ -1,0 +1,7 @@
+﻿{
+    "command":  "python pipeline/run_fast_track_end_to_end.py",
+    "started_at":  "2026-07-22T14:16:06.0916050+07:00",
+    "ended_at":  "2026-07-22T14:29:59.7941270+07:00",
+    "elapsed_seconds":  833.70252199999993,
+    "exit_code":  0
+}
