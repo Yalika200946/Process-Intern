@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "records": [
+    {
+      "property_model": "WATSON_NELSON_LINEAR_CP_AND_THERMAL_EXPANSION_DENSITY",
+      "source": "src/features/crude_properties.py; legacy project calculation basis",
+      "valid_temperature_range_c": [-20.0, 450.0],
+      "valid_sg_range": [0.5, 1.2],
+      "crude_basis": "daily SG at 15.6C",
+      "status": "PROVISIONAL",
+      "uncertainty": "UNQUANTIFIED",
+      "fallback_reason": "No approved crude-group or laboratory Cp/density model is available.",
+      "notes": "Cp is linear in temperature; analytic integral equals midpoint Cp times delta T. Range is a software guardrail, not an engineer-approved correlation range."
+    },
+    {
+      "property_model": "FIXED_PROPERTY_APPROXIMATION",
+      "source": "legacy reference only",
+      "valid_temperature_range_c": null,
+      "valid_sg_range": null,
+      "crude_basis": "none",
+      "status": "NOT_APPLICABLE",
+      "uncertainty": "UNQUANTIFIED",
+      "fallback_reason": "Not used by the current real-data pipeline.",
+      "notes": "Retained only as a comparison concept; it must not silently replace the canonical temperature-dependent model."
+    }
+  ]
+}

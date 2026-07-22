@@ -1,0 +1,15 @@
+stage,status,basis
+Raw Data,VALIDATED,Read-only source and canonical adapter
+Validated Data,VALIDATED,Quality and operating masks
+HX Performance,PROVISIONAL,Q/LMTD validated; apparent UA uses unapproved F
+Empirical Reference,PROVISIONAL,Four historical high-performance references
+Fouling Condition,EXPLORATORY,Relative performance is not confirmed fouling
+HX-CIT Screening,EXPLORATORY,Association only
+CPHT-2 Pilot Network,PROVISIONAL,Pilot gates pass explicitly approved provisional error thresholds
+Pilot Endpoint Counterfactual,EXPLORATORY,E104 outlet restoration only; empirical reference basis
+Pilot Counterfactual CIT,BLOCKED,E105AB and terminal propagation to measured CIT not validated
+F101 Consequence,PROVISIONAL,Physics duty; attributable fuel saving blocked
+Forecast,EXPLORATORY,Chronological benchmark; no approved action threshold
+Monitoring Decision,EXPLORATORY,Monitoring priority only
+Dashboard Snapshot,VALIDATED,Generation-consistent evidence-labeled snapshot
+Optimization,BLOCKED,Outside sprint and missing validated consequences

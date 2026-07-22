@@ -1,0 +1,17 @@
+{
+  "generation_id": "sprint-20260722T072945Z",
+  "banner": "PROVISIONAL / EXPLORATORY - NOT FOR DIRECT PLANT ACTION",
+  "artifacts": {
+    "data_quality": "cca693a29fa3650745ad6ae787ffd2eb5b20f06c131e6a12014d253da20bb1c2",
+    "hx_performance": "02487a79d2ce83a17f2418a9fee9654e031be5e177a3920c389e95131464a4ff",
+    "experimental_analytics": "2ea198a56d2fff2ce364012426df839a772e67fd68f2df2f1ffcd023b351e410"
+  },
+  "status": "VALIDATED",
+  "prohibited_claims": [
+    "confirmed fouling",
+    "counterfactual CIT recovery",
+    "guaranteed fuel saving",
+    "final cleaning action",
+    "ROI"
+  ]
+}

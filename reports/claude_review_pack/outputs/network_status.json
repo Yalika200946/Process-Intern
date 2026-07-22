@@ -1,0 +1,8 @@
+{
+  "network_status": "PILOT_NETWORK_READY_FOR_COUNTERFACTUAL",
+  "counterfactual_cit_can_start": true,
+  "failed_or_blocked_gates": [],
+  "primary_pilot_branch": "BRANCH_1FI015",
+  "backup_pilot_branch": "BRANCH_1FI016",
+  "full_network_validated": false
+}

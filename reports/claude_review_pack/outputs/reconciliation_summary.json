@@ -1,0 +1,21 @@
+{
+  "stage": "DATA_RECONCILIATION_PILOT",
+  "status": "PROVISIONAL",
+  "configuration_scope": "CPHT2_STATIC_MEMBERSHIP_NO_VALVE_CONFIRMATION",
+  "flow_reconciled_timestamps": 1953,
+  "mix_reconciled_timestamps": 787,
+  "flow_median_absolute_normalized_residual": 0.9167432091958019,
+  "mix_median_absolute_normalized_residual": 0.4096805817750409,
+  "mix_pct_above_warning_threshold": 4.701397712833545,
+  "measured_values_preserved": true,
+  "uncertainty_status": "ASSUMPTION",
+  "approval_status": "ENGINEERING_REVIEW_REQUIRED",
+  "full_network_validated": false,
+  "downstream_inverse_fouling_allowed": false,
+  "blockers": [
+    "CANDIDATE_UNCERTAINTY_WEIGHTS",
+    "STATIC_CONFIGURATION_ONLY",
+    "VERIFIED_AREA_F_UNAVAILABLE",
+    "HOT_SIDE_BALANCE_UNAVAILABLE"
+  ]
+}

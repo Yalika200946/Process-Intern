@@ -1,0 +1,23 @@
+{
+  "schema_version": "1.0.0",
+  "source_inventory": "reports/tables/mvp_real_data/dependency_closure/calculation_base_inventory.csv",
+  "records": [
+    {"hx_id":"E101AB","configured_area_m2":1433,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"Calculation base example; active-shell basis unverified"},
+    {"hx_id":"E101CD","configured_area_m2":469,"area_status":"MAPPING_AMBIGUOUS","F_value":1.0,"F_status":"ASSUMPTION","basis":"C/D grouped versus individual shell basis unresolved"},
+    {"hx_id":"E101EF","configured_area_m2":480,"area_status":"MAPPING_AMBIGUOUS","F_value":1.0,"F_status":"ASSUMPTION","basis":"E/F grouped versus substitution basis unresolved"},
+    {"hx_id":"E101G","configured_area_m2":null,"area_status":"NOT_USABLE","F_value":null,"F_status":"UNAVAILABLE","basis":"No direct online performance mapping"},
+    {"hx_id":"E102","configured_area_m2":289,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"Example calculation only"},
+    {"hx_id":"E103AB","configured_area_m2":614,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"Example calculation contains temperature anomaly"},
+    {"hx_id":"E104","configured_area_m2":678,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"Example calculation contains upstream anomaly"},
+    {"hx_id":"E105AB","configured_area_m2":1364,"area_status":"MAPPING_AMBIGUOUS","F_value":1.0,"F_status":"ASSUMPTION","basis":"Hot-in tag and grouped-shell basis unresolved"},
+    {"hx_id":"E106AB","configured_area_m2":620,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"Example calculation only"},
+    {"hx_id":"E107AB","configured_area_m2":480,"area_status":"EXAMPLE_AREA_ONLY","F_value":1.0,"F_status":"ASSUMPTION","basis":"Area A/Train header; per-shell versus active-train basis unapproved"},
+    {"hx_id":"E108AB","configured_area_m2":892,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"No verified design-area evidence"},
+    {"hx_id":"E109AB","configured_area_m2":762,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"No verified design-area evidence"},
+    {"hx_id":"E110ABC","configured_area_m2":1680,"area_status":"CONFIGURATION_DEPENDENT","F_value":1.0,"F_status":"ASSUMPTION","basis":"Three-shell active-area basis unverified"},
+    {"hx_id":"E111","configured_area_m2":139,"area_status":"NOT_USABLE","F_value":1.0,"F_status":"ASSUMPTION","basis":"No verified design-area evidence"},
+    {"hx_id":"E112AB","configured_area_m2":1318,"area_status":"CONFIGURATION_DEPENDENT","F_value":1.0,"F_status":"ASSUMPTION","basis":"Shell and residue-substitution basis unverified"},
+    {"hx_id":"E112C","configured_area_m2":null,"area_status":"MAPPING_AMBIGUOUS","F_value":null,"F_status":"UNAVAILABLE","basis":"Topology and terminal-temperature conflict"},
+    {"hx_id":"E113A","configured_area_m2":852,"area_status":"CONFIGURATION_DEPENDENT","F_value":1.0,"F_status":"ASSUMPTION","basis":"Alternate terminal with E112C; active configuration unverified"}
+  ]
+}

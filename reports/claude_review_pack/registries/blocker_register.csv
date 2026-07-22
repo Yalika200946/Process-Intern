@@ -1,0 +1,8 @@
+capability,status,smallest_missing_input
+VERIFIED_U,BLOCKED,Approved transferable area and F
+CONFIRMED_FOULING,BLOCKED,Maintenance/clean-state evidence
+PILOT_COUNTERFACTUAL_CIT,BLOCKED,Acceptable mix and propagation error thresholds
+FULL_NETWORK_CIT,BLOCKED,Pilot gate plus time-varying residue lineup
+HX_FUEL_SAVING,BLOCKED,Network attribution and approved LHV/efficiency
+FINAL_CLEANING_PRIORITY,BLOCKED,Confirmed condition/consequence/feasibility/economics
+OPTIMIZATION,BLOCKED,Outside sprint; operational constraints incomplete

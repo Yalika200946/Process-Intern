@@ -1,0 +1,5 @@
+dashboard_level,status,allowed_visualizations,prohibited_or_blocked
+A Data Quality,VALIDATED,availability; missingness; flatline; operating state; valid coverage,None
+B HX Performance,PROVISIONAL,temperatures; Q; LMTD; apparent UA; warnings,Verified U unavailable
+C Experimental Analytics,EXPLORATORY,empirical reference; relative performance; HX-CIT screening; pilot; furnace; forecast,Permanent non-action banner required
+D Cleaning Decision,BLOCKED,None,No confirmed condition/network benefit/economics
