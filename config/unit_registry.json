@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "status": "VALIDATED",
+  "records": [
+    {"quantity":"temperature","canonical_unit":"degC","difference_equivalent_unit":"K","conversion":"K difference equals degC difference","status":"VALIDATED"},
+    {"quantity":"volumetric_flow","canonical_unit":"m3/h","conversion":"source unit retained","status":"VALIDATED"},
+    {"quantity":"density","canonical_unit":"kg/m3","conversion":"none","status":"PROVISIONAL"},
+    {"quantity":"mass_flow","canonical_unit":"kg/s","conversion":"m3/h * kg/m3 / 3600","status":"VALIDATED"},
+    {"quantity":"heat_capacity","canonical_unit":"kJ/kg-K","conversion":"none","status":"PROVISIONAL"},
+    {"quantity":"specific_enthalpy_change","canonical_unit":"kJ/kg","conversion":"integral Cp dT","status":"PROVISIONAL"},
+    {"quantity":"heat_duty","canonical_unit":"kW","conversion":"kg/s * kJ/kg = kJ/s = kW","status":"VALIDATED"},
+    {"quantity":"conductance_UA","canonical_unit":"kW/K","conversion":"Q/(F*LMTD)","status":"PROVISIONAL"},
+    {"quantity":"heat_transfer_coefficient_U","canonical_unit":"W/m2-K","conversion":"UA[kW/K]*1000/area[m2]","status":"BLOCKED"},
+    {"quantity":"area","canonical_unit":"m2","conversion":"ft2 * 0.09290304 when source is explicit","status":"BLOCKED"},
+    {"quantity":"effectiveness","canonical_unit":"fraction","conversion":"none","status":"IMPLEMENTED_NOT_VALIDATED"},
+    {"quantity":"energy_closure","canonical_unit":"fraction","conversion":"none","status":"IMPLEMENTED_NOT_VALIDATED"},
+    {"quantity":"local_equivalent_temperature_gain","canonical_unit":"K","conversion":"kW/(kg/s*kJ/kg-K)","status":"PROVISIONAL"}
+  ]
+}

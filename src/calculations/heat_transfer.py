@@ -45,3 +45,31 @@ def calculate_ua(duty_kw: float, lmtd_c: float, correction_factor: float = 1.0) 
         ))),
         quality={"is_valid": warning_code is None, "warning_code": warning_code, "reason": reason},
     )
+
+
+def calculate_effectiveness(duty_kw: float, cold_capacity_rate_kw_k: float,
+                            hot_capacity_rate_kw_k: float, hot_in_c: float,
+                            cold_in_c: float) -> CalculationResult:
+    """Calculate HX effectiveness only when both capacity rates are credible."""
+    values = tuple(float(value) for value in (
+        duty_kw, cold_capacity_rate_kw_k, hot_capacity_rate_kw_k, hot_in_c, cold_in_c
+    ))
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("Effectiveness inputs must be finite")
+    if cold_capacity_rate_kw_k <= 0 or hot_capacity_rate_kw_k <= 0:
+        raise ValueError("Both capacity rates must be positive")
+    driving = hot_in_c - cold_in_c
+    if driving <= 0:
+        raise ValueError("Hot inlet temperature must exceed cold inlet temperature")
+    q_max = min(cold_capacity_rate_kw_k, hot_capacity_rate_kw_k) * driving
+    value = duty_kw / q_max
+    valid = 0.0 <= value <= 1.0
+    reason = None if valid else "Effectiveness lies outside physical bounds; inputs or state require review."
+    return CalculationResult(
+        value=value, unit="fraction", basis="Q / (C_min x (T_hot,in - T_cold,in))",
+        data_kind="CALCULATED", confidence="LOW", approval_status="CANDIDATE",
+        source_columns=("Q_kW", "C_cold_kW_K", "C_hot_kW_K", "T_hot_in_C", "T_cold_in_C"),
+        warnings=() if reason is None else (reason,),
+        quality={"is_valid": valid, "warning_code": None if valid else "EFFECTIVENESS_OUT_OF_BOUNDS",
+                 "reason": reason, "q_max_kw": q_max},
+    )

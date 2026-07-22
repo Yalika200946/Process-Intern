@@ -78,6 +78,54 @@ def calculate_cold_side_heat_duty(
     )
 
 
+def calculate_heat_duty_from_enthalpy(
+    mass_flow_kg_s: float,
+    specific_enthalpy_change_kj_kg: float,
+    *,
+    stream_label: str = "unspecified",
+) -> CalculationResult:
+    """Calculate signed stream duty from mass flow and an enthalpy change."""
+    values = (float(mass_flow_kg_s), float(specific_enthalpy_change_kj_kg))
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("Enthalpy-duty inputs must be finite")
+    if mass_flow_kg_s < 0:
+        raise ValueError("Mass flow must be non-negative")
+    warning_code = None
+    reason = None
+    if mass_flow_kg_s == 0:
+        warning_code, reason = "ZERO_MASS_FLOW", "Zero mass flow; verify stream operating state."
+    elif specific_enthalpy_change_kj_kg < 0:
+        warning_code, reason = "NEGATIVE_ENTHALPY_CHANGE", "Signed negative duty is preserved."
+    return CalculationResult(
+        value=float(mass_flow_kg_s) * float(specific_enthalpy_change_kj_kg),
+        unit="kW", basis="mass flow [kg/s] x specific enthalpy change [kJ/kg]",
+        data_kind="CALCULATED", confidence="MEDIUM", approval_status="CANDIDATE",
+        source_columns=(f"{stream_label}_mass_flow_kg_s", f"{stream_label}_enthalpy_change_kj_kg"),
+        warnings=() if reason is None else (reason,),
+        quality={"is_valid": warning_code is None, "warning_code": warning_code,
+                 "reason": reason, "stream_label": stream_label},
+    )
+
+
+def reconcile_heat_duties(q_cold_kw: float, q_hot_kw: float,
+                           cold_uncertainty_kw: float, hot_uncertainty_kw: float) -> CalculationResult:
+    """Inverse-variance reconciliation; requires explicit positive uncertainties."""
+    values = tuple(float(value) for value in (q_cold_kw, q_hot_kw, cold_uncertainty_kw, hot_uncertainty_kw))
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError("Duty-reconciliation inputs must be finite")
+    if cold_uncertainty_kw <= 0 or hot_uncertainty_kw <= 0:
+        raise ValueError("Duty uncertainties must be positive")
+    wc, wh = 1.0 / cold_uncertainty_kw**2, 1.0 / hot_uncertainty_kw**2
+    return CalculationResult(
+        value=(wc * q_cold_kw + wh * q_hot_kw) / (wc + wh), unit="kW",
+        basis="inverse-variance weighted reconciliation of credible cold and hot duties",
+        data_kind="CALCULATED", confidence="LOW", approval_status="CANDIDATE",
+        source_columns=("Q_cold_kW", "Q_hot_kW", "sigma_cold_kW", "sigma_hot_kW"),
+        warnings=("Use only when both duties and uncertainty bases are credible.",),
+        quality={"is_valid": True, "warning_code": None},
+    )
+
+
 def calculate_q_norm(duty_kw: float, total_charge_m3_h: float) -> CalculationResult:
     if not math.isfinite(float(duty_kw)) or not math.isfinite(float(total_charge_m3_h)):
         raise ValueError("Q_norm inputs must be finite")
