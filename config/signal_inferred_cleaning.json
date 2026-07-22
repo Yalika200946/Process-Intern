@@ -49,5 +49,10 @@
     "recovery_threshold_fraction": 0.05,
     "recovery_iqr_max": 0.15
   },
+  "cross_hx_review": {
+    "cluster_days": 3,
+    "multi_hx_process_signal_minimum": 3,
+    "interpretation": "Coincident recovery signals are grouped to prevent one plant disturbance being counted as multiple independent cleaning actions."
+  },
   "interpretation": "Signal-inferred thermal recovery candidate only. No maintenance record is available, so neither cleaning nor a clean state is confirmed."
 }

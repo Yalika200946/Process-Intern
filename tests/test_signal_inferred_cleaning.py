@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from src.events.cleaning_detection import (
-    detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
+    consolidate_cross_hx_events, detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
     review_hx_tam_recovery,
 )
 
@@ -136,3 +136,36 @@ def test_tam_hx_review_reports_insufficient_valid_data():
              "plant_tam_status": "SIGNAL_DERIVED_TAM"}
     result = review_hx_tam_recovery(frame, event, comparison_window_days=20)
     assert result["tam_recovery_status"] == "TAM_ASSOCIATED_INSUFFICIENT_DATA"
+
+
+def test_cross_hx_signals_are_one_process_group_not_confirmed_cleanings():
+    events = pd.DataFrame({
+        "hx_id": ["A", "B", "C"],
+        "event_timestamp": pd.to_datetime(["2024-01-01", "2024-01-02", "2024-01-03"], utc=True),
+        "event_status": ["CLEANING_CANDIDATE"] * 3,
+    })
+    reviewed, groups = consolidate_cross_hx_events(events)
+    assert len(groups) == 1
+    assert groups.iloc[0].group_classification == "MULTI_HX_PROCESS_DISTURBANCE"
+    assert (reviewed.evidence_level == "PROCESS_CHANGE_LIKELY").all()
+    assert not reviewed.independent_cleaning_event_confirmed.any()
+
+
+def test_isolated_bypass_signal_retains_candidate_evidence_level():
+    events = pd.DataFrame({
+        "hx_id": ["E113A"], "event_timestamp": pd.to_datetime(["2024-01-01"], utc=True),
+        "event_status": ["BYPASS_OR_SWITCH_CANDIDATE"],
+    })
+    reviewed, groups = consolidate_cross_hx_events(events)
+    assert groups.iloc[0].group_classification == "INDIVIDUAL_HX_SIGNAL"
+    assert reviewed.iloc[0].evidence_level == "SHELL_SWITCH_OR_BYPASS_CANDIDATE"
+
+
+def test_rejected_signal_remains_rejected_inside_multi_hx_group():
+    events = pd.DataFrame({
+        "hx_id": ["A", "B", "C"],
+        "event_timestamp": pd.to_datetime(["2024-01-01"] * 3, utc=True),
+        "event_status": ["REJECTED_SIGNAL_EVENT", "CLEANING_CANDIDATE", "CLEANING_CANDIDATE"],
+    })
+    reviewed, _ = consolidate_cross_hx_events(events)
+    assert reviewed.loc[reviewed.hx_id == "A", "evidence_level"].iloc[0] == "REJECTED"

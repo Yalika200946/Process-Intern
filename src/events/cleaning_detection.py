@@ -130,6 +130,75 @@ def review_hx_tam_recovery(
     }
 
 
+def consolidate_cross_hx_events(
+    events: pd.DataFrame,
+    *,
+    cluster_days: int = 3,
+    multi_hx_process_signal_minimum: int = 3,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Group coincident HX signals without claiming one cleaning per HX."""
+    if events.empty:
+        return events.copy(), pd.DataFrame()
+    out = events.copy()
+    out["event_timestamp"] = pd.to_datetime(out.event_timestamp)
+    ordered = out.sort_values("event_timestamp")
+    group_number = 0
+    last_time = None
+    assignments = {}
+    for index, row in ordered.iterrows():
+        if last_time is None or row.event_timestamp - last_time > pd.Timedelta(days=cluster_days):
+            group_number += 1
+        assignments[index] = group_number
+        last_time = row.event_timestamp
+    out["event_group_number"] = pd.Series(assignments)
+    out["event_group_id"] = out.event_group_number.map(lambda value: f"SIGNAL_GROUP_{int(value):03d}")
+
+    group_rows = []
+    for group_id, group in out.groupby("event_group_id", sort=False):
+        hx_count = int(group.hx_id.nunique())
+        statuses = set(group.event_status)
+        if "TAM_ASSOCIATED_RECOVERY" in statuses:
+            classification = "PLANT_TAM_RESTART_SIGNAL"
+        elif hx_count >= multi_hx_process_signal_minimum:
+            classification = "MULTI_HX_PROCESS_DISTURBANCE"
+        elif hx_count == 2:
+            classification = "SHARED_PROCESS_OR_MAINTENANCE_SIGNAL"
+        else:
+            classification = "INDIVIDUAL_HX_SIGNAL"
+        group_rows.append({
+            "event_group_id": group_id,
+            "group_start": group.event_timestamp.min(), "group_end": group.event_timestamp.max(),
+            "hx_count": hx_count, "hx_ids": "|".join(sorted(group.hx_id.unique())),
+            "raw_signal_count": len(group),
+            "candidate_signal_count": int(group.event_status.isin([
+                "CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE", "TAM_ASSOCIATED_RECOVERY"
+            ]).sum()),
+            "group_classification": classification,
+            "confirmed_independent_cleaning_action_count": 0,
+            "cleaning_event_confirmed": False,
+            "warning_code": "CROSS_HX_GROUP_REQUIRES_ENGINEERING_REVIEW",
+        })
+    groups = pd.DataFrame(group_rows)
+    out = out.merge(groups[["event_group_id", "hx_count", "group_classification"]],
+                    on="event_group_id", how="left", suffixes=("", "_group"))
+
+    def evidence_level(row) -> str:
+        if row.event_status == "REJECTED_SIGNAL_EVENT":
+            return "REJECTED"
+        if row.group_classification == "MULTI_HX_PROCESS_DISTURBANCE":
+            return "PROCESS_CHANGE_LIKELY"
+        return {
+            "NOT_CLEANING_ELIGIBLE_MID_RUN": "INFEASIBLE_MID_RUN_SIGNAL",
+            "TAM_ASSOCIATED_RECOVERY": "TAM_ASSOCIATED_RECOVERY",
+            "BYPASS_OR_SWITCH_CANDIDATE": "SHELL_SWITCH_OR_BYPASS_CANDIDATE",
+            "CLEANING_CANDIDATE": "CLEANING_CANDIDATE",
+        }.get(row.event_status, "UNRESOLVED_SIGNAL")
+
+    out["evidence_level"] = out.apply(evidence_level, axis=1)
+    out["independent_cleaning_event_confirmed"] = False
+    return out.drop(columns="event_group_number"), groups
+
+
 def score_cleaning_event(*, tam_record=False, maintenance_record=False, stable_recovery=False,
                          configuration_change=False, process_change=False):
     score = 0

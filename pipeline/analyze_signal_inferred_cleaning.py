@@ -20,7 +20,7 @@ if str(ROOT) not in sys.path:
 
 from src.domain.bypass import BYPASS_CONFIG, feasibility_label
 from src.events.cleaning_detection import (
-    detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
+    consolidate_cross_hx_events, detect_plant_tam_windows, detect_signal_recoveries, matched_condition_review,
     review_hx_tam_recovery,
 )
 from src.validation.real_data import load_dcs_matrix, load_pilot_config, resolve_tag
@@ -34,6 +34,8 @@ def build_cycles(physics: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
     accepted = events[events.event_status.isin([
         "CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE", "TAM_ASSOCIATED_RECOVERY"
     ])].copy()
+    if "evidence_level" in accepted:
+        accepted = accepted[accepted.evidence_level != "PROCESS_CHANGE_LIKELY"]
     for hx_id, group in accepted.groupby("hx_id"):
         group = group.sort_values("event_timestamp")
         hx = physics[(physics.hx_id == hx_id) & physics.operating_valid & physics.ua_valid].copy()
@@ -60,14 +62,18 @@ def build_cycles(physics: pd.DataFrame, events: pd.DataFrame) -> pd.DataFrame:
 def annual_frequency_check(events: pd.DataFrame, config: dict, data_end) -> pd.DataFrame:
     guidance = config["engineering_guidance"]
     priority = set(guidance["high_review_priority_hx"])
-    eligible = events[
-        events.hx_id.isin(priority)
-        & (events.event_status != "TAM_ASSOCIATED_RECOVERY")
-        & (
-            events.event_status.isin(["CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"])
-            | (events.matched_review_status == "MATCHED_RECOVERY_PLAUSIBLE")
-        )
-    ].copy()
+    if "evidence_level" in events:
+        eligible = events[
+            events.hx_id.isin(priority)
+            & events.evidence_level.isin([
+                "CLEANING_CANDIDATE", "SHELL_SWITCH_OR_BYPASS_CANDIDATE"
+            ])
+        ].copy()
+    else:
+        eligible = events[
+            events.hx_id.isin(priority)
+            & events.event_status.isin(["CLEANING_CANDIDATE", "BYPASS_OR_SWITCH_CANDIDATE"])
+        ].copy()
     eligible["year"] = pd.to_datetime(eligible.event_timestamp).dt.year
     start_year = int(pd.to_datetime(events.event_timestamp).dt.year.min()) if not events.empty else pd.Timestamp(data_end).year
     end_year = pd.Timestamp(data_end).year
@@ -159,6 +165,25 @@ def main() -> None:
             ), axis=1,
         )
     tam_restart_dates = [str(value) for value in plant_tam.restart_from.dropna()]
+    crude_property = pd.read_csv(pilot_config["dataset"]["crude_properties_path"])
+    crude_property_dates = set(pd.to_datetime(crude_property["Date"], errors="coerce").dropna().dt.date)
+    tam_input_audit = []
+    for tam_event in plant_tam.to_dict("records"):
+        start = pd.Timestamp(tam_event["tam_start"])
+        pre_dates = pd.date_range(start - pd.Timedelta(days=tam_config["comparison_window_days"]),
+                                  start - pd.Timedelta(days=1), freq="D")
+        available = sum(value.date() in crude_property_dates for value in pre_dates)
+        tam_input_audit.append({
+            "tam_id": tam_event["tam_id"], "required_input": "SG_15_6C",
+            "review_period": "PRE_TAM", "period_start": pre_dates.min(), "period_end": pre_dates.max(),
+            "required_days": len(pre_dates), "available_days": available,
+            "coverage_fraction": available / len(pre_dates),
+            "status": "AVAILABLE" if available == len(pre_dates) else "INSUFFICIENT_INPUT_COVERAGE",
+            "reason": ("Crude property coverage is complete." if available == len(pre_dates)
+                       else "Crude property file does not cover the complete pre-TAM period; no future-data backfill is allowed."),
+            "first_available_crude_property_date": min(crude_property_dates),
+            "future_data_backfill_used": False,
+        })
     screening = config["screening"]
     priority_hx = set(config["engineering_guidance"]["high_review_priority_hx"])
 
@@ -256,6 +281,11 @@ def main() -> None:
         "feasibility_status", "cleaning_event_confirmed", "clean_condition_confirmed",
     ]
     events = pd.concat(event_frames, ignore_index=True) if event_frames else pd.DataFrame(columns=event_columns)
+    cross_hx = config["cross_hx_review"]
+    events, event_groups = consolidate_cross_hx_events(
+        events, cluster_days=cross_hx["cluster_days"],
+        multi_hx_process_signal_minimum=cross_hx["multi_hx_process_signal_minimum"],
+    )
     cycles = build_cycles(physics, events) if not events.empty else pd.DataFrame()
     frequency = annual_frequency_check(events, config, physics.timestamp.max())
     review_queue = events[events.hx_id.isin(priority_hx)].copy()
@@ -266,12 +296,21 @@ def main() -> None:
         axis=1,
     )
     review_queue = review_queue.sort_values(["review_queue_rank", "hx_id", "event_timestamp"])
+    evidence_summary = events.groupby(
+        ["evidence_level", "group_classification"], dropna=False
+    ).agg(raw_signal_count=("event_id", "count"), hx_count=("hx_id", "nunique"),
+          event_group_count=("event_group_id", "nunique")).reset_index()
+    evidence_summary["confirmed_cleaning_count"] = 0
+    evidence_summary["interpretation"] = "Signal evidence only; counts are not confirmed cleaning actions."
     table_dir = ROOT / "reports/tables/mvp_real_data/signal_inferred_cleaning"
     figure_dir = ROOT / "reports/figures/mvp_real_data/signal_inferred_cleaning"
     table_dir.mkdir(parents=True, exist_ok=True)
     events.to_csv(table_dir / "signal_recovery_candidates.csv", index=False)
     plant_tam.to_csv(table_dir / "plant_tam_events.csv", index=False)
     pd.DataFrame(tam_review_rows).to_csv(table_dir / "hx_tam_event_study.csv", index=False)
+    pd.DataFrame(tam_input_audit).to_csv(table_dir / "tam_input_coverage_audit.csv", index=False)
+    event_groups.to_csv(table_dir / "cross_hx_event_groups.csv", index=False)
+    evidence_summary.to_csv(table_dir / "event_evidence_summary.csv", index=False)
     pd.DataFrame(summary_rows).to_csv(table_dir / "hx_signal_screening_summary.csv", index=False)
     pd.DataFrame(feasibility_rows).to_csv(table_dir / "bypass_cleaning_feasibility.csv", index=False)
     cycles.to_csv(table_dir / "exploratory_signal_cycles.csv", index=False)
