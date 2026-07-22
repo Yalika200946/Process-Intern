@@ -1,6 +1,9 @@
 import pandas as pd
 
-from pipeline.build_mvp_coverage_outputs import correlation_summary, data_quality_summary, method_recommendations
+from pipeline.build_mvp_coverage_outputs import (
+    correlation_summary, data_quality_summary, method_recommendations,
+    performance_summary, temporal_quality_audit,
+)
 
 
 def test_quality_summary_counts_all_states_and_warnings():
@@ -18,3 +21,20 @@ def test_relationship_outputs_use_valid_records_and_are_review_only():
     rec=method_recommendations(physics,correlations,settings)
     assert rec.loc[0,"approval_status"]=="REVIEW_ONLY_NOT_A_CLEAN_BASELINE"
     assert set(["clean_ua","fouling_index","cit_gain"]).isdisjoint(rec.columns)
+
+
+def test_temporal_audit_reports_duplicates_gaps_and_no_interpolation():
+    states=pd.DataFrame({"hx_id":["HX"]*4,"timestamp":pd.to_datetime(["2024-01-01","2024-01-01","2024-01-02","2024-01-05"],utc=True),"quality_warning_code":["","","SENSOR_FLATLINE",""]})
+    summary,gaps=temporal_quality_audit(states,long_gap_hours=36)
+    assert summary.loc[0,"duplicate_timestamp_records"]==2
+    assert summary.loc[0,"long_gap_count"]==1
+    assert summary.loc[0,"flatline_record_count"]==1
+    assert not summary.loc[0,"long_gap_interpolation_used"]
+    assert gaps.loc[0,"gap_hours"]==72
+
+
+def test_performance_summary_uses_only_valid_records():
+    physics=pd.DataFrame({"hx_id":["HX"]*3,"operating_valid":[True,False,True],"ua_valid":[True,False,True],"q_cold_value":[10,999,20],"lmtd_value":[5,999,7],"ua_w_m2_k":[100,999,120]})
+    out=performance_summary(physics)
+    assert out.loc[0,"valid_records"]==2
+    assert out.loc[0,"median_q_cold"]==15

@@ -30,6 +30,45 @@ def data_quality_summary(states: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFra
     return summary, warning_summary
 
 
+def temporal_quality_audit(states: pd.DataFrame, long_gap_hours: float = 36.0) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Audit timestamps without filling gaps or removing invalid records."""
+    rows, gaps = [], []
+    work = states.copy(); work["timestamp"] = pd.to_datetime(work.timestamp)
+    for hx_id, group in work.groupby("hx_id"):
+        ordered = group.sort_values("timestamp")
+        duplicate_count = int(ordered.timestamp.duplicated(keep=False).sum())
+        delta = ordered.timestamp.diff().dt.total_seconds().div(3600)
+        long = ordered.loc[delta > long_gap_hours, ["timestamp"]].copy()
+        long["gap_hours"] = delta[delta > long_gap_hours].values
+        long["hx_id"] = hx_id; gaps.append(long)
+        flatline_count = int(ordered.quality_warning_code.fillna("").str.contains("SENSOR_FLATLINE").sum())
+        rows.append({"hx_id": hx_id, "record_count": len(ordered),
+                     "duplicate_timestamp_records": duplicate_count,
+                     "median_sampling_interval_hours": float(delta.median()),
+                     "long_gap_count": len(long), "flatline_record_count": flatline_count,
+                     "long_gap_interpolation_used": False, "raw_records_removed": False})
+    return pd.DataFrame(rows), pd.concat(gaps, ignore_index=True) if gaps else pd.DataFrame(
+        columns=["timestamp", "gap_hours", "hx_id"])
+
+
+def performance_summary(physics: pd.DataFrame) -> pd.DataFrame:
+    rows = []
+    for hx_id, group in physics.groupby("hx_id"):
+        valid = group[group.operating_valid & group.ua_valid].copy()
+        row = {"hx_id": hx_id, "total_records": len(group), "valid_records": len(valid),
+               "valid_coverage_pct": len(valid) / len(group) * 100 if len(group) else 0,
+               "output_status": "VALIDATED" if len(valid) >= 30 else "PARTIAL"}
+        for field, prefix, unit in (("q_cold_value", "q_cold", "kW"),
+                                    ("lmtd_value", "lmtd", "degC"),
+                                    ("ua_w_m2_k", "u", "W/m2-K")):
+            values = valid[field].dropna()
+            row[f"median_{prefix}"] = values.median()
+            row[f"iqr_{prefix}"] = values.quantile(.75) - values.quantile(.25)
+            row[f"{prefix}_unit"] = unit
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def consolidated_mapping(mapping: dict, metadata: pd.DataFrame) -> pd.DataFrame:
     units = dict(zip(metadata.source_tag.str.casefold(), metadata.source_unit))
     aliases = mapping["aliases"]
@@ -159,17 +198,32 @@ def plot_throughput(distributions: pd.DataFrame, output: Path):
     fig.suptitle("UA stratified by per-HX crude-throughput quantile band");fig.tight_layout();fig.savefig(output/"ua_by_throughput_band.png",dpi=140,bbox_inches="tight");plt.close(fig)
 
 
+def plot_performance_comparison(summary: pd.DataFrame, output: Path):
+    fig, axes = plt.subplots(1, 3, figsize=(17, 5))
+    for ax, value, spread, ylabel in zip(
+        axes, ["median_q_cold", "median_lmtd", "median_u"],
+        ["iqr_q_cold", "iqr_lmtd", "iqr_u"],
+        ["Qcold (kW)", "LMTD (degC)", "U (W/m2-K)"],
+    ):
+        ax.errorbar(summary.hx_id, summary[value], yerr=summary[spread] / 2, fmt="o", capsize=3)
+        ax.set_ylabel(ylabel); ax.tick_params(axis="x", rotation=65); ax.grid(alpha=.2)
+    fig.suptitle("HX performance comparison: median and half-IQR (valid steady records)")
+    fig.tight_layout(); fig.savefig(output / "hx_performance_median_iqr.png", dpi=140, bbox_inches="tight"); plt.close(fig)
+
+
 def main():
     ap=argparse.ArgumentParser();ap.add_argument("--physics",type=Path,default=ROOT/"reports/tables/mvp_real_data/hx_physics_validation.csv");ap.add_argument("--states",type=Path,default=ROOT/"reports/tables/mvp_real_data/record_quality_states.csv");ap.add_argument("--mapping",type=Path,default=ROOT/"config/mvp_real_data_pilot.json");ap.add_argument("--settings",type=Path,default=ROOT/"config/mvp_relationship_review.json");args=ap.parse_args()
-    physics=pd.read_csv(args.physics);physics["timestamp"]=pd.to_datetime(physics.timestamp,utc=True).dt.tz_convert("Asia/Bangkok");states=pd.read_csv(args.states);mapping=json.loads(args.mapping.read_text(encoding="utf-8"));settings=json.loads(args.settings.read_text(encoding="utf-8"));metadata=pd.read_csv(ROOT/"reports/tables/mvp_real_data/source_tag_metadata.csv")
+    physics=pd.read_csv(args.physics);physics["timestamp"]=pd.to_datetime(physics.timestamp,utc=True).dt.tz_convert("Asia/Bangkok");states=pd.read_csv(args.states);states["timestamp"]=pd.to_datetime(states.timestamp,utc=True).dt.tz_convert("Asia/Bangkok");mapping=json.loads(args.mapping.read_text(encoding="utf-8"));settings=json.loads(args.settings.read_text(encoding="utf-8"));metadata=pd.read_csv(ROOT/"reports/tables/mvp_real_data/source_tag_metadata.csv")
     tables=ROOT/"reports/tables/mvp_real_data/coverage_completion";figures=ROOT/"reports/figures/mvp_real_data/coverage_completion";tables.mkdir(parents=True,exist_ok=True);figures.mkdir(parents=True,exist_ok=True)
     dq,warnings=data_quality_summary(states);dq.to_csv(tables/"data_quality_summary.csv",index=False);warnings.to_csv(tables/"warning_code_summary.csv",index=False)
     consolidated_mapping(mapping,metadata).to_csv(tables/"tag_mapping_availability.csv",index=False)
+    temporal, gaps = temporal_quality_audit(states, mapping["rules"]["long_gap_hours"]); temporal.to_csv(tables/"temporal_quality_summary.csv",index=False); gaps.to_csv(tables/"long_gap_records.csv",index=False)
     temperature_validity(physics).to_csv(tables/"four_temperature_validity.csv",index=False)
     correlations=correlation_summary(physics,settings["minimum_paired_records"]);correlations.to_csv(tables/"relationship_correlations.csv",index=False)
     throughput,dist=throughput_summary(physics,settings);throughput.to_csv(tables/"ua_by_throughput_band.csv",index=False)
     method_recommendations(physics,correlations,settings).to_csv(tables/"baseline_method_review.csv",index=False)
-    plot_hx_outputs(physics,figures);plot_throughput(dist,figures)
+    perf=performance_summary(physics);perf.to_csv(tables/"hx_performance_summary.csv",index=False)
+    plot_hx_outputs(physics,figures);plot_throughput(dist,figures);plot_performance_comparison(perf,figures)
     print(f"Completed feasible B/C/C2 reporting for {physics.hx_id.nunique()} HX.")
     print("Qhot, closure, differential pressure, and configuration stratification remain unavailable.")
 
